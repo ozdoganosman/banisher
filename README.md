@@ -32,7 +32,25 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
-## Şu anki özellikler (v0.8)
+## Şu anki özellikler (v0.9)
+
+### v0.9: Minecraft tarzı envanter ve mantık düzeltmeleri
+
+- **Koloni envanteri**: üst bardaki kaynak yazıları kaldırıldı; araç
+  çubuğunun üstünde Minecraft tarzı slot çubuğu (pikselli eşya ikonları,
+  sağ altta adet, altta kapasite çizgisi, dolu slotta kırmızı çerçeve)
+- **Köylü çantası**: profilde slot ızgarası olarak görüntülenir
+  (boş slotlar soluk, doludakiler adetli)
+- **Mantık düzeltmeleri**:
+  - Depo doluyken teslim edilemeyen eşyalar artık kaybolmuyor (çantada
+    kalıyor, depo boşalınca teslim ediliyor)
+  - Deposu dolu eşya için boşuna depo yolculuğu yapılmıyor
+  - Çantası tamamen dolu köylü yeni hasat işi almıyor (hasat kaybı yok);
+    kısmi sığmada "Çanta dolu!" uyarısı
+  - Bakımevindeki bebeklerin açlığı artık iyileşiyor (donmuyordu;
+    bakımevi geç kurulunca bebek yine ölebiliyordu)
+
+### v0.8: Saat, mini harita ve yaşam kalitesi
 
 ### v0.8: Saat, mini harita ve yaşam kalitesi
 

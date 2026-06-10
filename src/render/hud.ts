@@ -7,12 +7,152 @@ import {
   type Building,
 } from "../sim/buildings";
 import { ROLE_NAMES } from "../sim/buildings";
-import { isFull, ITEM_INFO, ITEM_TYPES, resources } from "../sim/resources";
+import {
+  isFull,
+  ITEM_INFO,
+  ITEM_TYPES,
+  resources,
+  type ItemType,
+} from "../sim/resources";
 import { darkness, dateString, timeString } from "../sim/time";
 import { assignmentLabel, type Villager } from "../sim/villager";
 import type { World } from "../world/world";
 
 export const TOOLBAR_HEIGHT = 64;
+
+// ---- Minecraft tarzı eşya slotları ----
+
+type IconItem = ItemType | "knowledge";
+
+// Pikselli eşya ikonu (24x24 tasarım alanında, s boyutuna ölçeklenir)
+function drawItemIcon(ctx: CanvasRenderingContext2D, item: IconItem, x: number, y: number, s: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s / 24, s / 24);
+  switch (item) {
+    case "wood":
+      // kütük: gövde + halkalar
+      ctx.fillStyle = "#8a5a2b";
+      ctx.fillRect(3, 8, 18, 9);
+      ctx.fillStyle = "#6b4422";
+      ctx.fillRect(3, 11, 18, 2);
+      ctx.fillStyle = "#c9a35a";
+      ctx.fillRect(17, 9, 3, 7);
+      ctx.fillStyle = "#8a5a2b";
+      ctx.fillRect(18, 11, 1, 3);
+      break;
+    case "stone":
+      ctx.fillStyle = "#9aa0a8";
+      ctx.fillRect(5, 9, 14, 10);
+      ctx.fillRect(8, 6, 9, 4);
+      ctx.fillStyle = "#7c7f86";
+      ctx.fillRect(8, 12, 5, 4);
+      ctx.fillStyle = "#b8bdc4";
+      ctx.fillRect(9, 7, 4, 2);
+      break;
+    case "berry":
+      ctx.fillStyle = "#4a7a3a";
+      ctx.fillRect(11, 3, 2, 5);
+      ctx.fillRect(13, 5, 4, 2);
+      ctx.fillStyle = "#d43f3f";
+      ctx.beginPath();
+      ctx.arc(12, 14, 6.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f08080";
+      ctx.fillRect(9, 11, 3, 2);
+      break;
+    case "mushroom":
+      ctx.fillStyle = "#e8e0cc";
+      ctx.fillRect(10, 13, 5, 8);
+      ctx.fillStyle = "#c43030";
+      ctx.fillRect(5, 8, 15, 6);
+      ctx.fillRect(7, 5, 11, 3);
+      ctx.fillStyle = "#f0e8e0";
+      ctx.fillRect(9, 7, 3, 3);
+      ctx.fillRect(15, 9, 2, 2);
+      break;
+    case "knowledge":
+      ctx.fillStyle = "#b08fe0";
+      ctx.fillRect(4, 5, 16, 15);
+      ctx.fillStyle = "#8a6cc0";
+      ctx.fillRect(11.3, 5, 1.4, 15);
+      ctx.fillStyle = "#f0eaff";
+      ctx.fillRect(6, 9, 4, 1.4);
+      ctx.fillRect(14, 9, 4, 1.4);
+      ctx.fillRect(6, 13, 4, 1.4);
+      ctx.fillRect(14, 13, 4, 1.4);
+      break;
+  }
+  ctx.restore();
+}
+
+// Minecraft hissi veren slot: koyu zemin + eğimli kenarlık
+function drawSlot(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, s: number,
+  accent?: string
+): void {
+  ctx.fillStyle = "rgba(18, 20, 26, 0.92)";
+  ctx.fillRect(x, y, s, s);
+  // bevel: üst/sol koyu, alt/sağ açık
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(x, y, s, 2);
+  ctx.fillRect(x, y, 2, s);
+  ctx.fillStyle = "rgba(255,255,255,0.14)";
+  ctx.fillRect(x, y + s - 2, s, 2);
+  ctx.fillRect(x + s - 2, y, 2, s);
+  if (accent) {
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+  }
+}
+
+// Slot içinde sayı (Minecraft tarzı: sağ altta, gölgeli)
+function drawSlotCount(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, n: number): void {
+  ctx.font = "bold 12px monospace";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "alphabetic";
+  const tx = x + s - 4;
+  const ty = y + s - 4;
+  ctx.fillStyle = "rgba(0,0,0,0.8)";
+  ctx.fillText(`${n}`, tx + 1, ty + 1);
+  ctx.fillStyle = n > 0 ? "#ffffff" : "#6a6f78";
+  ctx.fillText(`${n}`, tx, ty);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+}
+
+// Koloni envanteri: araç çubuğunun üstünde slot çubuğu
+function drawInventoryBar(ctx: CanvasRenderingContext2D): void {
+  const slotS = 44;
+  const gap = 5;
+  const items: IconItem[] = [...ITEM_TYPES, "knowledge"];
+  const total = items.length * slotS + (items.length - 1) * gap;
+  const x0 = (ctx.canvas.width - total) / 2;
+  const y0 = ctx.canvas.height - TOOLBAR_HEIGHT - slotS - 10;
+
+  ctx.fillStyle = "rgba(10, 12, 16, 0.6)";
+  ctx.fillRect(x0 - 6, y0 - 6, total + 12, slotS + 12);
+
+  items.forEach((item, i) => {
+    const x = x0 + i * (slotS + gap);
+    const isKnowledge = item === "knowledge";
+    const full = !isKnowledge && isFull(item as ItemType);
+    drawSlot(ctx, x, y0, slotS, full ? "#d4453f" : isKnowledge ? "#8a6cc0" : undefined);
+    drawItemIcon(ctx, item, x + 7, y0 + 5, 30);
+    const count = isKnowledge ? resources.knowledge : resources[item as ItemType];
+    drawSlotCount(ctx, x, y0, slotS, count);
+    // depolanabilirlerde kapasite çizgisi
+    if (!isKnowledge) {
+      const ratio = Math.min(1, resources[item as ItemType] / resources.cap);
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+      ctx.fillRect(x + 4, y0 + slotS - 5, slotS - 8, 2);
+      ctx.fillStyle = full ? "#d4453f" : "#8fd05e";
+      ctx.fillRect(x + 4, y0 + slotS - 5, (slotS - 8) * ratio, 2);
+    }
+  });
+}
 
 export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.House,
@@ -78,7 +218,7 @@ export function isOverToolbar(sy: number, canvasH: number): boolean {
 
 // ---- Köylü profil paneli ----
 
-const PROFILE = { x: 12, y: 44, w: 252, h: 168 };
+const PROFILE = { x: 12, y: 44, w: 252, h: 184 };
 const CLOSE = { x: PROFILE.x + PROFILE.w - 24, y: PROFILE.y + 6, w: 18, h: 18 };
 
 export type ProfileHit = { kind: "close" } | { kind: "panel" } | null;
@@ -197,33 +337,26 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.strokeStyle = "#3a3f48";
   ctx.strokeRect(barX + 0.5, y + 110.5, barW - 1, 11);
 
-  // çanta (kişisel envanter)
+  // çanta: Minecraft tarzı slot ızgarası (boş slotlar soluk)
   ctx.fillStyle = "#e8e2d0";
-  ctx.fillText("Çanta", x + 10, y + 140);
-  if (v.inventoryTotal === 0) {
-    ctx.fillStyle = "#8a8478";
-    ctx.fillText("boş", x + 72, y + 140);
-  } else {
-    let ix = x + 72;
-    for (const item of ITEM_TYPES) {
-      const n = v.inventory[item];
-      if (n <= 0) continue;
-      ctx.fillStyle = ITEM_INFO[item].color;
-      ctx.fillRect(ix, y + 134, 10, 10);
-      ctx.strokeStyle = "#3a3f48";
-      ctx.strokeRect(ix + 0.5, y + 134.5, 9, 9);
-      ctx.fillStyle = "#e8e2d0";
-      ctx.fillText(`${n}`, ix + 14, y + 140);
-      ix += 14 + ctx.measureText(`${n}`).width + 10;
-    }
-  }
+  ctx.fillText("Çanta", x + 10, y + 145);
+  const slotS = 28;
+  ITEM_TYPES.forEach((item, i) => {
+    const sx = x + 66 + i * (slotS + 4);
+    drawSlot(ctx, sx, y + 130, slotS);
+    const n = v.inventory[item];
+    ctx.globalAlpha = n > 0 ? 1 : 0.25;
+    drawItemIcon(ctx, item, sx + 4, y + 134, 20);
+    ctx.globalAlpha = 1;
+    if (n > 0) drawSlotCount(ctx, sx, y + 130, slotS, n);
+  });
 
   // görev ataması iş panelinden (N) ve bina panellerinden yapılır
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
   ctx.fillText(
     v.baby ? "Bebekler büyüyünce çalışmaya başlar." : "Görevler binalardan ve N menüsünden atanır.",
-    x + 10, y + 158, w - 20
+    x + 10, y + 172, w - 20
   );
 }
 
@@ -663,63 +796,7 @@ export function drawHud(
     cx += 20 + ctx.measureText(text).width + 22;
   };
 
-  // odun
-  entry((ix) => {
-    ctx.fillStyle = "#8a5a2b";
-    ctx.fillRect(ix, 11, 12, 12);
-    ctx.fillStyle = "#6b4422";
-    ctx.fillRect(ix, 15, 12, 2);
-  }, `Odun: ${resources.wood}/${resources.cap}`);
-
-  // taş
-  entry((ix) => {
-    ctx.fillStyle = "#9aa0a8";
-    ctx.fillRect(ix + 1, 12, 10, 9);
-    ctx.fillStyle = "#7c7f86";
-    ctx.fillRect(ix + 3, 14, 4, 3);
-  }, `Taş: ${resources.stone}/${resources.cap}`);
-
-  // meyve
-  entry((ix) => {
-    ctx.fillStyle = "#d43f3f";
-    ctx.beginPath();
-    ctx.arc(ix + 6, 18, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#4a7a3a";
-    ctx.fillRect(ix + 5, 9, 2, 4);
-  }, `Meyve: ${resources.berry}`);
-
-  // mantar
-  entry((ix) => {
-    ctx.fillStyle = "#e8e0cc";
-    ctx.fillRect(ix + 4, 16, 4, 6);
-    ctx.fillStyle = "#c43030";
-    ctx.fillRect(ix + 1, 12, 10, 5);
-    ctx.fillStyle = "#f0e8e0";
-    ctx.fillRect(ix + 4, 13, 2, 2);
-  }, `Mantar: ${resources.mushroom}`);
-
-  // bilgi (tapınaklarda üretilir)
-  entry((ix) => {
-    ctx.fillStyle = "#b08fe0";
-    ctx.fillRect(ix + 1, 11, 10, 12);
-    ctx.fillStyle = "#8a6cc0";
-    ctx.fillRect(ix + 5.5, 11, 1, 12);
-    ctx.fillStyle = "#f0eaff";
-    ctx.fillRect(ix + 3, 14, 2, 1);
-    ctx.fillRect(ix + 7, 14, 2, 1);
-    ctx.fillRect(ix + 3, 17, 2, 1);
-    ctx.fillRect(ix + 7, 17, 2, 1);
-  }, `Bilgi: ${resources.knowledge}`);
-
-  // grup ayracı: kaynaklar | nüfus
-  ctx.strokeStyle = "rgba(255,255,255,0.15)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx + 0.5, 7);
-  ctx.lineTo(cx + 0.5, 27);
-  ctx.stroke();
-  cx += 14;
+  // (kaynak stoğu artık alttaki envanter çubuğunda gösterilir)
 
   // nüfus: tıklanabilir düğme (nüfus yönetim menüsünü açar)
   {
@@ -887,4 +964,7 @@ export function drawHud(
     ctx.font = "10px monospace";
     ctx.fillText(def.desc, r.x + 10, r.y + 43, r.w - 20);
   });
+
+  // koloni envanteri (Minecraft tarzı slot çubuğu)
+  drawInventoryBar(ctx);
 }

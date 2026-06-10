@@ -200,8 +200,10 @@ export class Villager {
       this.assignment = { kind: "laborer" };
     }
 
-    // açlık her durumda işler (bakımevi varsa bebekler acıkmaz)
-    if (!(this.baby && hasNursery)) {
+    // açlık her durumda işler; bakımevi bebeklere bakar: acıkmaz, toparlanır
+    if (this.baby && hasNursery) {
+      this.hunger = Math.max(0, this.hunger - 8 * dt);
+    } else {
       this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
     }
     if (this.starving) {
@@ -335,7 +337,15 @@ export class Villager {
     }
 
     // 2) Çanta dolduysa depoya/kampa taşı
-    if (this.inventoryTotal >= DEPOSIT_AT && this.tryDeposit(world, buildings)) return;
+    // (deposu dolu ürünler için boş yere gidip gelme: teslim edilebilir olmalı)
+    const depositable = ITEM_TYPES.some(
+      (it) => this.inventory[it] > 0 && !isFull(it)
+    );
+    if (this.inventoryTotal >= DEPOSIT_AT && depositable && this.tryDeposit(world, buildings)) {
+      return;
+    }
+    // çanta tamamen doluysa yeni hasat kaybolur: iş alma, bekle
+    const bagFull = this.inventoryTotal >= INVENTORY_CAP;
 
     // Gece yalnızca ışıklı (meşale/kamp ateşi yakını) noktalarda çalışılır
     const lit = (wx: number, wy: number) => !isNight() || isLit(buildings, wx, wy);
@@ -374,7 +384,7 @@ export class Villager {
       const inArea = (x: number, y: number) =>
         Math.abs(x - hx) <= AUTO_MARK_RADIUS && Math.abs(y - hy) <= AUTO_MARK_RADIUS;
 
-      if (hut.type === BuildingType.Woodcutter && !isFull("wood")) {
+      if (hut.type === BuildingType.Woodcutter && !isFull("wood") && !bagFull) {
         const tree = world.findNearestMarked(
           world.markedTrees, world.claimedTrees, this.x, this.y,
           (x, y) => inArea(x, y) && litTile(x, y)
@@ -388,7 +398,7 @@ export class Villager {
             }),
           });
         }
-      } else if (hut.type === BuildingType.Gatherer) {
+      } else if (hut.type === BuildingType.Gatherer && !bagFull) {
         const food = world.findNearestMarked(
           world.markedBushes, world.claimedBushes, this.x, this.y,
           (x, y) =>
@@ -424,7 +434,7 @@ export class Villager {
       }
     } else {
       // ortalık işçisi: elle/kulübece işaretlenmiş her kaynağa gider
-      if (!isFull("wood")) {
+      if (!isFull("wood") && !bagFull) {
         const tree = world.findNearestMarked(
           world.markedTrees, world.claimedTrees, this.x, this.y, litTile
         );
@@ -439,7 +449,7 @@ export class Villager {
         }
       }
 
-      const food = world.findNearestMarked(
+      const food = bagFull ? null : world.findNearestMarked(
         world.markedBushes, world.claimedBushes, this.x, this.y,
         (x, y) =>
           litTile(x, y) &&
@@ -456,7 +466,7 @@ export class Villager {
         });
       }
 
-      if (!isFull("stone")) {
+      if (!isFull("stone") && !bagFull) {
         const stone = world.findNearestMarked(
           world.markedStones, world.claimedStones, this.x, this.y, litTile
         );
@@ -477,9 +487,9 @@ export class Villager {
       if (c.start()) return;
     }
 
-    // 4) İş yoksa: çantada bir şey varsa teslim et, yoksa dolan
+    // 4) İş yoksa: çantada teslim edilebilir bir şey varsa teslim et, yoksa dolan
     // (bina çalışanları iş yerlerinin çevresinde bekler)
-    if (this.inventoryTotal > 0 && this.tryDeposit(world, buildings)) return;
+    if (this.inventoryTotal > 0 && depositable && this.tryDeposit(world, buildings)) return;
 
     const anchor = a.kind === "building" ? a.building : null;
     const ax = anchor ? Math.floor(anchor.centerX / TILE_SIZE) : this.tileX;
@@ -669,11 +679,13 @@ export class Villager {
       return;
     }
     let line = 0;
+    let anyFull = false;
     for (const item of ITEM_TYPES) {
       const n = this.inventory[item];
       if (n <= 0) continue;
       const added = addItem(item, n);
-      this.inventory[item] = 0;
+      // sığmayanlar çantada kalır (depo boşalınca tekrar denenir)
+      this.inventory[item] = n - added;
       if (added > 0) {
         addFloater(
           job.building.centerX,
@@ -682,9 +694,11 @@ export class Villager {
           ITEM_INFO[item].color
         );
         line++;
-      } else {
-        addFloater(job.building.centerX, job.building.centerY - 18, "Depo dolu!", "#ff6655");
       }
+      if (added < n) anyFull = true;
+    }
+    if (anyFull) {
+      addFloater(job.building.centerX, job.building.centerY - 18 - line * 7, "Depo dolu!", "#ff6655");
     }
     this.job = null;
     this.toIdle();
@@ -697,9 +711,11 @@ export class Villager {
   // Çantaya sığdığı kadar ekle, kazanç yazısı göster
   private gainItem(item: ItemType, n: number, fx: number, fy: number): void {
     const gain = Math.min(n, INVENTORY_CAP - this.inventoryTotal);
-    if (gain <= 0) return;
-    this.inventory[item] += gain;
-    addFloater(fx, fy, `+${gain} ${ITEM_INFO[item].name}`, ITEM_INFO[item].color);
+    if (gain > 0) {
+      this.inventory[item] += gain;
+      addFloater(fx, fy, `+${gain} ${ITEM_INFO[item].name}`, ITEM_INFO[item].color);
+    }
+    if (gain < n) addFloater(fx, fy + 7, "Çanta dolu!", "#b8b2a0");
   }
 
   // Vuruş ritmiyle parçacık saç (balta/kazma/çekiç efekti)
