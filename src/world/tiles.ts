@@ -11,6 +11,28 @@ export const enum Tile {
   Tree = 5,
   Bush = 6, // meyve çalısı: toplayıcılar yemek toplar
   Mushroom = 7, // orman mantarı: alternatif yemek kaynağı
+  AppleTree = 8, // elma ağacı: toplanır, sonra yeniden meyve verir
+  OrangeTree = 9, // portakal ağacı
+  TangerineTree = 10, // mandalina ağacı
+  NutBush = 11, // yemiş (fındık) çalısı
+}
+
+// Toplanabilir yemek blokları hangi eşyayı verir?
+import type { ItemType } from "../sim/resources";
+export function foodItemOf(t: Tile): ItemType | null {
+  switch (t) {
+    case Tile.Bush: return "berry";
+    case Tile.Mushroom: return "mushroom";
+    case Tile.AppleTree: return "apple";
+    case Tile.OrangeTree: return "orange";
+    case Tile.TangerineTree: return "tangerine";
+    case Tile.NutBush: return "nut";
+    default: return null;
+  }
+}
+
+export function isFruitTree(t: Tile): boolean {
+  return t === Tile.AppleTree || t === Tile.OrangeTree || t === Tile.TangerineTree;
 }
 
 export function isWalkable(t: Tile): boolean {
@@ -27,4 +49,8 @@ export const TILE_COLORS: Record<Tile, string[]> = {
   [Tile.Tree]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, ağaç üstüne çizilir
   [Tile.Bush]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, çalı üstüne çizilir
   [Tile.Mushroom]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, mantar üstüne çizilir
+  [Tile.AppleTree]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.OrangeTree]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.TangerineTree]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.NutBush]: ["#5a8f3c", "#558838", "#609541"],
 };

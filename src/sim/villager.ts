@@ -1,6 +1,7 @@
 import { addFloater, burst } from "../render/effects";
-import { Tile, TILE_SIZE } from "../world/tiles";
+import { foodItemOf, Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
+import type { Animal } from "./animals";
 import type { Building } from "./buildings";
 import {
   AUTO_MARK_RADIUS,
@@ -37,12 +38,16 @@ const CHOP_TIME = 3; // saniye
 const GATHER_TIME = 2.5;
 const MINE_TIME = 4;
 const WOOD_PER_TREE = 4;
-const BERRY_PER_BUSH = 4;
-const MUSHROOM_PER_PATCH = 3;
 const STONE_PER_MINE = 3;
 
 const FISH_TIME = 6;
 const FISH_PER_CATCH = 2;
+const TEND_TIME = 2.5;
+
+// Toplanabilir yemeklerin verimi (eşya başına)
+const GATHER_YIELD: Partial<Record<ItemType, number>> = {
+  berry: 4, mushroom: 3, apple: 3, orange: 3, tangerine: 3, nut: 3,
+};
 
 // Teknolojiye göre değişen değerler
 function invCap(): number {
@@ -97,13 +102,15 @@ type VillagerState =
   | "building"
   | "worshipping"
   | "fishing"
+  | "tending"
   | "eating";
 
 type Job =
   | { kind: "chop"; tile: number }
-  | { kind: "gather"; tile: number; item: "berry" | "mushroom" }
+  | { kind: "gather"; tile: number; item: ItemType }
   | { kind: "mine"; tile: number }
   | { kind: "fish"; tile: number }
+  | { kind: "tend"; animal: Animal }
   | { kind: "build"; building: Building }
   | { kind: "worship"; building: Building }
   | { kind: "eat"; building: Building }
@@ -125,9 +132,9 @@ export class Villager {
   home: Building | null = null; // atandığı konut (ev/kamp)
   readonly identity: Identity;
   // Kişisel çanta: toplananlar önce buraya, sonra kampa/depoya gider
-  readonly inventory: Record<ItemType, number> = {
-    wood: 0, stone: 0, berry: 0, mushroom: 0, fish: 0,
-  };
+  readonly inventory: Record<ItemType, number> = Object.fromEntries(
+    ITEM_TYPES.map((t) => [t, 0])
+  ) as Record<ItemType, number>;
 
   private starveTimer = 0;
   private atCafeteria = false; // şu anki yemek yemekhanede mi
@@ -183,6 +190,7 @@ export class Villager {
           case "gather": return "Toplamaya gidiyor";
           case "mine": return "Taş ocağına gidiyor";
           case "fish": return "Kıyıya gidiyor";
+          case "tend": return "Hayvana gidiyor";
           case "build": return "Şantiyeye gidiyor";
           case "worship": return "Tapınağa gidiyor";
           case "eat": return "Yemekhaneye gidiyor";
@@ -191,10 +199,13 @@ export class Villager {
         break;
       case "chopping":
         return "Ağaç kesiyor";
-      case "gathering":
-        return this.job?.kind === "gather" && this.job.item === "mushroom"
-          ? "Mantar topluyor"
-          : "Meyve topluyor";
+      case "gathering": {
+        if (this.job?.kind !== "gather") return "Topluyor";
+        const n = ITEM_INFO[this.job.item].name;
+        return `${n[0].toUpperCase()}${n.slice(1)} topluyor`;
+      }
+      case "tending":
+        return "Hayvanla ilgileniyor";
       case "mining":
         return "Taş kazıyor";
       case "fishing":
@@ -209,7 +220,7 @@ export class Villager {
     return "";
   }
 
-  update(dt: number, world: World, buildings: Building[]): void {
+  update(dt: number, world: World, buildings: Building[], animals: Animal[]): void {
     const hasNursery = buildings.some(
       (b) => b.type === BuildingType.Nursery && b.done
     );
@@ -244,7 +255,8 @@ export class Villager {
       !isLit(buildings, this.x, this.y) &&
       (this.state === "chopping" || this.state === "gathering" ||
         this.state === "mining" || this.state === "building" ||
-        this.state === "worshipping" || this.state === "fishing")
+        this.state === "worshipping" || this.state === "fishing" ||
+        this.state === "tending")
     ) {
       this.releaseJob(world);
       this.toIdle();
@@ -253,7 +265,7 @@ export class Villager {
     switch (this.state) {
       case "idle":
         this.timer -= dt;
-        if (this.timer <= 0) this.decide(world, buildings);
+        if (this.timer <= 0) this.decide(world, buildings, animals);
         break;
       case "walking":
         this.walk(dt, world, buildings);
@@ -272,6 +284,9 @@ export class Villager {
         break;
       case "fishing":
         this.fish(dt, world);
+        break;
+      case "tending":
+        this.tend(dt);
         break;
       case "worshipping":
         this.worship(dt);
@@ -304,6 +319,7 @@ export class Villager {
       case "gather": world.claimedBushes.delete(this.job.tile); break;
       case "mine": world.claimedStones.delete(this.job.tile); break;
       case "build": this.job.building.claimed = false; break;
+      case "tend": this.job.animal.claimed = false; break;
       case "worship": this.job.building.worshipClaimed = false; break;
       case "deposit": break;
     }
@@ -311,7 +327,7 @@ export class Villager {
   }
 
 
-  private decide(world: World, buildings: Building[]): void {
+  private decide(world: World, buildings: Building[], animals: Animal[]): void {
     // 1) Acıkmışsa ve yemek varsa: ye (varsa yemekhanede — tokluk tam dolar)
     if (this.hunger > EAT_THRESHOLD && foodTotal() >= FOOD_PER_MEAL) {
       if (!this.baby) {
@@ -426,16 +442,17 @@ export class Villager {
       } else if (hut.type === BuildingType.Gatherer && !bagFull) {
         const food = world.findNearestMarked(
           world.markedBushes, world.claimedBushes, this.x, this.y,
-          (x, y) =>
-            inArea(x, y) && litTile(x, y) &&
-            (world.get(x, y) === Tile.Mushroom ? !isFull("mushroom") : !isFull("berry"))
+          (x, y) => {
+            const item = foodItemOf(world.get(x, y));
+            return !!item && inArea(x, y) && litTile(x, y) && !isFull(item);
+          }
         );
         if (food) {
           candidates.push({
             dist: food.dist,
             start: () => this.startTileJob(world, food.x, food.y, (i) => {
               world.claimedBushes.add(i);
-              const item = world.get(food.x, food.y) === Tile.Mushroom ? "mushroom" : "berry";
+              const item = foodItemOf(world.get(food.x, food.y)) ?? "berry";
               this.job = { kind: "gather", tile: i, item };
             }),
           });
@@ -451,6 +468,36 @@ export class Villager {
                 const path = findPath(world, this.tileX, this.tileY, spot.x, spot.y);
                 if (!path) return false;
                 this.job = { kind: "fish", tile: world.index(spot.x, spot.y) };
+                this.startPath(path);
+                return true;
+              },
+            });
+          }
+        }
+      } else if (hut.type === BuildingType.Barn) {
+        if (!bagFull) {
+          let bestA: Animal | null = null;
+          let bestD = Infinity;
+          for (const a of animals) {
+            if (a.barn !== hut || !a.ready || !lit(a.x, a.y)) continue;
+            const d = Math.abs(a.x - this.x) + Math.abs(a.y - this.y);
+            if (d < bestD) {
+              bestD = d;
+              bestA = a;
+            }
+          }
+          if (bestA) {
+            const target = bestA;
+            candidates.push({
+              dist: bestD / TILE_SIZE,
+              start: () => {
+                const path = findPath(
+                  world, this.tileX, this.tileY,
+                  Math.floor(target.x / TILE_SIZE), Math.floor(target.y / TILE_SIZE)
+                );
+                if (!path) return false;
+                target.claimed = true;
+                this.job = { kind: "tend", animal: target };
                 this.startPath(path);
                 return true;
               },
@@ -493,16 +540,17 @@ export class Villager {
 
       const food = bagFull ? null : world.findNearestMarked(
         world.markedBushes, world.claimedBushes, this.x, this.y,
-        (x, y) =>
-          litTile(x, y) &&
-          (world.get(x, y) === Tile.Mushroom ? !isFull("mushroom") : !isFull("berry"))
+        (x, y) => {
+          const item = foodItemOf(world.get(x, y));
+          return !!item && litTile(x, y) && !isFull(item);
+        }
       );
       if (food) {
         candidates.push({
           dist: food.dist,
           start: () => this.startTileJob(world, food.x, food.y, (i) => {
             world.claimedBushes.add(i);
-            const item = world.get(food.x, food.y) === Tile.Mushroom ? "mushroom" : "berry";
+            const item = foodItemOf(world.get(food.x, food.y)) ?? "berry";
             this.job = { kind: "gather", tile: i, item };
           }),
         });
@@ -608,6 +656,8 @@ export class Villager {
         return world.markedStones.has(this.job.tile) && !isFull("stone") && tileLit(this.job.tile);
       case "fish":
         return !isFull("fish") && tileLit(this.job.tile);
+      case "tend":
+        return !this.job.animal.dead;
       case "build":
       case "worship":
         return !this.job.building.removed &&
@@ -686,6 +736,11 @@ export class Villager {
         else if (world.inBounds(fx - 1, fy) && world.get(fx - 1, fy) === Tile.Water) this.facing = -1;
         break;
       }
+      case "tend":
+        this.state = "tending";
+        this.timer = TEND_TIME;
+        this.faceTowards(this.job.animal.x);
+        break;
       case "build":
         this.state = "building";
         this.faceTowards(this.job.building.centerX);
@@ -826,8 +881,7 @@ export class Villager {
     this.timer -= dt;
     if (this.timer <= 0) {
       world.harvestFood(job.tile % world.width, Math.floor(job.tile / world.width));
-      const amount =
-        (job.item === "mushroom" ? MUSHROOM_PER_PATCH : BERRY_PER_BUSH) + forageBonus();
+      const amount = (GATHER_YIELD[job.item] ?? 3) + forageBonus();
       this.gainItem(job.item, amount, c.x, c.y - 8);
       this.job = null;
       this.toIdle();
@@ -866,6 +920,31 @@ export class Villager {
     if (this.timer <= 0) {
       const c = this.jobTileCenter(world, job.tile);
       this.gainItem("fish", FISH_PER_CATCH + forageBonus(), c.x, c.y - 10);
+      this.job = null;
+      this.toIdle();
+    }
+  }
+
+  private tend(dt: number): void {
+    const job = this.job;
+    if (!job || job.kind !== "tend" || job.animal.dead) {
+      if (job?.kind === "tend") job.animal.claimed = false;
+      this.job = null;
+      this.toIdle();
+      return;
+    }
+    this.walkPhase += dt * 7;
+    this.timer -= dt;
+    if (this.timer <= 0) {
+      const a = job.animal;
+      this.gainItem(a.def.product, a.def.yieldAmount, a.x, a.y - 10);
+      if (a.def.slaughter) {
+        a.slaughtered = true;
+        a.dead = true;
+      } else {
+        a.produceTimer = a.def.interval;
+      }
+      a.claimed = false;
       this.job = null;
       this.toIdle();
     }

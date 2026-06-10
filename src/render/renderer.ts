@@ -1,4 +1,5 @@
 import type { Camera } from "../engine/camera";
+import type { Animal } from "../sim/animals";
 import type { Villager } from "../sim/villager";
 import {
   Building,
@@ -183,8 +184,29 @@ export class Renderer {
     this.paintRelief(px, py, x, y);
 
     if (t === Tile.Tree) this.paintTree(px, py, x, y);
-    else if (t === Tile.Bush) this.paintBush(px, py, x, y);
+    else if (t === Tile.Bush || t === Tile.NutBush) this.paintBush(px, py, x, y, t);
     else if (t === Tile.Mushroom) this.paintMushroom(px, py, x, y);
+    else if (t === Tile.AppleTree || t === Tile.OrangeTree || t === Tile.TangerineTree) {
+      this.paintTree(px, py, x, y);
+      this.paintTreeFruit(px, py, x, y, t);
+    }
+  }
+
+  // Meyve ağacı: taç üzerine renkli meyve noktaları
+  private paintTreeFruit(px: number, py: number, x: number, y: number, t: Tile): void {
+    const c = this.tctx;
+    const color =
+      t === Tile.AppleTree ? "#e03434" :
+      t === Tile.OrangeTree ? "#ff8a1e" : "#ffb23c";
+    const cx = px + 8;
+    const cy = py + 6;
+    for (let k = 0; k < 5; k++) {
+      const dx = -3 + Math.floor(hash2(x * 7 + k, y, 121) * 7);
+      const dy = -3 + Math.floor(hash2(x, y * 7 + k, 122) * 6);
+      if (dx * dx + dy * dy > 16) continue;
+      c.fillStyle = color;
+      c.fillRect(cx + dx, cy + dy, 1.5, 1.5);
+    }
   }
 
   private paintMinimapPixel(x: number, y: number, t: Tile): void {
@@ -351,7 +373,7 @@ export class Renderer {
     }
   }
 
-  private paintBush(px: number, py: number, x: number, y: number): void {
+  private paintBush(px: number, py: number, x: number, y: number, t: Tile = Tile.Bush): void {
     const c = this.tctx;
     const cx = px + 8;
     const cy = py + 10;
@@ -371,7 +393,8 @@ export class Renderer {
         c.fillRect(cx + dx, cy + dy, 1, 1);
       }
     }
-    c.fillStyle = "#d43f3f";
+    // meyveler: çalıda kırmızı, yemiş çalısında kahverengi
+    c.fillStyle = t === Tile.NutBush ? "#9a6c40" : "#d43f3f";
     for (let k = 0; k < 4; k++) {
       const bx = cx - 3 + Math.floor(hash2(x, y * 4 + k, 55) * 6);
       const by = cy - 2 + Math.floor(hash2(x * 4 + k, y, 66) * 4);
@@ -388,6 +411,7 @@ export class Renderer {
     camera: Camera,
     villagers: Villager[],
     buildings: Building[],
+    animals: Animal[],
     hoverTile: { x: number; y: number } | null,
     ghost: Ghost | null,
     selectedVillager: Villager | null,
@@ -504,6 +528,9 @@ export class Renderer {
     }
     for (const v of villagers) {
       drawables.push({ baseY: v.y, draw: () => this.drawVillager(ctx, v) });
+    }
+    for (const a of animals) {
+      drawables.push({ baseY: a.y, draw: () => this.drawAnimal(ctx, a) });
     }
     drawables.sort((a, b) => a.baseY - b.baseY);
     for (const d of drawables) d.draw();
@@ -670,6 +697,136 @@ export class Renderer {
       case BuildingType.Cafeteria: this.drawCafeteria(ctx, px, py); break;
       case BuildingType.Nursery: this.drawNursery(ctx, px, py); break;
       case BuildingType.Fisher: this.drawFisher(ctx, px, py); break;
+      case BuildingType.Barn: this.drawBarn(ctx, px, py); break;
+    }
+  }
+
+  private drawBarn(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 16, py + 29, 15);
+    // kırmızı ahır: beyaz çerçeveli büyük kapı
+    ctx.fillStyle = "#a8362e";
+    ctx.fillRect(px + 3, py + 12, 26, 17);
+    this.outlineRect(ctx, px + 3, py + 12, 26, 17);
+    // beşik çatı
+    ctx.fillStyle = "#7a2820";
+    for (let r = 0; r < 7; r++) {
+      const w = 8 + r * 3;
+      ctx.fillRect(px + 16 - w / 2, py + 4 + r, w, 1.5);
+    }
+    ctx.fillStyle = "#c4524a";
+    ctx.fillRect(px + 12, py + 4, 8, 1.5);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 3, py + 12, 26, 2);
+    // büyük kapı + beyaz çapraz
+    ctx.fillStyle = "#7a2820";
+    ctx.fillRect(px + 11, py + 18, 10, 11);
+    ctx.strokeStyle = "#e8e2d0";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 11.5, py + 18.5, 9, 10);
+    ctx.beginPath();
+    ctx.moveTo(px + 11.5, py + 18.5);
+    ctx.lineTo(px + 20.5, py + 28.5);
+    ctx.moveTo(px + 20.5, py + 18.5);
+    ctx.lineTo(px + 11.5, py + 28.5);
+    ctx.stroke();
+    // saman balyası
+    ctx.fillStyle = "#d8b84a";
+    ctx.fillRect(px + 24, py + 23, 5, 5);
+    ctx.fillStyle = "#b89a38";
+    ctx.fillRect(px + 24, py + 25, 5, 1);
+  }
+
+  // ---- Çiftlik hayvanları ----
+
+  private drawAnimal(ctx: CanvasRenderingContext2D, a: Animal): void {
+    const x = a.x;
+    const y = a.y;
+    const bob = Math.sin(a.walkPhase) * 0.6;
+    const f = a.facing;
+
+    // gölge
+    ctx.fillStyle = "rgba(0,0,0,0.2)";
+    ctx.beginPath();
+    ctx.ellipse(x, y + 0.5, 3.5, 1.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const headDrop = a.grazing ? 2.2 : 0; // otlarken kafa yere eğilir
+
+    switch (a.type) {
+      case "chicken": {
+        ctx.fillStyle = "#f0ead8";
+        ctx.fillRect(x - 2, y - 4 + bob, 4, 3);
+        ctx.fillRect(x + f * 2 - 0.5, y - 5.5 + bob + headDrop, 2, 2); // kafa
+        ctx.fillStyle = "#d43f3f";
+        ctx.fillRect(x + f * 2, y - 6.3 + bob + headDrop, 1, 1); // ibik
+        ctx.fillStyle = "#f0a030";
+        ctx.fillRect(x + f * 3.2, y - 4.8 + bob + headDrop, 1, 0.8); // gaga
+        ctx.fillStyle = "#c09040";
+        ctx.fillRect(x - 1, y - 1, 0.8, 1);
+        ctx.fillRect(x + 0.5, y - 1, 0.8, 1);
+        break;
+      }
+      case "cow": {
+        ctx.fillStyle = "#ece8dc";
+        ctx.fillRect(x - 4, y - 6 + bob, 8, 4);
+        ctx.fillStyle = "#2a2622";
+        ctx.fillRect(x - 3, y - 5.5 + bob, 2.5, 2);
+        ctx.fillRect(x + 1, y - 4 + bob, 2, 1.5);
+        ctx.fillStyle = "#ece8dc";
+        ctx.fillRect(x + f * 4 - 1, y - 7 + bob + headDrop, 3, 3); // kafa
+        ctx.fillStyle = "#d8a8b8";
+        ctx.fillRect(x + f * 4, y - 5 + bob + headDrop, 2, 1); // burun
+        ctx.fillStyle = "#2a2622";
+        ctx.fillRect(x - 3, y - 2, 1, 2);
+        ctx.fillRect(x + 2, y - 2, 1, 2);
+        break;
+      }
+      case "pig": {
+        ctx.fillStyle = "#e8a0a8";
+        ctx.fillRect(x - 3, y - 5 + bob, 6, 3.5);
+        ctx.fillRect(x + f * 3 - 1, y - 5.5 + bob + headDrop, 2.5, 2.5); // kafa
+        ctx.fillStyle = "#d4848e";
+        ctx.fillRect(x + f * 4, y - 4.5 + bob + headDrop, 1.2, 1.2); // burun
+        ctx.fillStyle = "#c87880";
+        ctx.fillRect(x - 2, y - 1.5, 1, 1.5);
+        ctx.fillRect(x + 1.5, y - 1.5, 1, 1.5);
+        break;
+      }
+      case "sheep": {
+        // yünlü gövde: kabarık
+        ctx.fillStyle = "#ece8d8";
+        ctx.fillRect(x - 3.5, y - 5.5 + bob, 7, 4);
+        ctx.fillRect(x - 2.5, y - 6.3 + bob, 5, 1);
+        ctx.fillStyle = "#5a5048";
+        ctx.fillRect(x + f * 3.5 - 1, y - 5 + bob + headDrop, 2.5, 2.5); // koyu kafa
+        ctx.fillRect(x - 2, y - 1.5, 1, 1.5);
+        ctx.fillRect(x + 1.5, y - 1.5, 1, 1.5);
+        break;
+      }
+      case "goat": {
+        ctx.fillStyle = "#b8a890";
+        ctx.fillRect(x - 3, y - 5 + bob, 6, 3.5);
+        ctx.fillRect(x + f * 3 - 1, y - 6 + bob + headDrop, 2.5, 3); // kafa
+        ctx.fillStyle = "#7a6a55";
+        ctx.fillRect(x + f * 3.5, y - 7 + bob + headDrop, 1, 1.2); // boynuz
+        ctx.fillRect(x + f * 3 - 0.5, y - 3 + bob + headDrop, 1, 1.3); // sakal
+        ctx.fillRect(x - 2, y - 1.5, 1, 1.5);
+        ctx.fillRect(x + 1.5, y - 1.5, 1, 1.5);
+        break;
+      }
+    }
+
+    // açlık göstergesi: aç hayvanın tepesinde küçük bar
+    if (a.hunger > 70) {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(x - 3, y - 9, 6, 1.4);
+      ctx.fillStyle = a.hunger >= 100 ? "#ff2222" : "#ff8844";
+      ctx.fillRect(x - 3, y - 9, (6 * a.hunger) / 100, 1.4);
+    }
+    // ürün hazır: küçük yeşil nokta
+    if (a.ready) {
+      ctx.fillStyle = "#8fd05e";
+      ctx.fillRect(x - 0.8, y - 9.5, 1.6, 1.6);
     }
   }
 
@@ -1083,8 +1240,8 @@ export class Renderer {
         ctx.fillStyle = v.state === "chopping" ? "#9aa0a8" : "#6e7178";
         ctx.fillRect(ax - 1, ay - 1, 2, 2);
       }
-    } else if (v.state === "gathering") {
-      // eğilip toplama: kollar aşağı uzanır
+    } else if (v.state === "gathering" || v.state === "tending") {
+      // eğilip toplama / hayvanla ilgilenme: kollar aşağı uzanır
       const reach = 1.5 + Math.sin(v.walkPhase) * 1.5;
       ctx.beginPath();
       ctx.moveTo(x, y - 8.5);

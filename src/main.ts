@@ -25,6 +25,7 @@ import {
   updateMessages,
 } from "./render/hud";
 import { buyTech } from "./sim/tech";
+import { Animal, ANIMAL_DEFS, BARN_HERD, type AnimalType } from "./sim/animals";
 import {
   Building,
   BUILDING_DEFS,
@@ -86,6 +87,9 @@ const input = new Input(canvas, camera);
 
 const villagers: Villager[] = [];
 const buildings: Building[] = [];
+const animals: Animal[] = [];
+// kesilen domuzların yerine yenisi gelir
+const animalRespawns: { barn: Building; type: AnimalType; t: number }[] = [];
 let selected: BuildingType | null = null;
 let selectedVillager: Villager | null = null;
 let selectedBuilding: Building | null = null;
@@ -156,9 +160,30 @@ function fire(target: Building | null): void {
 }
 
 // Binayı yık: blokları aç, çalışanları/sakinleri serbest bırak, yarı iade
+// Çiftlik çevresindeki yürünebilir bloğa hayvan bırak
+function spawnAnimal(barn: Building, type: AnimalType): void {
+  for (let r = 1; r <= 4; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = b2t(barn.centerX) + dx;
+        const y = b2t(barn.centerY) + dy;
+        if (!world.walkableAt(x, y)) continue;
+        animals.push(new Animal(type, barn, x, y));
+        return;
+      }
+    }
+  }
+}
+const b2t = (px: number) => Math.floor(px / TILE_SIZE);
+
 function demolishBuilding(b: Building): void {
   if (b.type === BuildingType.Camp) return;
   b.removed = true;
+  // çiftlik yıkılırsa hayvanları da gider
+  for (let i = animals.length - 1; i >= 0; i--) {
+    if (animals[i].barn === b) animals.splice(i, 1);
+  }
   for (let dy = 0; dy < b.size; dy++) {
     for (let dx = 0; dx < b.size; dx++) {
       world.blocked.delete(world.index(b.x + dx, b.y + dy));
@@ -438,8 +463,9 @@ window.addEventListener("keydown", (e) => {
   }
   else if (e.code.startsWith("Digit")) {
     const n = Number(e.code.slice(5));
-    if (n >= 1 && n <= TOOLBAR_TYPES.length) {
-      selected = selected === TOOLBAR_TYPES[n - 1] ? null : TOOLBAR_TYPES[n - 1];
+    const idx = n === 0 ? 9 : n - 1; // 0 tuşu = 10. bina
+    if (idx >= 0 && idx < TOOLBAR_TYPES.length) {
+      selected = selected === TOOLBAR_TYPES[idx] ? null : TOOLBAR_TYPES[idx];
     }
   }
 });
@@ -500,9 +526,9 @@ function nightlyBirths(): void {
 }
 
 // Depo dolduğunda bir kez bildirim göster (boşalınca sıfırlanır)
-const wasFull: Record<ItemType, boolean> = {
-  wood: false, stone: false, berry: false, mushroom: false, fish: false,
-};
+const wasFull: Record<ItemType, boolean> = Object.fromEntries(
+  ITEM_TYPES.map((t) => [t, false])
+) as Record<ItemType, boolean>;
 
 let wasFamine = false;
 
@@ -575,7 +601,32 @@ function step(dt: number) {
     assignHomes();
   }
 
-  for (const v of villagers) v.update(dt, world, buildings);
+  for (const v of villagers) v.update(dt, world, buildings, animals);
+
+  // hayvanlar: dolanma, otlama, açlık
+  for (const a of animals) a.update(dt, world);
+  for (let i = animals.length - 1; i >= 0; i--) {
+    const a = animals[i];
+    if (!a.dead) continue;
+    if (a.slaughtered) {
+      // kesilen hayvanın yerine zamanla yenisi gelir
+      animalRespawns.push({ barn: a.barn, type: a.type, t: 90 });
+    } else {
+      addMessage(`🐄 Bir ${ANIMAL_DEFS[a.type].name.toLowerCase()} açlıktan telef oldu!`);
+    }
+    animals.splice(i, 1);
+  }
+  for (let i = animalRespawns.length - 1; i >= 0; i--) {
+    const r = animalRespawns[i];
+    r.t -= dt;
+    if (r.t <= 0) {
+      animalRespawns.splice(i, 1);
+      if (buildings.includes(r.barn)) {
+        spawnAnimal(r.barn, r.type);
+        addMessage(`Çiftliğe yeni bir ${ANIMAL_DEFS[r.type].name.toLowerCase()} geldi`);
+      }
+    }
+  }
 
   // büyüyen bebekler işçi olur
   for (const v of villagers) {
@@ -608,6 +659,11 @@ function step(dt: number) {
       } else {
         addMessage(`${def.name} tamamlandı`);
       }
+      // çiftlik tamamlanınca sürü gelir
+      if (b.type === BuildingType.Barn) {
+        for (const type of BARN_HERD) spawnAnimal(b, type);
+        addMessage("Çiftlik hayvanları geldi: tavuk, inek, domuz, koyun, keçi!");
+      }
       // üretim binası tamamlanınca havuzdan 1 işçi otomatik istihdam edilir
       if (b.def.maxWorkers > 0 && hire(b)) {
         addMessage(`${b.def.name} 1 ${(ROLE_NAMES[b.type] ?? "çalışan").toLowerCase()} istihdam etti`);
@@ -624,7 +680,7 @@ declare global {
     __game: unknown;
   }
 }
-window.__game = { world, villagers, buildings, camera, resources, gameTime };
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime };
 
 let last = performance.now();
 let accumulator = 0;
@@ -669,6 +725,7 @@ function frame(now: number) {
     camera,
     villagers,
     buildings,
+    animals,
     hoverValid ? hoverTile : null,
     ghost,
     selectedVillager,

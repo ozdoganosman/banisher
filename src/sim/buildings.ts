@@ -1,7 +1,13 @@
 import { TILE_SIZE } from "../world/tiles";
-import { Tile } from "../world/tiles";
+import { Tile, foodItemOf } from "../world/tiles";
 import type { World } from "../world/world";
 import { isFull } from "./resources";
+
+// Toplayıcı kulübesinin tarayacağı yemek blokları
+const FOOD_TILES: Tile[] = [
+  Tile.Bush, Tile.Mushroom, Tile.AppleTree,
+  Tile.OrangeTree, Tile.TangerineTree, Tile.NutBush,
+];
 
 export const enum BuildingType {
   House = 0,
@@ -14,6 +20,7 @@ export const enum BuildingType {
   Cafeteria = 7, // köylüler burada yemek yer: tokluk tamamen dolar
   Nursery = 8, // bebekler burada bakılır: hızlı büyür, acıkmaz
   Fisher = 9, // su kenarına kurulur; balıkçılar kıyıdan balık tutar
+  Barn = 10, // çiftlik: tavuk/inek/domuz besler, çiftçiler ürün toplar
 }
 
 export interface BuildingDef {
@@ -110,6 +117,14 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     needsWater: true,
     desc: "2 balıkçı istihdam eder; su kenarına kurulur, kışın da çalışır",
   },
+  [BuildingType.Barn]: {
+    name: "Çiftlik",
+    cost: 18,
+    buildTime: 11,
+    size: 2,
+    maxWorkers: 2,
+    desc: "Tavuk, inek ve domuz besler; çiftçiler yumurta, süt ve et toplar",
+  },
 };
 
 // ---- Konut sistemi ----
@@ -126,6 +141,7 @@ export const ROLE_NAMES: Partial<Record<BuildingType, string>> = {
   [BuildingType.Gatherer]: "Toplayıcı",
   [BuildingType.Temple]: "Rahip",
   [BuildingType.Fisher]: "Balıkçı",
+  [BuildingType.Barn]: "Çiftçi",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları
@@ -222,12 +238,15 @@ export class Building {
       if (t) world.markTree(t.x, t.y);
     } else {
       if (world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS) >= maxMarks) return;
-      const b =
-        (isFull("berry") ? null
-          : world.findNearestTileOfType(Tile.Bush, cx, cy, AUTO_MARK_RADIUS, world.markedBushes)) ??
-        (isFull("mushroom") ? null
-          : world.findNearestTileOfType(Tile.Mushroom, cx, cy, AUTO_MARK_RADIUS, world.markedBushes));
-      if (b) world.markFood(b.x, b.y);
+      for (const tile of FOOD_TILES) {
+        const item = foodItemOf(tile)!;
+        if (isFull(item)) continue;
+        const b = world.findNearestTileOfType(tile, cx, cy, AUTO_MARK_RADIUS, world.markedBushes);
+        if (b) {
+          world.markFood(b.x, b.y);
+          return;
+        }
+      }
     }
   }
 }

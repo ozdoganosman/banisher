@@ -96,6 +96,100 @@ function drawItemIcon(ctx: CanvasRenderingContext2D, item: IconItem, x: number, 
       ctx.fillStyle = "#1a2a36";
       ctx.fillRect(6, 11, 1.6, 1.6);
       break;
+    case "apple":
+      ctx.fillStyle = "#6b4a2b";
+      ctx.fillRect(11, 3, 2, 4);
+      ctx.fillStyle = "#4a8a2c";
+      ctx.fillRect(13, 4, 4, 2);
+      ctx.fillStyle = "#d43030";
+      ctx.beginPath();
+      ctx.arc(12, 14, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f08080";
+      ctx.fillRect(8, 10, 3, 2);
+      break;
+    case "orange":
+      ctx.fillStyle = "#f08a24";
+      ctx.beginPath();
+      ctx.arc(12, 13, 7.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#4a8a2c";
+      ctx.fillRect(10, 4, 4, 2);
+      ctx.fillStyle = "#ffc080";
+      ctx.fillRect(8, 9, 3, 2);
+      break;
+    case "tangerine":
+      ctx.fillStyle = "#ffaa3c";
+      ctx.beginPath();
+      ctx.ellipse(12, 14, 7, 5.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#4a8a2c";
+      ctx.fillRect(11, 6, 2, 3);
+      ctx.fillStyle = "#ffd9a0";
+      ctx.fillRect(8, 11, 3, 2);
+      break;
+    case "nut":
+      // palamut: koyu başlık + gövde
+      ctx.fillStyle = "#6b4a2b";
+      ctx.fillRect(7, 6, 10, 4);
+      ctx.fillRect(11, 4, 2, 2);
+      ctx.fillStyle = "#9a6c40";
+      ctx.beginPath();
+      ctx.ellipse(12, 14, 5, 6, 0, 0, Math.PI);
+      ctx.fill();
+      ctx.fillRect(7, 10, 10, 4);
+      break;
+    case "egg":
+      ctx.fillStyle = "#f0ead8";
+      ctx.beginPath();
+      ctx.ellipse(12, 13, 5.5, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fffaf0";
+      ctx.fillRect(9, 8, 3, 4);
+      break;
+    case "milk":
+      // süt kovası
+      ctx.fillStyle = "#8a8f96";
+      ctx.fillRect(6, 9, 12, 10);
+      ctx.fillStyle = "#aab0b8";
+      ctx.fillRect(7, 10, 4, 8);
+      ctx.fillStyle = "#eef2f5";
+      ctx.fillRect(7, 9, 10, 2.5);
+      ctx.strokeStyle = "#6e7178";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(12, 9, 6, Math.PI, 0);
+      ctx.stroke();
+      break;
+    case "meat":
+      // but: et + kemik
+      ctx.fillStyle = "#c05a50";
+      ctx.beginPath();
+      ctx.ellipse(10, 11, 6.5, 5.5, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e8e2d0";
+      ctx.save();
+      ctx.translate(15, 16);
+      ctx.rotate(-0.7);
+      ctx.fillRect(0, -1, 7, 2);
+      ctx.fillRect(6, -2.5, 2.5, 2.5);
+      ctx.fillRect(6, 0.5, 2.5, 2.5);
+      ctx.restore();
+      break;
+    case "wool":
+      // yün yumağı: kabarık bulut
+      ctx.fillStyle = "#e8e4d4";
+      ctx.beginPath();
+      ctx.arc(9, 13, 5, 0, Math.PI * 2);
+      ctx.arc(15, 13, 5, 0, Math.PI * 2);
+      ctx.arc(12, 10, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#c8c4b4";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(12, 13, 3, 0.5, 2.5);
+      ctx.stroke();
+      break;
     case "knowledge":
       ctx.fillStyle = "#b08fe0";
       ctx.fillRect(4, 5, 16, 15);
@@ -151,7 +245,7 @@ function drawSlotCount(ctx: CanvasRenderingContext2D, x: number, y: number, s: n
 // Koloni envanteri: araç çubuğunun üstünde slot çubuğu.
 // Minecraft gibi: slotlar boş başlar, edinilen eşya ilk boş slota
 // yerleşir ve stok bitince slot yeniden boşalır.
-const HOTBAR_SLOTS = 8;
+const HOTBAR_SLOTS = 13;
 const hotbarAssign: (IconItem | null)[] = new Array(HOTBAR_SLOTS).fill(null);
 
 function itemCount(item: IconItem): number {
@@ -212,15 +306,16 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.Woodcutter,
   BuildingType.Gatherer,
   BuildingType.Fisher,
+  BuildingType.Barn,
   BuildingType.Torch,
   BuildingType.Temple,
   BuildingType.Cafeteria,
   BuildingType.Nursery,
 ];
 
-const BTN_W = 104;
+const BTN_W = 96;
 const BTN_H = 48;
-const BTN_GAP = 5;
+const BTN_GAP = 4;
 
 // Geçici bildirimler ("Yetersiz odun!", "Yeni köylüler geldi" vb.)
 const messages: { text: string; ttl: number }[] = [];
@@ -396,7 +491,7 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.fillText("Çanta", x + 10, y + 145);
   const slotS = 28;
   const held = ITEM_TYPES.filter((it) => v.inventory[it] > 0);
-  for (let i = 0; i < ITEM_TYPES.length; i++) {
+  for (let i = 0; i < 6; i++) {
     const sx = x + 66 + i * (slotS + 4);
     drawSlot(ctx, sx, y + 130, slotS);
     const item = held[i];
@@ -1211,7 +1306,7 @@ export function drawHud(
 
     ctx.fillStyle = affordable ? "#e8e2d0" : "#8a8478";
     ctx.font = "bold 13px monospace";
-    ctx.fillText(`${i + 1}. ${def.name}`, r.x + 10, r.y + 14);
+    ctx.fillText(`${(i + 1) % 10}. ${def.name}`, r.x + 8, r.y + 14, r.w - 14);
     ctx.font = "12px monospace";
     ctx.fillStyle = affordable ? "#c9a35a" : "#9a6055";
     ctx.fillText(`${def.cost} odun`, r.x + 10, r.y + 30);

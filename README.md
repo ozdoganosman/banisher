@@ -32,7 +32,25 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
-## Şu anki özellikler (v1.0)
+## Şu anki özellikler (v1.1)
+
+### v1.1: Hayvancılık, yeni yiyecekler ve UI iyileştirmeleri
+
+- **Çiftlik (18 odun, 2 çiftçi)**: tamamlanınca tavuk×2, inek, domuz,
+  koyun ve keçi gelir; hayvanlar çiftlik çevresinde dolanır
+- **Hayvan açlığı**: hayvanlar acıkınca çimende otlar; aç hayvan üretmez,
+  uzun süre aç kalan telef olur (baş üstü açlık barı)
+- **Hayvan ürünleri**: tavuk→yumurta, inek/keçi→süt, koyun→yün,
+  domuz→et (kesilir, 90 sn sonra yenisi gelir); hazır hayvanın üstünde
+  yeşil nokta belirir, çiftçi gidip toplar
+- **Meyve ağaçları**: ormanlarda elma/portakal/mandalina ağaçları —
+  toplanır, ağaç yerinde kalır ve bir süre sonra yeniden meyve verir;
+  **yemiş çalıları** fındık verir
+- **Yeni eşyalar**: elma, portakal, mandalina, yemiş, yumurta, süt, et
+  (hepsi yenir) ve yün (malzeme)
+- **UI**: mini haritada sürükleyerek gezinme, tıklanabilir duraklat/hız
+  düğmeleri, bina paneline Yık düğmesi (yarı iade), kilometre taşı
+  kutlamaları, eşya taşıyan köylülerde sırt çantası
 
 ### v1.0: Mevsimler, balıkçılık ve teknoloji ağacı
 
