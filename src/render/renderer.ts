@@ -10,7 +10,7 @@ import { isFull, ITEM_INFO, ITEM_TYPES } from "../sim/resources";
 import { darkness, season } from "../sim/time";
 import { floaters, particles, FLOATER_TTL } from "./effects";
 import { hash2 } from "../world/noise";
-import { Tile, TILE_COLORS, TILE_SIZE } from "../world/tiles";
+import { Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
 
 const SKIN = "#e8b88a";
@@ -24,8 +24,50 @@ const OUTLINE = "#3a2c1a";
 const WATER_SHALLOW = ["#4383cc", "#477fc4", "#3f7abd"];
 const WATER_DEEP = ["#1c4170", "#1e466f", "#193d66"];
 
+// ---- Mevsime göre zemin paletleri (ilkbahar, yaz, sonbahar, kış) ----
+
+const GRASS_BY_SEASON: string[][] = [
+  ["#5a8f3c", "#558838", "#609541"], // ilkbahar: taze yeşil
+  ["#549435", "#4e8c31", "#5c9c3c"], // yaz: canlı yeşil
+  ["#7d8b3a", "#768434", "#849240"], // sonbahar: sararmış
+  ["#e8edf2", "#dfe5ec", "#f2f5f9"], // kış: kar örtüsü
+];
+
+const DIRT_BY_SEASON: string[][] = [
+  ["#8a6a43", "#84653f", "#907048"],
+  ["#8a6a43", "#84653f", "#907048"],
+  ["#8f6a3c", "#886438", "#967144"],
+  ["#b3aea2", "#aaa498", "#bcb7ab"], // kırağılı toprak
+];
+
+const SAND_BY_SEASON: string[][] = [
+  ["#d8c27a", "#d1bb74", "#dfc983"],
+  ["#d8c27a", "#d1bb74", "#dfc983"],
+  ["#d4bb72", "#ccb36b", "#dcc37c"],
+  ["#e6e1cd", "#ded9c4", "#eee9d6"], // karla karışık kum
+];
+
+const STONE_BY_SEASON: string[][] = [
+  ["#7c7f86", "#75787f", "#84878e"],
+  ["#7c7f86", "#75787f", "#84878e"],
+  ["#7c7f86", "#75787f", "#84878e"],
+  ["#a6abb3", "#9da2aa", "#b2b7bf"], // karlı kayalar
+];
+
 // Ağaç tacı: koyudan açığa, ışık sol üstten gelir
-const CANOPY = ["#27581d", "#2e6b22", "#3d8a2e", "#54a83d", "#6cbf4e"];
+const CANOPY_BY_SEASON: string[][] = [
+  ["#27581d", "#2e6b22", "#3d8a2e", "#54a83d", "#6cbf4e"], // ilkbahar
+  ["#24561a", "#2c6c20", "#3b8c2c", "#52aa3b", "#6ac24c"], // yaz
+  ["#7a3c12", "#9c5a1e", "#bb7228", "#d98e3a", "#e8a84c"], // sonbahar: turuncu
+  ["#2f5a3c", "#3a6a48", "#7fa395", "#d8e4ea", "#eef4f8"], // kış: karlı taç
+];
+
+const BUSH_BY_SEASON: string[][] = [
+  ["#34701f", "#4a9438", "#56a843"],
+  ["#316f1c", "#479236", "#54a641"],
+  ["#7a4a1d", "#b06a28", "#c98438"], // sonbahar çalısı
+  ["#5a7a6a", "#cfdce4", "#eef4f8"], // karlı çalı
+];
 
 // İki hex rengi karıştır (t: 0 -> a, 1 -> b)
 function mix(a: string, b: string, t: number): string {
@@ -59,6 +101,8 @@ export class Renderer {
   private minimap = document.createElement("canvas");
   private mctx: CanvasRenderingContext2D;
   private minimapRect = { x: 0, y: 0, w: 0, h: 0 };
+  // Mevsim değişince zemin tamamen yeniden boyanır
+  private lastSeason = season();
 
   constructor(private world: World) {
     this.terrain = document.createElement("canvas");
@@ -100,7 +144,15 @@ export class Renderer {
       return;
     }
 
-    const colors = TILE_COLORS[t];
+    // mevsime göre zemin paleti
+    const s = season();
+    let colors: string[];
+    switch (t) {
+      case Tile.Sand: colors = SAND_BY_SEASON[s]; break;
+      case Tile.Dirt: colors = DIRT_BY_SEASON[s]; break;
+      case Tile.Stone: colors = STONE_BY_SEASON[s]; break;
+      default: colors = GRASS_BY_SEASON[s]; break; // çimen ve üstündekiler
+    }
     const sub = 4;
     for (let sy = 0; sy < sub; sy++) {
       for (let sx = 0; sx < sub; sx++) {
@@ -110,15 +162,21 @@ export class Renderer {
       }
     }
 
-    // çimen zeminlerde tek tük ot pikselleri
-    if (t === Tile.Grass || t === Tile.Tree || t === Tile.Bush) {
-      this.tctx.fillStyle = "#3f6e2b";
+    // çimen zeminlerde mevsim detayları: ot, ilkbaharda çiçek, kışta yok
+    if ((t === Tile.Grass || t === Tile.Tree || t === Tile.Bush) && s !== 3) {
       for (let k = 0; k < 3; k++) {
         const v = hash2(x * 3 + k, y * 7 + k, 21);
         if (v > 0.55) continue;
         const gx = px + 1 + Math.floor(hash2(x + k, y, 22) * 14);
         const gy = py + 2 + Math.floor(hash2(x, y + k, 23) * 12);
-        this.tctx.fillRect(gx, gy, 1, 2);
+        if (s === 0 && v < 0.12) {
+          // ilkbahar çiçekleri
+          this.tctx.fillStyle = v < 0.06 ? "#f0c8e0" : "#f5f0d8";
+          this.tctx.fillRect(gx, gy, 2, 2);
+        } else {
+          this.tctx.fillStyle = s === 2 ? "#6e7530" : "#3f6e2b";
+          this.tctx.fillRect(gx, gy, 1, 2);
+        }
       }
     }
 
@@ -130,17 +188,18 @@ export class Renderer {
   }
 
   private paintMinimapPixel(x: number, y: number, t: Tile): void {
+    const s = season();
     let color: string;
     switch (t) {
       case Tile.Water:
         color = this.world.heightAt(x, y) < 0.2 ? "#1c4170" : "#2a5d9c";
         break;
-      case Tile.Sand: color = "#d8c27a"; break;
-      case Tile.Dirt: color = "#8a6a43"; break;
-      case Tile.Stone: color = "#85888f"; break;
-      case Tile.Tree: color = "#2e6b22"; break;
-      case Tile.Bush: color = "#4a9438"; break;
-      default: color = "#5a8f3c"; break;
+      case Tile.Sand: color = SAND_BY_SEASON[s][0]; break;
+      case Tile.Dirt: color = DIRT_BY_SEASON[s][0]; break;
+      case Tile.Stone: color = STONE_BY_SEASON[s][0]; break;
+      case Tile.Tree: color = CANOPY_BY_SEASON[s][1]; break;
+      case Tile.Bush: color = BUSH_BY_SEASON[s][1]; break;
+      default: color = GRASS_BY_SEASON[s][0]; break;
     }
     this.mctx.fillStyle = color;
     this.mctx.fillRect(x, y, 1, 1);
@@ -278,14 +337,15 @@ export class Renderer {
     c.fillRect(px + 7, py + 9, 2, 6);
     c.fillStyle = "#57391f";
     c.fillRect(px + 8, py + 9, 1, 6); // gövdenin gölgeli yarısı
-    // yapraklar: yönlü ışıkla taç (sol üst açık, sağ alt koyu)
+    // yapraklar: yönlü ışıkla taç (sol üst açık, sağ alt koyu), mevsim renkli
+    const canopy = CANOPY_BY_SEASON[season()];
     for (let dy = -5; dy <= 5; dy++) {
       for (let dx = -5; dx <= 5; dx++) {
         if (dx * dx + dy * dy > 22) continue;
         const v = hash2(x * 16 + dx, y * 16 + dy, 99);
         const light = 0.55 - (dx + dy) * 0.07 + (v - 0.5) * 0.55;
-        const idx = Math.min(CANOPY.length - 1, Math.max(0, Math.floor(light * CANOPY.length)));
-        c.fillStyle = CANOPY[idx];
+        const idx = Math.min(canopy.length - 1, Math.max(0, Math.floor(light * canopy.length)));
+        c.fillStyle = canopy[idx];
         c.fillRect(cx + dx, cy + dy, 1, 1);
       }
     }
@@ -300,13 +360,14 @@ export class Renderer {
     c.beginPath();
     c.ellipse(cx + 1, cy + 3, 4.5, 1.6, 0, 0, Math.PI * 2);
     c.fill();
-    // alçak yuvarlak çalı: üstü açık, altı koyu + kırmızı meyveler
+    // alçak yuvarlak çalı: üstü açık, altı koyu + kırmızı meyveler (mevsim renkli)
+    const bushPal = BUSH_BY_SEASON[season()];
     for (let dy = -3; dy <= 3; dy++) {
       for (let dx = -4; dx <= 4; dx++) {
         if (dx * dx + dy * dy * 2 > 16) continue;
         const v = hash2(x * 16 + dx, y * 16 + dy, 77);
         const light = 0.5 - (dx + dy) * 0.09 + (v - 0.5) * 0.5;
-        c.fillStyle = light > 0.6 ? "#56a843" : light > 0.3 ? "#4a9438" : "#34701f";
+        c.fillStyle = light > 0.6 ? bushPal[2] : light > 0.3 ? bushPal[1] : bushPal[0];
         c.fillRect(cx + dx, cy + dy, 1, 1);
       }
     }
@@ -333,6 +394,16 @@ export class Renderer {
     selectedBuilding: Building | null,
     time: number
   ): void {
+    // mevsim değiştiyse zemini yeni paletle baştan boya
+    if (season() !== this.lastSeason) {
+      this.lastSeason = season();
+      for (let y = 0; y < this.world.height; y++) {
+        for (let x = 0; x < this.world.width; x++) {
+          this.paintTile(x, y);
+        }
+      }
+    }
+
     const vw = ctx.canvas.width;
     const vh = ctx.canvas.height;
     ctx.imageSmoothingEnabled = false;
@@ -506,13 +577,14 @@ export class Renderer {
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    // Mevsim atmosferi: sonbaharda sıcak ton, kışta soğuk ton + kar
+    // Mevsim atmosferi: sonbaharda sıcak ton, kışta hafif soğuk ton + kar
+    // (zemin zaten mevsim paletiyle boyanır; tonlar inceltildi)
     const s = season();
     if (s === 2) {
-      ctx.fillStyle = "rgba(220, 140, 50, 0.06)";
+      ctx.fillStyle = "rgba(220, 140, 50, 0.04)";
       ctx.fillRect(0, 0, vw, vh);
     } else if (s === 3) {
-      ctx.fillStyle = "rgba(190, 215, 250, 0.13)";
+      ctx.fillStyle = "rgba(190, 215, 250, 0.06)";
       ctx.fillRect(0, 0, vw, vh);
       // süzülen kar taneleri (ekran uzayında, deterministik)
       ctx.fillStyle = "rgba(245, 250, 255, 0.75)";
