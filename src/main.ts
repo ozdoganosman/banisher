@@ -691,6 +691,13 @@ function step(dt: number) {
 
   for (const b of buildings) {
     b.update(dt, world, workersOf(b));
+    // kaynak bitti uyarısı (bir kez; kaynak dönerse sıfırlanır)
+    if (b.outOfResources && !b.warnedOut && workersOf(b) > 0) {
+      b.warnedOut = true;
+      addMessage(`⚠ ${b.def.name} kulübesinin menzilinde kaynak kalmadı!`);
+    } else if (!b.outOfResources) {
+      b.warnedOut = false;
+    }
     // tamamlanma etkileri bir kez uygulanır
     if (b.done && !b.effectApplied) {
       b.effectApplied = true;

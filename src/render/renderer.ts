@@ -2,6 +2,7 @@ import type { Camera } from "../engine/camera";
 import type { Animal } from "../sim/animals";
 import type { Villager } from "../sim/villager";
 import {
+  AUTO_MARK_RADIUS,
   Building,
   BuildingType,
   isDepositPoint,
@@ -560,6 +561,24 @@ export class Renderer {
       }
     }
 
+    // Kaynağı biten üretim kulübeleri: turuncu "!" uyarısı
+    {
+      const bob2 = Math.sin(time * 4 + 1.5) * 1.5;
+      for (const b of buildings) {
+        if (!b.done || !b.outOfResources) continue;
+        const wx = b.centerX;
+        const wy = b.y * TILE_SIZE - 8 + bob2;
+        ctx.fillStyle = "#f08a24";
+        ctx.fillRect(wx - 3, wy - 4, 6, 8);
+        ctx.strokeStyle = "#3a2c1a";
+        ctx.lineWidth = 0.6;
+        ctx.strokeRect(wx - 3, wy - 4, 6, 8);
+        ctx.fillStyle = "#3a2c1a";
+        ctx.fillRect(wx - 0.6, wy - 2.5, 1.2, 3.5);
+        ctx.fillRect(wx - 0.6, wy + 2, 1.2, 1.2);
+      }
+    }
+
     // parçacıklar (talaş, taş kırıntısı) ve uçan kazanç yazıları
     for (const p of particles) {
       ctx.globalAlpha = Math.min(1, p.ttl * 2.5);
@@ -590,13 +609,18 @@ export class Renderer {
       ctx.fillRect(gx, gy, s, s);
       ctx.strokeStyle = ghost.valid ? "rgba(80, 220, 100, 0.9)" : "rgba(230, 60, 60, 0.9)";
       ctx.strokeRect(gx + 0.5, gy + 0.5, s - 1, s - 1);
-      // meşale hayaletinde ışık yarıçapı önizlemesi
+      // meşale hayaletinde ışık, üretim kulübelerinde çalışma alanı önizlemesi
       const lr = LIGHT_RADIUS[ghost.type];
-      if (lr) {
-        ctx.strokeStyle = "rgba(255, 200, 80, 0.5)";
+      const isWorkHut =
+        ghost.type === BuildingType.Woodcutter ||
+        ghost.type === BuildingType.Gatherer ||
+        ghost.type === BuildingType.Fisher;
+      const pr = lr ?? (isWorkHut ? AUTO_MARK_RADIUS * TILE_SIZE : 0);
+      if (pr) {
+        ctx.strokeStyle = lr ? "rgba(255, 200, 80, 0.5)" : "rgba(110, 220, 200, 0.5)";
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
-        ctx.arc(gx + s / 2, gy + s / 2, lr, 0, Math.PI * 2);
+        ctx.arc(gx + s / 2, gy + s / 2, pr, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
       }

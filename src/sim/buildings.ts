@@ -173,13 +173,15 @@ export function isDepositPoint(b: Building): boolean {
 }
 
 export const AUTO_MARK_RADIUS = 9; // blok: kulübenin çalışma alanı
-const SCAN_INTERVAL = 2.5; // saniye
+const SCAN_INTERVAL = 1.5; // saniye
 
 export class Building {
   progress = 0;
   removed = false; // yıkıldı: köylüler işlerini bırakır
   claimed = false; // bir inşaatçı bu şantiyeyi sahiplendi mi
   effectApplied = false; // tamamlanma etkisi (köylü gelmesi vb.) bir kez uygulanır
+  outOfResources = false; // çalışma alanında işlenecek kaynak kalmadı
+  warnedOut = false; // kaynak bitti bildirimi bir kez gösterilir
   worshipTimer = 8; // tapınak: bu sayaç bitince yeni ayin yapılabilir
   worshipClaimed = false;
   private scanTimer = Math.random() * SCAN_INTERVAL;
@@ -227,26 +229,32 @@ export class Building {
     if (this.scanTimer > 0) return;
     this.scanTimer = SCAN_INTERVAL;
     if (workers <= 0) return;
-    const maxMarks = workers * 2;
+    const maxMarks = workers * 3;
 
     const cx = this.x + 1;
     const cy = this.y + 1;
     if (this.type === BuildingType.Woodcutter) {
-      if (isFull("wood")) return; // depo dolu: işaretlemeyi durdur
-      if (world.countMarkedNear(world.markedTrees, cx, cy, AUTO_MARK_RADIUS) >= maxMarks) return;
       const t = world.findNearestTileOfType(Tile.Tree, cx, cy, AUTO_MARK_RADIUS, world.markedTrees);
+      const markedNear = world.countMarkedNear(world.markedTrees, cx, cy, AUTO_MARK_RADIUS);
+      this.outOfResources = !t && markedNear === 0;
+      if (isFull("wood")) return; // depo dolu: işaretlemeyi durdur
+      if (markedNear >= maxMarks) return;
       if (t) world.markTree(t.x, t.y);
     } else {
-      if (world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS) >= maxMarks) return;
+      const markedNear = world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS);
+      let found = false;
       for (const tile of FOOD_TILES) {
         const item = foodItemOf(tile)!;
-        if (isFull(item)) continue;
         const b = world.findNearestTileOfType(tile, cx, cy, AUTO_MARK_RADIUS, world.markedBushes);
-        if (b) {
+        if (!b) continue;
+        found = true;
+        if (isFull(item)) continue;
+        if (markedNear < maxMarks) {
           world.markFood(b.x, b.y);
-          return;
+          break;
         }
       }
+      this.outOfResources = !found && markedNear === 0;
     }
   }
 }

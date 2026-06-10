@@ -429,37 +429,27 @@ export class Villager {
         Math.abs(x - hx) <= AUTO_MARK_RADIUS && Math.abs(y - hy) <= AUTO_MARK_RADIUS;
 
       if (hut.type === BuildingType.Woodcutter && !isFull("wood") && !bagFull) {
-        const tree = world.findNearestMarked(
-          world.markedTrees, world.claimedTrees, this.x, this.y,
-          (x, y) => inArea(x, y) && litTile(x, y)
+        this.pushTileJobCandidate(
+          world, candidates, world.markedTrees, world.claimedTrees,
+          (x, y) => inArea(x, y) && litTile(x, y),
+          (i) => {
+            world.claimedTrees.add(i);
+            this.job = { kind: "chop", tile: i };
+          }
         );
-        if (tree) {
-          candidates.push({
-            dist: tree.dist,
-            start: () => this.startTileJob(world, tree.x, tree.y, (i) => {
-              world.claimedTrees.add(i);
-              this.job = { kind: "chop", tile: i };
-            }),
-          });
-        }
       } else if (hut.type === BuildingType.Gatherer && !bagFull) {
-        const food = world.findNearestMarked(
-          world.markedBushes, world.claimedBushes, this.x, this.y,
+        this.pushTileJobCandidate(
+          world, candidates, world.markedBushes, world.claimedBushes,
           (x, y) => {
             const item = foodItemOf(world.get(x, y));
             return !!item && inArea(x, y) && litTile(x, y) && !isFull(item);
+          },
+          (i, fx, fy) => {
+            world.claimedBushes.add(i);
+            const item = foodItemOf(world.get(fx, fy)) ?? "berry";
+            this.job = { kind: "gather", tile: i, item };
           }
         );
-        if (food) {
-          candidates.push({
-            dist: food.dist,
-            start: () => this.startTileJob(world, food.x, food.y, (i) => {
-              world.claimedBushes.add(i);
-              const item = foodItemOf(world.get(food.x, food.y)) ?? "berry";
-              this.job = { kind: "gather", tile: i, item };
-            }),
-          });
-        }
       } else if (hut.type === BuildingType.Fisher) {
         if (!isFull("fish") && !bagFull) {
           // kulübe alanında su komşusu olan kıyı bloğu bul, oraya git
@@ -558,51 +548,38 @@ export class Villager {
 
       // ortalık işçisi: elle/kulübece işaretlenmiş her kaynağa gider
       if (!isFull("wood") && !bagFull) {
-        const tree = world.findNearestMarked(
-          world.markedTrees, world.claimedTrees, this.x, this.y, litTile
+        this.pushTileJobCandidate(
+          world, candidates, world.markedTrees, world.claimedTrees, litTile,
+          (i) => {
+            world.claimedTrees.add(i);
+            this.job = { kind: "chop", tile: i };
+          }
         );
-        if (tree) {
-          candidates.push({
-            dist: tree.dist,
-            start: () => this.startTileJob(world, tree.x, tree.y, (i) => {
-              world.claimedTrees.add(i);
-              this.job = { kind: "chop", tile: i };
-            }),
-          });
-        }
       }
 
-      const food = bagFull ? null : world.findNearestMarked(
-        world.markedBushes, world.claimedBushes, this.x, this.y,
-        (x, y) => {
-          const item = foodItemOf(world.get(x, y));
-          return !!item && litTile(x, y) && !isFull(item);
-        }
-      );
-      if (food) {
-        candidates.push({
-          dist: food.dist,
-          start: () => this.startTileJob(world, food.x, food.y, (i) => {
+      if (!bagFull) {
+        this.pushTileJobCandidate(
+          world, candidates, world.markedBushes, world.claimedBushes,
+          (x, y) => {
+            const item = foodItemOf(world.get(x, y));
+            return !!item && litTile(x, y) && !isFull(item);
+          },
+          (i, fx, fy) => {
             world.claimedBushes.add(i);
-            const item = foodItemOf(world.get(food.x, food.y)) ?? "berry";
+            const item = foodItemOf(world.get(fx, fy)) ?? "berry";
             this.job = { kind: "gather", tile: i, item };
-          }),
-        });
+          }
+        );
       }
 
       if (!isFull("stone") && !bagFull) {
-        const stone = world.findNearestMarked(
-          world.markedStones, world.claimedStones, this.x, this.y, litTile
+        this.pushTileJobCandidate(
+          world, candidates, world.markedStones, world.claimedStones, litTile,
+          (i) => {
+            world.claimedStones.add(i);
+            this.job = { kind: "mine", tile: i };
+          }
         );
-        if (stone) {
-          candidates.push({
-            dist: stone.dist,
-            start: () => this.startTileJob(world, stone.x, stone.y, (i) => {
-              world.claimedStones.add(i);
-              this.job = { kind: "mine", tile: i };
-            }),
-          });
-        }
       }
     }
 
@@ -643,6 +620,36 @@ export class Villager {
     claim(world.index(tx, ty));
     this.startPath(path);
     return true;
+  }
+
+  // İşaretli blok işi adayı ekler; en yakın hedefe yol yoksa
+  // sıradaki birkaç hedefi dener (işçiler boşuna beklemesin)
+  private pushTileJobCandidate(
+    world: World,
+    candidates: { dist: number; start: () => boolean }[],
+    marked: Set<number>,
+    claimed: Set<number>,
+    accept: (x: number, y: number) => boolean,
+    claim: (index: number, x: number, y: number) => void
+  ): void {
+    const first = world.findNearestMarked(marked, claimed, this.x, this.y, accept);
+    if (!first) return;
+    candidates.push({
+      dist: first.dist,
+      start: () => {
+        const tried = new Set<number>();
+        for (let k = 0; k < 4; k++) {
+          const t = world.findNearestMarked(
+            marked, claimed, this.x, this.y,
+            (x, y) => !tried.has(world.index(x, y)) && accept(x, y)
+          );
+          if (!t) return false;
+          if (this.startTileJob(world, t.x, t.y, (i) => claim(i, t.x, t.y))) return true;
+          tried.add(world.index(t.x, t.y));
+        }
+        return false;
+      },
+    });
   }
 
   private tryDeposit(world: World, buildings: Building[]): boolean {
@@ -1016,6 +1023,6 @@ export class Villager {
     this.state = "idle";
     this.path = [];
     this.walkPhase = 0;
-    this.timer = 0.5 + Math.random() * 2;
+    this.timer = 0.3 + Math.random() * 0.7;
   }
 }
