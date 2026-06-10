@@ -114,6 +114,8 @@ function villagerAt(wx: number, wy: number): Villager | null {
   let best: Villager | null = null;
   let bestDist = 9;
   for (const v of villagers) {
+    // evinde uyuyan içeridedir: tıklama binaya gitsin
+    if (v.state === "sleeping" && !v.groundSleep && v.home) continue;
     const d = Math.hypot(wx - v.x, wy - (v.y - 6));
     if (d < bestDist) {
       bestDist = d;

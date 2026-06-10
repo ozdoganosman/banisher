@@ -272,8 +272,9 @@ export class Villager {
       this.toIdle();
     }
 
-    // sabah oldu: uyan
+    // sabah oldu: uyan (evde uyuyan evin yanına çıkar)
     if (this.state === "sleeping" && !isSleepTime()) {
+      if (!this.groundSleep && this.home) this.exitBuilding(world, this.home);
       this.groundSleep = false;
       this.toIdle();
     }
@@ -712,8 +713,7 @@ export class Villager {
       const near = TILE_SIZE * (this.groundSleep ? 3.5 : 2.5);
       const d = Math.abs(this.x - target.centerX) + Math.abs(this.y - target.centerY);
       if (d <= near) {
-        this.state = "sleeping";
-        this.walkPhase = 0;
+        this.enterSleep(target);
         return;
       }
       // evsizler kampın çevresine dağılarak yatar (üst üste yığılmasınlar)
@@ -744,6 +744,32 @@ export class Villager {
     // hedefe ulaşılamıyorsa olduğu yerde uyu
     this.state = "sleeping";
     this.walkPhase = 0;
+  }
+
+  // Uykuya geç: evi varsa içine girer (görünmez olur), yoksa yerde yatar
+  private enterSleep(target: Building | null): void {
+    if (!this.groundSleep && this.home && target === this.home) {
+      this.x = this.home.centerX;
+      this.y = this.home.centerY;
+    }
+    this.state = "sleeping";
+    this.walkPhase = 0;
+  }
+
+  // Bina içinden çevredeki yürünebilir bloğa çık
+  private exitBuilding(world: World, b: Building): void {
+    for (let r = 1; r <= 3; r++) {
+      for (let dy = -r; dy <= r + b.size - 1; dy++) {
+        for (let dx = -r; dx <= r + b.size - 1; dx++) {
+          const x = b.x + dx;
+          const y = b.y + dy;
+          if (!world.walkableAt(x, y)) continue;
+          this.x = (x + 0.5) * TILE_SIZE;
+          this.y = (y + 0.5) * TILE_SIZE;
+          return;
+        }
+      }
+    }
   }
 
   private startPath(path: PathNode[]): void {
@@ -872,11 +898,12 @@ export class Villager {
         this.timer = WORSHIP_TIME;
         this.faceTowards(this.job.building.centerX);
         break;
-      case "sleep":
+      case "sleep": {
+        const b = this.job.building;
         this.job = null;
-        this.state = "sleeping";
-        this.walkPhase = 0;
+        this.enterSleep(b);
         break;
+      }
       case "eat":
         this.atCafeteria = true;
         this.job = null;

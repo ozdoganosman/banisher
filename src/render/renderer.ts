@@ -260,6 +260,7 @@ export class Renderer {
       ctx.fillRect(x + b.x * sx, y + b.y * sy, Math.max(2, b.size * sx), Math.max(2, b.size * sy));
     }
     for (const v of villagers) {
+      if (v.state === "sleeping" && !v.groundSleep && v.home) continue; // içeride
       ctx.fillStyle = v.baby ? "#ffb0d0" : "#ffffff";
       ctx.fillRect(x + (v.x / TILE_SIZE) * sx - 0.5, y + (v.y / TILE_SIZE) * sy - 0.5, 1.5, 1.5);
     }
@@ -529,6 +530,8 @@ export class Renderer {
       });
     }
     for (const v of villagers) {
+      // evinde uyuyan köylü içeridedir: çizilmez (evin üstünde z çıkar)
+      if (v.state === "sleeping" && !v.groundSleep && v.home) continue;
       drawables.push({ baseY: v.y, draw: () => this.drawVillager(ctx, v) });
     }
     for (const a of animals) {
@@ -560,6 +563,25 @@ export class Renderer {
           ctx.fillRect(wx - total / 2 + k * 4, wy + 6, 3, 3);
         });
       }
+    }
+
+    // İçinde uyuyan olan evlerin çatısında "z" animasyonu
+    {
+      const sleepingHomes = new Set<Building>();
+      for (const v of villagers) {
+        if (v.state === "sleeping" && !v.groundSleep && v.home) sleepingHomes.add(v.home);
+      }
+      ctx.font = "bold 5px monospace";
+      ctx.fillStyle = "#cfe0f0";
+      for (const b of sleepingHomes) {
+        const zt = (time % 2) / 2;
+        ctx.globalAlpha = 1 - zt;
+        ctx.fillText("z", b.centerX + 6, b.y * TILE_SIZE - 1 - zt * 4);
+        ctx.font = "bold 4px monospace";
+        ctx.fillText("z", b.centerX + 10, b.y * TILE_SIZE - 4 - zt * 4);
+        ctx.font = "bold 5px monospace";
+      }
+      ctx.globalAlpha = 1;
     }
 
     // Kaynağı biten üretim kulübeleri: turuncu "!" uyarısı
