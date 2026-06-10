@@ -2,8 +2,15 @@ import { addFloater, burst } from "../render/effects";
 import { Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
 import type { Building } from "./buildings";
-import { BUILDING_SIZE, isDepositPoint } from "./buildings";
+import {
+  isDepositPoint,
+  isLit,
+  KNOWLEDGE_PER_WORSHIP,
+  WORSHIP_INTERVAL,
+  WORSHIP_TIME,
+} from "./buildings";
 import { randomIdentity, type Identity } from "./names";
+import { isNight } from "./time";
 import {
   findPath,
   findPathAdjacent,
@@ -16,6 +23,7 @@ import {
   isFull,
   ITEM_INFO,
   ITEM_TYPES,
+  resources,
   takeFood,
   type ItemType,
 } from "./resources";
@@ -63,6 +71,7 @@ type VillagerState =
   | "gathering"
   | "mining"
   | "building"
+  | "worshipping"
   | "eating";
 
 type Job =
@@ -70,6 +79,7 @@ type Job =
   | { kind: "gather"; tile: number; item: "berry" | "mushroom" }
   | { kind: "mine"; tile: number }
   | { kind: "build"; building: Building }
+  | { kind: "worship"; building: Building }
   | { kind: "deposit"; building: Building };
 
 export class Villager {
@@ -131,6 +141,7 @@ export class Villager {
           case "gather": return "Toplamaya gidiyor";
           case "mine": return "Taş ocağına gidiyor";
           case "build": return "Şantiyeye gidiyor";
+          case "worship": return "Tapınağa gidiyor";
           case "deposit": return "Depoya taşıyor";
         }
         break;
@@ -144,6 +155,8 @@ export class Villager {
         return "Taş kazıyor";
       case "building":
         return "İnşaat yapıyor";
+      case "worshipping":
+        return "Tapınıyor";
       case "eating":
         return "Yemek yiyor";
     }
@@ -163,13 +176,25 @@ export class Villager {
       this.starveTimer = 0;
     }
 
+    // Gece çöktü ve çalıştığı yer karanlıkta kaldıysa işi bırak
+    if (
+      isNight() &&
+      !isLit(buildings, this.x, this.y) &&
+      (this.state === "chopping" || this.state === "gathering" ||
+        this.state === "mining" || this.state === "building" ||
+        this.state === "worshipping")
+    ) {
+      this.releaseJob(world);
+      this.toIdle();
+    }
+
     switch (this.state) {
       case "idle":
         this.timer -= dt;
         if (this.timer <= 0) this.decide(world, buildings);
         break;
       case "walking":
-        this.walk(dt, world);
+        this.walk(dt, world, buildings);
         break;
       case "chopping":
         this.chop(dt, world);
@@ -182,6 +207,9 @@ export class Villager {
         break;
       case "building":
         this.build(dt);
+        break;
+      case "worshipping":
+        this.worship(dt);
         break;
       case "eating":
         this.timer -= dt;
@@ -207,6 +235,7 @@ export class Villager {
       case "gather": world.claimedBushes.delete(this.job.tile); break;
       case "mine": world.claimedStones.delete(this.job.tile); break;
       case "build": this.job.building.claimed = false; break;
+      case "worship": this.job.building.worshipClaimed = false; break;
       case "deposit": break;
     }
     this.job = null;
@@ -233,19 +262,24 @@ export class Villager {
     // 2) Çanta dolduysa depoya/kampa taşı
     if (this.inventoryTotal >= DEPOSIT_AT && this.tryDeposit(world, buildings)) return;
 
+    // Gece yalnızca ışıklı (meşale/kamp ateşi yakını) noktalarda çalışılır
+    const lit = (wx: number, wy: number) => !isNight() || isLit(buildings, wx, wy);
+    const litTile = (x: number, y: number) =>
+      lit((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE);
+
     // 3) Mesleğine uygun en yakın işi seç
     type Candidate = { dist: number; start: () => boolean };
     const candidates: Candidate[] = [];
 
     if (this.canDo("build")) {
       for (const b of buildings) {
-        if (b.done || b.claimed) continue;
+        if (b.done || b.claimed || !lit(b.centerX, b.centerY)) continue;
         const d = Math.abs(b.x + 1 - this.tileX) + Math.abs(b.y + 1 - this.tileY);
         candidates.push({
           dist: d,
           start: () => {
             const path = findPathAdjacentRect(
-              world, this.tileX, this.tileY, b.x, b.y, BUILDING_SIZE
+              world, this.tileX, this.tileY, b.x, b.y, b.size
             );
             if (!path) return false;
             b.claimed = true;
@@ -257,8 +291,29 @@ export class Villager {
       }
     }
 
+    // tapınak ayini (her meslek yapabilir; bilgi üretir)
+    for (const b of buildings) {
+      if (!b.worshipReady || !lit(b.centerX, b.centerY)) continue;
+      const d = Math.abs(b.x + 1 - this.tileX) + Math.abs(b.y + 1 - this.tileY);
+      candidates.push({
+        dist: d,
+        start: () => {
+          const path = findPathAdjacentRect(
+            world, this.tileX, this.tileY, b.x, b.y, b.size
+          );
+          if (!path) return false;
+          b.worshipClaimed = true;
+          this.job = { kind: "worship", building: b };
+          this.startPath(path);
+          return true;
+        },
+      });
+    }
+
     if (this.canDo("chop") && !isFull("wood")) {
-      const tree = world.findNearestMarked(world.markedTrees, world.claimedTrees, this.x, this.y);
+      const tree = world.findNearestMarked(
+        world.markedTrees, world.claimedTrees, this.x, this.y, litTile
+      );
       if (tree) {
         candidates.push({
           dist: tree.dist,
@@ -271,10 +326,12 @@ export class Villager {
     }
 
     if (this.canDo("gather")) {
-      // deposu dolu olan yemek türünü toplamaya gitme
+      // deposu dolu olan yemek türünü toplamaya gitme; gece ışık şart
       const food = world.findNearestMarked(
         world.markedBushes, world.claimedBushes, this.x, this.y,
-        (x, y) => world.get(x, y) === Tile.Mushroom ? !isFull("mushroom") : !isFull("berry")
+        (x, y) =>
+          litTile(x, y) &&
+          (world.get(x, y) === Tile.Mushroom ? !isFull("mushroom") : !isFull("berry"))
       );
       if (food) {
         candidates.push({
@@ -289,7 +346,9 @@ export class Villager {
     }
 
     if (this.canDo("mine") && !isFull("stone")) {
-      const stone = world.findNearestMarked(world.markedStones, world.claimedStones, this.x, this.y);
+      const stone = world.findNearestMarked(
+        world.markedStones, world.claimedStones, this.x, this.y, litTile
+      );
       if (stone) {
         candidates.push({
           dist: stone.dist,
@@ -348,7 +407,7 @@ export class Villager {
       }
     }
     if (!best) return false;
-    const path = findPathAdjacentRect(world, this.tileX, this.tileY, best.x, best.y, BUILDING_SIZE);
+    const path = findPathAdjacentRect(world, this.tileX, this.tileY, best.x, best.y, best.size);
     if (!path) return false;
     this.job = { kind: "deposit", building: best };
     this.startPath(path);
@@ -361,23 +420,34 @@ export class Villager {
     this.state = "walking";
   }
 
-  // İş yürürken iptal edildiyse (işaret kaldırıldı veya depo dolduysa)
-  private jobStillValid(world: World): boolean {
+  // İş yürürken iptal edildiyse (işaret kaldırıldı, depo doldu veya hedef karanlıkta)
+  private jobStillValid(world: World, buildings: Building[]): boolean {
     if (!this.job) return true;
+    const night = isNight();
+    const tileLit = (tile: number) =>
+      !night ||
+      isLit(
+        buildings,
+        (tile % world.width + 0.5) * TILE_SIZE,
+        (Math.floor(tile / world.width) + 0.5) * TILE_SIZE
+      );
     switch (this.job.kind) {
       case "chop":
-        return world.markedTrees.has(this.job.tile) && !isFull("wood");
+        return world.markedTrees.has(this.job.tile) && !isFull("wood") && tileLit(this.job.tile);
       case "gather":
-        return world.markedBushes.has(this.job.tile) && !isFull(this.job.item);
+        return world.markedBushes.has(this.job.tile) && !isFull(this.job.item) && tileLit(this.job.tile);
       case "mine":
-        return world.markedStones.has(this.job.tile) && !isFull("stone");
+        return world.markedStones.has(this.job.tile) && !isFull("stone") && tileLit(this.job.tile);
+      case "build":
+      case "worship":
+        return !night || isLit(buildings, this.job.building.centerX, this.job.building.centerY);
       default:
         return true;
     }
   }
 
-  private walk(dt: number, world: World): void {
-    if (!this.jobStillValid(world)) {
+  private walk(dt: number, world: World, buildings: Building[]): void {
+    if (!this.jobStillValid(world, buildings)) {
       this.releaseJob(world);
       this.toIdle();
       return;
@@ -434,9 +504,35 @@ export class Villager {
         this.state = "building";
         this.faceTowards(this.job.building.centerX);
         break;
+      case "worship":
+        this.state = "worshipping";
+        this.timer = WORSHIP_TIME;
+        this.faceTowards(this.job.building.centerX);
+        break;
       case "deposit":
         this.doDeposit(world);
         break;
+    }
+  }
+
+  private worship(dt: number): void {
+    const job = this.job;
+    if (!job || job.kind !== "worship") {
+      this.toIdle();
+      return;
+    }
+    this.walkPhase += dt * 3; // yavaş sallanarak dua
+    this.timer -= dt;
+    if (this.timer <= 0) {
+      resources.knowledge += KNOWLEDGE_PER_WORSHIP;
+      addFloater(
+        job.building.centerX, job.building.y * TILE_SIZE - 6,
+        `+${KNOWLEDGE_PER_WORSHIP} bilgi`, "#b08fe0"
+      );
+      job.building.worshipClaimed = false;
+      job.building.worshipTimer = WORSHIP_INTERVAL;
+      this.job = null;
+      this.toIdle();
     }
   }
 

@@ -1,7 +1,13 @@
 import type { Camera } from "../engine/camera";
 import type { Villager } from "../sim/villager";
-import { Building, BuildingType, BUILDING_SIZE, isDepositPoint } from "../sim/buildings";
+import {
+  Building,
+  BuildingType,
+  isDepositPoint,
+  LIGHT_RADIUS,
+} from "../sim/buildings";
 import { isFull, ITEM_INFO, ITEM_TYPES } from "../sim/resources";
+import { darkness } from "../sim/time";
 import { floaters, particles, FLOATER_TTL } from "./effects";
 import { hash2 } from "../world/noise";
 import { Tile, TILE_COLORS, TILE_SIZE } from "../world/tiles";
@@ -36,6 +42,7 @@ export interface Ghost {
   type: BuildingType;
   tileX: number;
   tileY: number;
+  size: number;
   valid: boolean;
 }
 
@@ -43,6 +50,8 @@ export class Renderer {
   // Zemin bir kez offscreen canvas'a çizilir; sadece değişen bloklar yeniden boyanır
   private terrain: HTMLCanvasElement;
   private tctx: CanvasRenderingContext2D;
+  // Gece karanlığı katmanı (ışık delikleri açılır)
+  private night = document.createElement("canvas");
 
   constructor(private world: World) {
     this.terrain = document.createElement("canvas");
@@ -284,7 +293,7 @@ export class Renderer {
       const bPulse = 0.5 + 0.35 * Math.sin(time * 6);
       ctx.strokeStyle = `rgba(255, 255, 255, ${bPulse})`;
       ctx.lineWidth = 1;
-      const s = BUILDING_SIZE * TILE_SIZE;
+      const s = selectedBuilding.size * TILE_SIZE;
       ctx.strokeRect(
         selectedBuilding.x * TILE_SIZE - 1.5,
         selectedBuilding.y * TILE_SIZE - 1.5,
@@ -307,8 +316,8 @@ export class Renderer {
     const drawables: Drawable[] = [];
     for (const b of buildings) {
       drawables.push({
-        baseY: (b.y + BUILDING_SIZE) * TILE_SIZE,
-        draw: () => this.drawBuilding(ctx, b),
+        baseY: (b.y + b.size) * TILE_SIZE,
+        draw: () => this.drawBuilding(ctx, b, time),
       });
     }
     for (const v of villagers) {
@@ -367,14 +376,61 @@ export class Renderer {
     if (ghost) {
       const gx = ghost.tileX * TILE_SIZE;
       const gy = ghost.tileY * TILE_SIZE;
-      const s = BUILDING_SIZE * TILE_SIZE;
+      const s = ghost.size * TILE_SIZE;
       ctx.fillStyle = ghost.valid ? "rgba(80, 220, 100, 0.3)" : "rgba(230, 60, 60, 0.35)";
       ctx.fillRect(gx, gy, s, s);
       ctx.strokeStyle = ghost.valid ? "rgba(80, 220, 100, 0.9)" : "rgba(230, 60, 60, 0.9)";
       ctx.strokeRect(gx + 0.5, gy + 0.5, s - 1, s - 1);
+      // meşale hayaletinde ışık yarıçapı önizlemesi
+      const lr = LIGHT_RADIUS[ghost.type];
+      if (lr) {
+        ctx.strokeStyle = "rgba(255, 200, 80, 0.5)";
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.arc(gx + s / 2, gy + s / 2, lr, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    // Gece karanlığı: ışık kaynaklarının etrafında delikler açılır
+    const dark = darkness();
+    if (dark > 0.01) {
+      if (this.night.width !== vw || this.night.height !== vh) {
+        this.night.width = vw;
+        this.night.height = vh;
+      }
+      const nctx = this.night.getContext("2d")!;
+      nctx.globalCompositeOperation = "source-over";
+      nctx.clearRect(0, 0, vw, vh);
+      nctx.fillStyle = `rgba(8, 11, 34, ${0.66 * dark})`;
+      nctx.fillRect(0, 0, vw, vh);
+      nctx.globalCompositeOperation = "destination-out";
+      let li = 0;
+      for (const b of buildings) {
+        if (!b.done) continue;
+        const r = LIGHT_RADIUS[b.type];
+        if (!r) continue;
+        const sx = (b.centerX - camera.x) * camera.zoom + vw / 2;
+        const sy = (b.centerY - camera.y) * camera.zoom + vh / 2;
+        const flicker = 1 + 0.05 * Math.sin(time * 9 + li * 1.7);
+        const sr = r * camera.zoom * flicker;
+        li++;
+        if (sx < -sr || sx > vw + sr || sy < -sr || sy > vh + sr) continue;
+        const g = nctx.createRadialGradient(sx, sy, sr * 0.2, sx, sy, sr);
+        g.addColorStop(0, "rgba(0,0,0,0.95)");
+        g.addColorStop(0.7, "rgba(0,0,0,0.7)");
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        nctx.fillStyle = g;
+        nctx.beginPath();
+        nctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        nctx.fill();
+      }
+      nctx.globalCompositeOperation = "source-over";
+      ctx.drawImage(this.night, 0, 0);
+    }
   }
 
   private strokeMarked(
@@ -392,24 +448,86 @@ export class Renderer {
 
   // ---- Binalar (2x2 blok = 32x32 piksel sprite) ----
 
-  private drawBuilding(ctx: CanvasRenderingContext2D, b: Building): void {
+  private drawBuilding(ctx: CanvasRenderingContext2D, b: Building, time: number): void {
     const px = b.x * TILE_SIZE;
     const py = b.y * TILE_SIZE;
     if (!b.done) {
-      this.drawSite(ctx, px, py, b.progress / b.def.buildTime);
+      if (b.size === 1) this.drawSmallSite(ctx, px, py, b.progress / b.def.buildTime);
+      else this.drawSite(ctx, px, py, b.progress / b.def.buildTime);
       return;
     }
-    // binanın güneydoğuya düşen gölgesi
-    ctx.fillStyle = "rgba(10, 15, 10, 0.2)";
-    ctx.fillRect(px + 4, py + 29, 28, 4);
-    ctx.fillRect(px + 29, py + 8, 4, 21);
+    if (b.size === 2) {
+      // binanın güneydoğuya düşen gölgesi
+      ctx.fillStyle = "rgba(10, 15, 10, 0.2)";
+      ctx.fillRect(px + 4, py + 29, 28, 4);
+      ctx.fillRect(px + 29, py + 8, 4, 21);
+    }
     switch (b.type) {
       case BuildingType.House: this.drawHouse(ctx, px, py); break;
       case BuildingType.Depot: this.drawDepot(ctx, px, py); break;
       case BuildingType.Woodcutter: this.drawWoodcutter(ctx, px, py); break;
       case BuildingType.Gatherer: this.drawGatherer(ctx, px, py); break;
       case BuildingType.Camp: this.drawCamp(ctx, px, py); break;
+      case BuildingType.Torch: this.drawTorch(ctx, px, py, time); break;
+      case BuildingType.Temple: this.drawTemple(ctx, px, py); break;
     }
+  }
+
+  private drawSmallSite(ctx: CanvasRenderingContext2D, px: number, py: number, t: number): void {
+    ctx.fillStyle = "rgba(110, 84, 50, 0.85)";
+    ctx.fillRect(px + 3, py + 3, 10, 10);
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(px + 7, py + 5, 2, 8);
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(px + 2, py - 4, 12, 3);
+    ctx.fillStyle = "#ffd23c";
+    ctx.fillRect(px + 3, py - 3, 10 * Math.min(1, t), 1.5);
+  }
+
+  private drawTorch(ctx: CanvasRenderingContext2D, px: number, py: number, time: number): void {
+    // küçük gölge ve direk
+    ctx.fillStyle = "rgba(10, 15, 10, 0.2)";
+    ctx.fillRect(px + 6, py + 13, 5, 2);
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(px + 7, py + 4, 2, 10);
+    ctx.fillStyle = "#57391f";
+    ctx.fillRect(px + 8, py + 4, 1, 10);
+    // alev: iki karelik titreşen animasyon
+    const f = Math.floor(time * 6) % 2;
+    ctx.fillStyle = "#e8842c";
+    ctx.fillRect(px + 6, py + (f ? 1 : 2), 4, 3);
+    ctx.fillStyle = "#ffc83c";
+    ctx.fillRect(px + 7, py + (f ? 0 : 1), 2, 2);
+    ctx.fillStyle = "#fff3b0";
+    ctx.fillRect(px + 7.5, py + (f ? 1 : 2), 1, 1);
+  }
+
+  private drawTemple(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    // taban platformu
+    ctx.fillStyle = "#bba884";
+    ctx.fillRect(px + 2, py + 24, 28, 6);
+    this.outlineRect(ctx, px + 2, py + 24, 28, 6);
+    // sütunlar
+    ctx.fillStyle = "#d8c9a4";
+    ctx.fillRect(px + 5, py + 12, 3, 13);
+    ctx.fillRect(px + 24, py + 12, 3, 13);
+    ctx.fillRect(px + 14, py + 12, 3, 13);
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(px + 7, py + 12, 1, 13);
+    ctx.fillRect(px + 26, py + 12, 1, 13);
+    ctx.fillRect(px + 16, py + 12, 1, 13);
+    // alınlık (üçgen çatı)
+    for (let r = 0; r < 8; r++) {
+      const w = 6 + r * 3.2;
+      ctx.fillStyle = r < 3 ? "#d8c9a4" : "#bba884";
+      ctx.fillRect(px + 16 - w / 2, py + 3 + r, w, 1.4);
+    }
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 3, py + 11, 26, 2); // saçak gölgesi
+    // kutsal sembol: mor elmas
+    ctx.fillStyle = "#b08fe0";
+    ctx.fillRect(px + 15, py + 6, 2, 2);
+    ctx.fillRect(px + 14.5, py + 6.5, 3, 1);
   }
 
   private drawCamp(ctx: CanvasRenderingContext2D, px: number, py: number): void {
@@ -643,6 +761,15 @@ export class Renderer {
       ctx.beginPath();
       ctx.moveTo(x, y - 8.5);
       ctx.lineTo(x + v.facing * 2.5, y - 8.5 + reach + 2);
+      ctx.stroke();
+    } else if (v.state === "worshipping") {
+      // dua: iki kol yukarı kalkık, hafifçe sallanır
+      const sway = Math.sin(v.walkPhase) * 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 8.5);
+      ctx.lineTo(x - 2.2 + sway, y - 12);
+      ctx.moveTo(x, y - 8.5);
+      ctx.lineTo(x + 2.2 + sway, y - 12);
       ctx.stroke();
     } else {
       ctx.beginPath();

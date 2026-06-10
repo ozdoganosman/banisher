@@ -14,17 +14,18 @@ import {
   popPanelHitTest,
   popScrollBy,
   profileHitTest,
+  TOOLBAR_TYPES,
   toolbarHitTest,
   updateMessages,
 } from "./render/hud";
 import {
   Building,
   BUILDING_DEFS,
-  BUILDING_SIZE,
   BuildingType,
   canPlace,
   placeBuilding,
 } from "./sim/buildings";
+import { gameTime, updateTime } from "./sim/time";
 import { isFull, ITEM_INFO, ITEM_TYPES, resources, type ItemType } from "./sim/resources";
 import { Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
@@ -92,7 +93,7 @@ function villagerAt(wx: number, wy: number): Villager | null {
 // Tıklanan blok bir binanın ayak izindeyse o binayı döndür
 function buildingAt(tx: number, ty: number): Building | null {
   for (const b of buildings) {
-    if (tx >= b.x && tx < b.x + BUILDING_SIZE && ty >= b.y && ty < b.y + BUILDING_SIZE) {
+    if (tx >= b.x && tx < b.x + b.size && ty >= b.y && ty < b.y + b.size) {
       return b;
     }
   }
@@ -125,7 +126,7 @@ outer: for (let r = 0; r < 20; r++) {
       if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
       const x = spawn.x + dx;
       const y = spawn.y + dy;
-      if (!canPlace(world, x, y)) continue;
+      if (!canPlace(world, x, y, BUILDING_DEFS[BuildingType.Camp].size)) continue;
       const camp = new Building(BuildingType.Camp, x, y);
       camp.effectApplied = true; // hazır kurulu: tamamlanma mesajı çıkmasın
       placeBuilding(world, camp);
@@ -203,17 +204,18 @@ input.onClick = (wx, wy, sx, sy) => {
   }
 
   // bina yerleştirirken hayalet önizlemeyle aynı hizalama (harita kenarına sıkıştır)
+  const selSize = selected !== null ? BUILDING_DEFS[selected].size : 1;
   const tx = selected !== null
-    ? Math.min(Math.max(Math.floor(wx / TILE_SIZE), 0), MAP_W - BUILDING_SIZE)
+    ? Math.min(Math.max(Math.floor(wx / TILE_SIZE), 0), MAP_W - selSize)
     : Math.floor(wx / TILE_SIZE);
   const ty = selected !== null
-    ? Math.min(Math.max(Math.floor(wy / TILE_SIZE), 0), MAP_H - BUILDING_SIZE)
+    ? Math.min(Math.max(Math.floor(wy / TILE_SIZE), 0), MAP_H - selSize)
     : Math.floor(wy / TILE_SIZE);
 
   if (selected !== null) {
     // bina yerleştirme
     const def = BUILDING_DEFS[selected];
-    if (!canPlace(world, tx, ty)) {
+    if (!canPlace(world, tx, ty, def.size)) {
       addMessage("Buraya inşa edilemez!");
       return;
     }
@@ -276,14 +278,8 @@ window.addEventListener("keydown", (e) => {
   }
   else if (e.code.startsWith("Digit")) {
     const n = Number(e.code.slice(5));
-    const types = [
-      BuildingType.House,
-      BuildingType.Depot,
-      BuildingType.Woodcutter,
-      BuildingType.Gatherer,
-    ];
-    if (n >= 1 && n <= types.length) {
-      selected = selected === types[n - 1] ? null : types[n - 1];
+    if (n >= 1 && n <= TOOLBAR_TYPES.length) {
+      selected = selected === TOOLBAR_TYPES[n - 1] ? null : TOOLBAR_TYPES[n - 1];
     }
   }
 });
@@ -307,6 +303,7 @@ function checkStorageFull() {
 }
 
 function step(dt: number) {
+  updateTime(dt);
   world.update(dt);
   updateEffects(dt);
   checkStorageFull();
@@ -349,7 +346,7 @@ declare global {
     __game: unknown;
   }
 }
-window.__game = { world, villagers, buildings, camera, resources };
+window.__game = { world, villagers, buildings, camera, resources, gameTime };
 
 let last = performance.now();
 let accumulator = 0;
@@ -378,9 +375,10 @@ function frame(now: number) {
 
   let ghost: Ghost | null = null;
   if (selected !== null && hoverValid && !overToolbar) {
-    const gx = Math.min(Math.max(hoverTile.x, 0), MAP_W - BUILDING_SIZE);
-    const gy = Math.min(Math.max(hoverTile.y, 0), MAP_H - BUILDING_SIZE);
-    ghost = { type: selected, tileX: gx, tileY: gy, valid: canPlace(world, gx, gy) };
+    const size = BUILDING_DEFS[selected].size;
+    const gx = Math.min(Math.max(hoverTile.x, 0), MAP_W - size);
+    const gy = Math.min(Math.max(hoverTile.y, 0), MAP_H - size);
+    ghost = { type: selected, tileX: gx, tileY: gy, size, valid: canPlace(world, gx, gy, size) };
   }
 
   renderer.render(

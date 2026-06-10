@@ -5,6 +5,7 @@ import {
   type Building,
 } from "../sim/buildings";
 import { isFull, ITEM_INFO, ITEM_TYPES, resources } from "../sim/resources";
+import { darkness, dateString } from "../sim/time";
 import {
   PROFESSION_NAMES,
   PROFESSIONS,
@@ -15,16 +16,18 @@ import type { World } from "../world/world";
 
 export const TOOLBAR_HEIGHT = 64;
 
-const TOOLBAR_TYPES: BuildingType[] = [
+export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.House,
   BuildingType.Depot,
   BuildingType.Woodcutter,
   BuildingType.Gatherer,
+  BuildingType.Torch,
+  BuildingType.Temple,
 ];
 
-const BTN_W = 150;
+const BTN_W = 128;
 const BTN_H = 48;
-const BTN_GAP = 10;
+const BTN_GAP = 8;
 
 // Geçici bildirimler ("Yetersiz odun!", "Yeni köylüler geldi" vb.)
 const messages: { text: string; ttl: number }[] = [];
@@ -316,7 +319,11 @@ export function drawBuildingPanel(
   let h = 40 + descLines.length * 14 + 10;
   if (!b.done) h += 34;
   else if (isDepositPoint(b)) h += 14 + ITEM_TYPES.length * 17 + 6;
-  else if (b.type === BuildingType.Woodcutter || b.type === BuildingType.Gatherer) h += 22;
+  else if (
+    b.type === BuildingType.Woodcutter ||
+    b.type === BuildingType.Gatherer ||
+    b.type === BuildingType.Temple
+  ) h += 22;
   bpanel = { x, y, w, h };
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
@@ -380,6 +387,18 @@ export function drawBuildingPanel(
     ctx.fillStyle = "#e8e2d0";
     ctx.font = "12px monospace";
     ctx.fillText(`Çevrede işaretli: ${marked}`, x + 12, ly + 2);
+  } else if (b.type === BuildingType.Temple) {
+    ctx.font = "12px monospace";
+    if (b.worshipClaimed) {
+      ctx.fillStyle = "#b08fe0";
+      ctx.fillText("Ayin sürüyor...", x + 12, ly + 2);
+    } else if (b.worshipTimer <= 0) {
+      ctx.fillStyle = "#8fd05e";
+      ctx.fillText("Ayine hazır", x + 12, ly + 2);
+    } else {
+      ctx.fillStyle = "#e8e2d0";
+      ctx.fillText(`Sonraki ayin: ${Math.ceil(b.worshipTimer)} sn`, x + 12, ly + 2);
+    }
   }
 }
 
@@ -600,6 +619,19 @@ export function drawHud(
     ctx.fillRect(ix + 4, 13, 2, 2);
   }, `Mantar: ${resources.mushroom}`);
 
+  // bilgi (tapınaklarda üretilir)
+  entry((ix) => {
+    ctx.fillStyle = "#b08fe0";
+    ctx.fillRect(ix + 1, 11, 10, 12);
+    ctx.fillStyle = "#8a6cc0";
+    ctx.fillRect(ix + 5.5, 11, 1, 12);
+    ctx.fillStyle = "#f0eaff";
+    ctx.fillRect(ix + 3, 14, 2, 1);
+    ctx.fillRect(ix + 7, 14, 2, 1);
+    ctx.fillRect(ix + 3, 17, 2, 1);
+    ctx.fillRect(ix + 7, 17, 2, 1);
+  }, `Bilgi: ${resources.knowledge}`);
+
   // nüfus: tıklanabilir düğme (nüfus yönetim menüsünü açar)
   {
     const label = `Nüfus: ${population} ▾`;
@@ -623,13 +655,48 @@ export function drawHud(
     ctx.stroke();
     ctx.fillStyle = "#e8e2d0";
     ctx.fillText(label, cx + 20, 18);
+    cx += bw + 16;
+  }
+
+  // tarih ve gün/gece ikonu
+  {
+    const dark = darkness();
+    if (dark < 0.5) {
+      // güneş
+      ctx.fillStyle = "#ffd23c";
+      ctx.beginPath();
+      ctx.arc(cx + 8, 17, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ffd23c";
+      ctx.lineWidth = 1;
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + 8 + Math.cos(a) * 7, 17 + Math.sin(a) * 7);
+        ctx.lineTo(cx + 8 + Math.cos(a) * 9, 17 + Math.sin(a) * 9);
+        ctx.stroke();
+      }
+    } else {
+      // hilal
+      ctx.fillStyle = "#d8e0f0";
+      ctx.beginPath();
+      ctx.arc(cx + 8, 17, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(10, 12, 16, 1)";
+      ctx.beginPath();
+      ctx.arc(cx + 11, 15, 5.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#e8e2d0";
+    ctx.font = "15px monospace";
+    ctx.fillText(`Tarih: ${dateString()}`, cx + 22, 18);
   }
 
   // sağda hız ve kısa yardım
   ctx.textAlign = "right";
   ctx.fillStyle = speed > 1 ? "#ffd23c" : "#9a9488";
   ctx.font = "12px monospace";
-  const help = "1-4: bina • N: nüfus • Esc: iptal • Space: duraklat • X: hız";
+  const help = "1-6: bina • N: nüfus • Esc: iptal • Space: duraklat • X: hız";
   ctx.fillText(`Hız: ${speed}x`, w - 12, 10);
   ctx.fillStyle = "#9a9488";
   ctx.fillText(help, w - 12, 25);

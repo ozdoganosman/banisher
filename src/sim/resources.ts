@@ -12,12 +12,13 @@ export const ITEM_INFO: Record<ItemType, { name: string; color: string }> = {
   mushroom: { name: "mantar", color: "#d9b06b" },
 };
 
-export const resources: Record<ItemType, number> & { cap: number } = {
+export const resources: Record<ItemType, number> & { cap: number; knowledge: number } = {
   wood: 20,
   stone: 0,
   berry: 20,
   mushroom: 4,
   cap: 60,
+  knowledge: 0, // tapınaklarda üretilir; depo kapasitesine tabi değildir
 };
 
 // Stoğa ekle (kapasiteyle sınırlı); gerçekten eklenen miktarı döndürür

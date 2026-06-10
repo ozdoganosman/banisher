@@ -9,49 +9,94 @@ export const enum BuildingType {
   Woodcutter = 2,
   Gatherer = 3,
   Camp = 4, // başlangıç kampı: hazır kurulu küçük depo (inşa edilemez)
+  Torch = 5, // 1x1: geceyi aydınlatır
+  Temple = 6, // köylüler tapınarak bilgi üretir
 }
 
 export interface BuildingDef {
   name: string;
   cost: number; // odun
   buildTime: number; // saniye (tek inşaatçı ile)
+  size: number; // kapladığı kare kenarı (blok)
   desc: string;
 }
 
-export const BUILDING_SIZE = 2; // tüm binalar 2x2 blok kaplar
+export const BUILDING_SIZE = 2; // standart bina boyutu
 
 export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   [BuildingType.House]: {
     name: "Ev",
     cost: 8,
     buildTime: 8,
+    size: 2,
     desc: "Tamamlanınca 2 yeni köylü gelir",
   },
   [BuildingType.Depot]: {
     name: "Depo",
     cost: 12,
     buildTime: 10,
+    size: 2,
     desc: "Odun ve yemek kapasitesi +80",
   },
   [BuildingType.Woodcutter]: {
     name: "Oduncu",
     cost: 10,
     buildTime: 8,
+    size: 2,
     desc: "Çevredeki ağaçları otomatik işaretler",
   },
   [BuildingType.Gatherer]: {
     name: "Toplayıcı",
     cost: 10,
     buildTime: 8,
+    size: 2,
     desc: "Çevredeki çalı ve mantarları otomatik işaretler",
   },
   [BuildingType.Camp]: {
     name: "Kamp",
     cost: 0,
     buildTime: 0,
+    size: 2,
     desc: "Koloninin başlangıç noktası; eşyalar buraya teslim edilir",
   },
+  [BuildingType.Torch]: {
+    name: "Meşale",
+    cost: 2,
+    buildTime: 2,
+    size: 1,
+    desc: "Geceyi aydınlatır; köylüler ışıksız çalışamaz",
+  },
+  [BuildingType.Temple]: {
+    name: "Tapınak",
+    cost: 20,
+    buildTime: 12,
+    size: 2,
+    desc: "Köylüler tapınarak bilgi üretir",
+  },
 };
+
+// Işık kaynakları ve dünya-piksel cinsinden yarıçapları
+export const LIGHT_RADIUS: Partial<Record<BuildingType, number>> = {
+  [BuildingType.Torch]: 88,
+  [BuildingType.Camp]: 72,
+};
+
+// Bu nokta gece çalışılabilecek kadar aydınlık mı?
+export function isLit(buildings: Building[], wx: number, wy: number): boolean {
+  for (const b of buildings) {
+    if (!b.done) continue;
+    const r = LIGHT_RADIUS[b.type];
+    if (!r) continue;
+    const dx = wx - b.centerX;
+    const dy = wy - b.centerY;
+    if (dx * dx + dy * dy <= r * r) return true;
+  }
+  return false;
+}
+
+export const WORSHIP_INTERVAL = 20; // saniye: tapınak yeni ayine bu arayla izin verir
+export const WORSHIP_TIME = 6;
+export const KNOWLEDGE_PER_WORSHIP = 1;
 
 // Köylülerin topladıklarını teslim edebileceği bina mı?
 export function isDepositPoint(b: Building): boolean {
@@ -66,6 +111,8 @@ export class Building {
   progress = 0;
   claimed = false; // bir inşaatçı bu şantiyeyi sahiplendi mi
   effectApplied = false; // tamamlanma etkisi (köylü gelmesi vb.) bir kez uygulanır
+  worshipTimer = 8; // tapınak: bu sayaç bitince yeni ayin yapılabilir
+  worshipClaimed = false;
   private scanTimer = Math.random() * SCAN_INTERVAL;
 
   constructor(
@@ -78,21 +125,33 @@ export class Building {
     return BUILDING_DEFS[this.type];
   }
 
+  get size(): number {
+    return this.def.size;
+  }
+
   get done(): boolean {
     return this.progress >= this.def.buildTime;
   }
 
   get centerX(): number {
-    return (this.x + BUILDING_SIZE / 2) * TILE_SIZE;
+    return (this.x + this.size / 2) * TILE_SIZE;
   }
 
   get centerY(): number {
-    return (this.y + BUILDING_SIZE / 2) * TILE_SIZE;
+    return (this.y + this.size / 2) * TILE_SIZE;
+  }
+
+  get worshipReady(): boolean {
+    return this.type === BuildingType.Temple && this.done &&
+      this.worshipTimer <= 0 && !this.worshipClaimed;
   }
 
   // Tamamlanmış üretim binaları çevrelerindeki kaynakları işaretler
   update(dt: number, world: World): void {
     if (!this.done) return;
+    if (this.type === BuildingType.Temple && this.worshipTimer > 0) {
+      this.worshipTimer -= dt;
+    }
     if (this.type !== BuildingType.Woodcutter && this.type !== BuildingType.Gatherer) return;
     this.scanTimer -= dt;
     if (this.scanTimer > 0) return;
@@ -117,10 +176,10 @@ export class Building {
   }
 }
 
-// Yerleştirme kontrolü: 2x2 alanın tamamı boş ve yürünebilir zemin olmalı
-export function canPlace(world: World, tx: number, ty: number): boolean {
-  for (let dy = 0; dy < BUILDING_SIZE; dy++) {
-    for (let dx = 0; dx < BUILDING_SIZE; dx++) {
+// Yerleştirme kontrolü: ayak izinin tamamı boş ve yürünebilir zemin olmalı
+export function canPlace(world: World, tx: number, ty: number, size: number): boolean {
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) {
       if (!world.walkableAt(tx + dx, ty + dy)) return false;
     }
   }
@@ -128,8 +187,8 @@ export function canPlace(world: World, tx: number, ty: number): boolean {
 }
 
 export function placeBuilding(world: World, b: Building): void {
-  for (let dy = 0; dy < BUILDING_SIZE; dy++) {
-    for (let dx = 0; dx < BUILDING_SIZE; dx++) {
+  for (let dy = 0; dy < b.size; dy++) {
+    for (let dx = 0; dx < b.size; dx++) {
       world.blocked.add(world.index(b.x + dx, b.y + dy));
     }
   }

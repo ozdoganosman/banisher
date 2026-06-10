@@ -20,7 +20,7 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | Köylüye sol tık | Profilini aç (kimlik, durum, çanta, meslek atama) |
 | Binaya sol tık | Detay paneli (depo içeriği, inşaat ilerlemesi vb.) |
 | N / "Nüfus" düğmesi | Nüfus yönetim menüsü: tüm köylüler tek listede |
-| 1-4 | Bina seç (Ev, Depo, Oduncu, Toplayıcı) |
+| 1-6 | Bina seç (Ev, Depo, Oduncu, Toplayıcı, Meşale, Tapınak) |
 | Esc / sağ tık | Seçimi iptal et |
 | Space | Duraklat / devam et |
 | X | Oyun hızı (1x / 2x / 4x) |
@@ -30,7 +30,20 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
-## Şu anki özellikler (v0.4)
+## Şu anki özellikler (v0.5)
+
+### v0.5: Gün/gece, takvim, meşale ve tapınak
+
+- **Gün/gece döngüsü**: bir oyun günü 150 saniye; akşam karanlık çöker
+  (alacakaranlık geçişli), gece haritayı mavi karanlık kaplar
+- **Takvim**: tarih 0.0.0'dan başlar (gün.ay.yıl, 30 gün = ay, 12 ay = yıl);
+  üst barda güneş/hilal ikonuyla gösterilir
+- **Meşale (2 odun, 1x1)**: çevresini aydınlatır; köylüler gece yalnızca
+  ışıklı alanlarda (meşale veya kamp ateşi yakını) çalışabilir, karanlıkta
+  kalan işler bırakılır; yerleştirirken ışık yarıçapı önizlemesi gösterilir
+- **Tapınak (20 odun)**: sütunlu tapınak; köylüler sırayla gelip tapınır
+  (eller havada dua animasyonu) ve **bilgi** üretir (+1 bilgi / ayin,
+  20 sn arayla); bilgi üst barda mor kitap ikonuyla görünür
 
 ### v0.4: Yönetim panelleri ve depo dolu davranışı
 
