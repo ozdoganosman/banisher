@@ -45,3 +45,14 @@ export function randomIdentity(): Identity {
     female,
   };
 }
+
+// Yeni doğan bebek kimliği (yaş 0)
+export function babyIdentity(): Identity {
+  const female = Math.random() < 0.5;
+  return {
+    firstName: female ? pick(FEMALE_NAMES) : pick(MALE_NAMES),
+    lastName: pick(SURNAMES),
+    age: 0,
+    female,
+  };
+}

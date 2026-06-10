@@ -19,13 +19,18 @@ import {
   updateMessages,
 } from "./render/hud";
 import {
+  AUTO_PROFESSION,
   Building,
   BUILDING_DEFS,
   BuildingType,
   canPlace,
+  HOUSE_CAPACITY,
+  isHousing,
   placeBuilding,
 } from "./sim/buildings";
-import { gameTime, updateTime } from "./sim/time";
+import { gameTime, totalDays, updateTime } from "./sim/time";
+import { PROFESSION_NAMES } from "./sim/villager";
+import { addFloater } from "./render/effects";
 import { isFull, ITEM_INFO, ITEM_TYPES, resources, type ItemType } from "./sim/resources";
 import { Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
@@ -37,7 +42,6 @@ const MAP_H = 128;
 const VILLAGER_COUNT = 6;
 const FIXED_DT = 1 / 60;
 const DEPOT_CAP_BONUS = 80;
-const VILLAGERS_PER_HOUSE = 2;
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -164,7 +168,7 @@ input.onClick = (wx, wy, sx, sy) => {
       if (hit.kind === "close") {
         showPopulation = false;
       } else if (hit.kind === "profession") {
-        villagers[hit.index].profession = hit.profession;
+        if (!villagers[hit.index].baby) villagers[hit.index].profession = hit.profession;
       } else if (hit.kind === "select") {
         // isme tıkla: menüyü kapat, köylünün profilini aç ve kameraya al
         const v = villagers[hit.index];
@@ -188,7 +192,7 @@ input.onClick = (wx, wy, sx, sy) => {
       if (hit.kind === "close") {
         selectedVillager = null;
       } else if (hit.kind === "profession") {
-        selectedVillager.profession = hit.profession;
+        if (!selectedVillager.baby) selectedVillager.profession = hit.profession;
       }
       return;
     }
@@ -286,6 +290,59 @@ window.addEventListener("keydown", (e) => {
 
 // ---- Simülasyon adımı ----
 
+// ---- Konutlar ve doğumlar ----
+
+const BIRTH_CHANCE = 0.35; // her gün dönümünde, boş yeri olan ev başına
+let lastDayCount = 0;
+let homeTimer = 0;
+
+function occupants(b: Building): number {
+  let n = 0;
+  for (const v of villagers) if (v.home === b) n++;
+  return n;
+}
+
+// Evsiz köylüleri boş konutlara yerleştir
+function assignHomes(): void {
+  for (const v of villagers) {
+    if (v.home && (!buildings.includes(v.home) || !isHousing(v.home))) v.home = null;
+    if (v.home) continue;
+    for (const b of buildings) {
+      if (!isHousing(b) || occupants(b) >= HOUSE_CAPACITY) continue;
+      v.home = b;
+      break;
+    }
+  }
+}
+
+// Gün dönümü: boş yeri olan her konutta bebek doğma şansı
+function nightlyBirths(): void {
+  const adults = villagers.filter((v) => !v.baby).length;
+  if (adults < 2) return; // çoğalmak için en az 2 yetişkin
+  for (const b of buildings) {
+    if (!isHousing(b) || occupants(b) >= HOUSE_CAPACITY) continue;
+    if (Math.random() > BIRTH_CHANCE) continue;
+    // bebeği konutun yanındaki yürünebilir bloğa doğur
+    let placed = false;
+    for (let r = 1; r <= 3 && !placed; r++) {
+      for (let dy = -r; dy <= r && !placed; dy++) {
+        for (let dx = -r; dx <= r && !placed; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = b.x + 1 + dx;
+          const y = b.y + 1 + dy;
+          if (!world.walkableAt(x, y)) continue;
+          const baby = new Villager(x, y, true);
+          baby.home = b;
+          villagers.push(baby);
+          addMessage(`👶 ${baby.fullName} doğdu!`);
+          addFloater(b.centerX, b.y * TILE_SIZE - 6, "+1 bebek", "#ffb0d0");
+          placed = true;
+        }
+      }
+    }
+  }
+}
+
 // Depo dolduğunda bir kez bildirim göster (boşalınca sıfırlanır)
 const wasFull: Record<ItemType, boolean> = {
   wood: false, stone: false, berry: false, mushroom: false,
@@ -308,7 +365,29 @@ function step(dt: number) {
   updateEffects(dt);
   checkStorageFull();
 
+  // gün dönümü: doğumlar
+  const days = totalDays();
+  if (days !== lastDayCount) {
+    lastDayCount = days;
+    nightlyBirths();
+  }
+
+  // konut atamalarını periyodik tazele
+  homeTimer -= dt;
+  if (homeTimer <= 0) {
+    homeTimer = 1;
+    assignHomes();
+  }
+
   for (const v of villagers) v.update(dt, world, buildings);
+
+  // büyüyen bebekler işçi olur
+  for (const v of villagers) {
+    if (v.grewUp) {
+      v.grewUp = false;
+      addMessage(`${v.fullName} büyüdü, artık çalışabilir!`);
+    }
+  }
 
   // açlıktan ölenleri çıkar
   for (let i = villagers.length - 1; i >= 0; i--) {
@@ -326,13 +405,30 @@ function step(dt: number) {
       b.effectApplied = true;
       const def = BUILDING_DEFS[b.type];
       if (b.type === BuildingType.House) {
-        const n = spawnVillagersAround(b.x + 1, b.y + 1, VILLAGERS_PER_HOUSE);
-        addMessage(`Ev tamamlandı: ${n} yeni köylü geldi!`);
+        addMessage(`Ev tamamlandı: ${HOUSE_CAPACITY} kişilik konut`);
       } else if (b.type === BuildingType.Depot) {
         resources.cap += DEPOT_CAP_BONUS;
         addMessage(`Depo tamamlandı: kapasite +${DEPOT_CAP_BONUS}`);
       } else {
         addMessage(`${def.name} tamamlandı`);
+      }
+      // üretim binası tamamlanınca en yakın boştaki işçiyi mesleğe ata
+      const autoProf = AUTO_PROFESSION[b.type];
+      if (autoProf) {
+        let best: Villager | null = null;
+        let bestDist = Infinity;
+        for (const v of villagers) {
+          if (v.baby || v.profession !== "worker") continue;
+          const d = Math.hypot(v.x - b.centerX, v.y - b.centerY);
+          if (d < bestDist) {
+            bestDist = d;
+            best = v;
+          }
+        }
+        if (best) {
+          best.profession = autoProf;
+          addMessage(`${best.fullName} ${PROFESSION_NAMES[autoProf].toLowerCase()} oldu`);
+        }
       }
     }
   }
@@ -394,7 +490,7 @@ function frame(now: number) {
   );
   drawHud(ctx, villagers.length, selected, paused, gameSpeed);
   if (selectedVillager) drawProfile(ctx, selectedVillager);
-  if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world);
+  if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers);
   if (showPopulation) drawPopulationPanel(ctx, villagers);
 
   requestAnimationFrame(frame);

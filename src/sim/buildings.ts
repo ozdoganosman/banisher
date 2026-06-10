@@ -11,6 +11,8 @@ export const enum BuildingType {
   Camp = 4, // başlangıç kampı: hazır kurulu küçük depo (inşa edilemez)
   Torch = 5, // 1x1: geceyi aydınlatır
   Temple = 6, // köylüler tapınarak bilgi üretir
+  Cafeteria = 7, // köylüler burada yemek yer: tokluk tamamen dolar
+  Nursery = 8, // bebekler burada bakılır: hızlı büyür, acıkmaz
 }
 
 export interface BuildingDef {
@@ -73,6 +75,34 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     size: 2,
     desc: "Köylüler tapınarak bilgi üretir",
   },
+  [BuildingType.Cafeteria]: {
+    name: "Yemekhane",
+    cost: 14,
+    buildTime: 9,
+    size: 2,
+    desc: "Burada yenen yemek tokluğu tamamen doldurur",
+  },
+  [BuildingType.Nursery]: {
+    name: "Bakımevi",
+    cost: 12,
+    buildTime: 8,
+    size: 2,
+    desc: "Bebekler acıkmaz ve iki kat hızlı büyür",
+  },
+};
+
+// ---- Konut sistemi ----
+
+export const HOUSE_CAPACITY = 4;
+
+export function isHousing(b: Building): boolean {
+  return b.done && (b.type === BuildingType.House || b.type === BuildingType.Camp);
+}
+
+// Tamamlanınca en yakın boştaki işçinin otomatik atanacağı meslek
+export const AUTO_PROFESSION: Partial<Record<BuildingType, "woodcutter" | "gatherer">> = {
+  [BuildingType.Woodcutter]: "woodcutter",
+  [BuildingType.Gatherer]: "gatherer",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları

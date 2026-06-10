@@ -1,7 +1,9 @@
 import {
   BUILDING_DEFS,
   BuildingType,
+  HOUSE_CAPACITY,
   isDepositPoint,
+  isHousing,
   type Building,
 } from "../sim/buildings";
 import { isFull, ITEM_INFO, ITEM_TYPES, resources } from "../sim/resources";
@@ -23,11 +25,13 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.Gatherer,
   BuildingType.Torch,
   BuildingType.Temple,
+  BuildingType.Cafeteria,
+  BuildingType.Nursery,
 ];
 
-const BTN_W = 128;
+const BTN_W = 112;
 const BTN_H = 48;
-const BTN_GAP = 8;
+const BTN_GAP = 6;
 
 // Geçici bildirimler ("Yetersiz odun!", "Yeni köylüler geldi" vb.)
 const messages: { text: string; ttl: number }[] = [];
@@ -198,9 +202,10 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.fillText(v.fullName, tx, y + 24, w - 82 - 34);
   ctx.font = "13px monospace";
   ctx.fillStyle = "#e8e2d0";
-  ctx.fillText(`Yaş: ${v.identity.age} • ${v.identity.female ? "Kadın" : "Erkek"}`, tx, y + 46);
+  const ageText = v.baby ? `${v.ageDays} günlük` : `Yaş: ${v.identity.age}`;
+  ctx.fillText(`${ageText} • ${v.identity.female ? "Kadın" : "Erkek"}`, tx, y + 46);
   ctx.fillStyle = "#c9a35a";
-  ctx.fillText(`Meslek: ${PROFESSION_NAMES[v.profession]}`, tx, y + 64);
+  ctx.fillText(`Meslek: ${v.baby ? "Bebek" : PROFESSION_NAMES[v.profession]}`, tx, y + 64);
   ctx.fillStyle = "#9ad0ff";
   ctx.fillText(v.statusText, tx, y + 82, w - 82 - 12);
 
@@ -239,7 +244,13 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
     }
   }
 
-  // meslek seçimi
+  // meslek seçimi (bebeklere meslek atanamaz)
+  if (v.baby) {
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "11px monospace";
+    ctx.fillText("Bebekler büyüyünce işçi olur.", x + 10, y + 178);
+    return;
+  }
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
   ctx.fillText("Meslek ata:", x + 10, y + 168);
@@ -306,7 +317,8 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): st
 export function drawBuildingPanel(
   ctx: CanvasRenderingContext2D,
   b: Building,
-  world: World
+  world: World,
+  villagers: Villager[]
 ): void {
   const def = b.def;
   const w = 252;
@@ -318,12 +330,15 @@ export function drawBuildingPanel(
   // içerik yüksekliğini hesapla
   let h = 40 + descLines.length * 14 + 10;
   if (!b.done) h += 34;
-  else if (isDepositPoint(b)) h += 14 + ITEM_TYPES.length * 17 + 6;
-  else if (
-    b.type === BuildingType.Woodcutter ||
-    b.type === BuildingType.Gatherer ||
-    b.type === BuildingType.Temple
-  ) h += 22;
+  else {
+    if (isHousing(b)) h += 20;
+    if (isDepositPoint(b)) h += 14 + ITEM_TYPES.length * 17 + 6;
+    else if (
+      b.type === BuildingType.Woodcutter ||
+      b.type === BuildingType.Gatherer ||
+      b.type === BuildingType.Temple
+    ) h += 22;
+  }
   bpanel = { x, y, w, h };
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
@@ -358,7 +373,20 @@ export function drawBuildingPanel(
     ctx.fillRect(x + 12, ly + 14, w - 24, 8);
     ctx.fillStyle = "#ffd23c";
     ctx.fillRect(x + 13, ly + 15, (w - 26) * (b.progress / def.buildTime), 6);
-  } else if (isDepositPoint(b)) {
+    return;
+  }
+
+  // konutlarda sakin sayısı
+  if (isHousing(b)) {
+    let n = 0;
+    for (const v of villagers) if (v.home === b) n++;
+    ctx.font = "12px monospace";
+    ctx.fillStyle = n >= HOUSE_CAPACITY ? "#e0a83c" : "#8fd05e";
+    ctx.fillText(`Sakinler: ${n}/${HOUSE_CAPACITY}`, x + 12, ly);
+    ly += 20;
+  }
+
+  if (isDepositPoint(b)) {
     // depo içeriği: her ürün ayrı satır, dolanlar kırmızı "DOLU" etiketli
     ctx.font = "12px monospace";
     for (const item of ITEM_TYPES) {
@@ -533,7 +561,13 @@ export function drawPopulationPanel(
     ctx.fillRect(x + 348, ry + 9, 50, 8);
     ctx.fillStyle = fullness > 0.5 ? "#6fbf4a" : fullness > 0.2 ? "#e0a83c" : "#d4453f";
     ctx.fillRect(x + 349, ry + 10, 48 * fullness, 6);
-    // meslek düğmeleri
+    // meslek düğmeleri (bebeklerde gösterilmez)
+    if (v.baby) {
+      ctx.fillStyle = "#ffb0d0";
+      ctx.font = "11px monospace";
+      ctx.fillText("👶 Bebek", x + 412, ry + POP_ROW_H / 2);
+      continue;
+    }
     for (const b of popProfButtons(ry)) {
       const active = v.profession === b.profession;
       ctx.fillStyle = active ? "rgba(90, 143, 60, 0.5)" : "rgba(255,255,255,0.07)";

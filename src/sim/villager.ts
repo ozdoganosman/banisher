@@ -3,14 +3,15 @@ import { Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
 import type { Building } from "./buildings";
 import {
+  BuildingType,
   isDepositPoint,
   isLit,
   KNOWLEDGE_PER_WORSHIP,
   WORSHIP_INTERVAL,
   WORSHIP_TIME,
 } from "./buildings";
-import { randomIdentity, type Identity } from "./names";
-import { isNight } from "./time";
+import { babyIdentity, randomIdentity, type Identity } from "./names";
+import { isNight, totalDays } from "./time";
 import {
   findPath,
   findPathAdjacent,
@@ -47,6 +48,9 @@ const FOOD_PER_MEAL = 2;
 const HUNGER_PER_MEAL = 55;
 const STARVE_TIME = 45;
 
+const GROW_DAYS = 4; // bebek bu kadar günde büyür (bakımevi varsa yarısı)
+const GROW_DAYS_NURSERY = 2;
+
 const SHIRT_COLORS = ["#c0392b", "#2980b9", "#8e44ad", "#d35400", "#16a085"];
 let shirtIndex = 0;
 
@@ -80,6 +84,7 @@ type Job =
   | { kind: "mine"; tile: number }
   | { kind: "build"; building: Building }
   | { kind: "worship"; building: Building }
+  | { kind: "eat"; building: Building }
   | { kind: "deposit"; building: Building };
 
 export class Villager {
@@ -92,24 +97,32 @@ export class Villager {
   hunger: number;
   dead = false;
   profession: Profession = "worker";
-  readonly identity: Identity = randomIdentity();
+  baby: boolean;
+  birthDay: number; // doğduğu gün (toplam gün sayısı)
+  grewUp = false; // main bunu görünce "büyüdü" bildirimi gösterir
+  home: Building | null = null; // atandığı konut (ev/kamp)
+  readonly identity: Identity;
   // Kişisel çanta: toplananlar önce buraya, sonra kampa/depoya gider
   readonly inventory: Record<ItemType, number> = {
     wood: 0, stone: 0, berry: 0, mushroom: 0,
   };
 
   private starveTimer = 0;
+  private atCafeteria = false; // şu anki yemek yemekhanede mi
   private hitTimer = 0; // parçacık efektleri için vuruş ritmi
   private path: PathNode[] = [];
   private pathIdx = 0;
   private timer = 1 + Math.random() * 2;
   private job: Job | null = null;
 
-  constructor(tileX: number, tileY: number) {
+  constructor(tileX: number, tileY: number, baby = false) {
     this.x = (tileX + 0.5) * TILE_SIZE;
     this.y = (tileY + 0.5) * TILE_SIZE;
     this.shirt = SHIRT_COLORS[shirtIndex++ % SHIRT_COLORS.length];
-    this.hunger = Math.random() * 30;
+    this.hunger = baby ? 0 : Math.random() * 30;
+    this.baby = baby;
+    this.birthDay = totalDays();
+    this.identity = baby ? babyIdentity() : randomIdentity();
   }
 
   get tileX(): number {
@@ -129,8 +142,13 @@ export class Villager {
     return `${this.identity.firstName} ${this.identity.lastName}`.trim();
   }
 
+  get ageDays(): number {
+    return totalDays() - this.birthDay;
+  }
+
   // Profil panelinde gösterilen anlık durum
   get statusText(): string {
+    if (this.baby) return `Bebek (${this.ageDays} günlük)`;
     switch (this.state) {
       case "idle":
         return this.starving ? "Açlıktan bitkin" : "Boşta";
@@ -142,6 +160,7 @@ export class Villager {
           case "mine": return "Taş ocağına gidiyor";
           case "build": return "Şantiyeye gidiyor";
           case "worship": return "Tapınağa gidiyor";
+          case "eat": return "Yemekhaneye gidiyor";
           case "deposit": return "Depoya taşıyor";
         }
         break;
@@ -164,8 +183,22 @@ export class Villager {
   }
 
   update(dt: number, world: World, buildings: Building[]): void {
-    // açlık her durumda işler
-    this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
+    const hasNursery = buildings.some(
+      (b) => b.type === BuildingType.Nursery && b.done
+    );
+
+    // Bebek büyümesi: bakımevi varsa iki kat hızlı
+    if (this.baby && this.ageDays >= (hasNursery ? GROW_DAYS_NURSERY : GROW_DAYS)) {
+      this.baby = false;
+      this.grewUp = true;
+      this.identity.age = 16;
+      this.profession = "worker";
+    }
+
+    // açlık her durumda işler (bakımevi varsa bebekler acıkmaz)
+    if (!(this.baby && hasNursery)) {
+      this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
+    }
     if (this.starving) {
       this.starveTimer += dt;
       if (this.starveTimer >= STARVE_TIME) {
@@ -215,8 +248,12 @@ export class Villager {
         this.timer -= dt;
         if (this.timer <= 0) {
           if (takeFood(FOOD_PER_MEAL)) {
-            this.hunger = Math.max(0, this.hunger - HUNGER_PER_MEAL);
+            // yemekhanede yenen yemek tokluğu tamamen doldurur
+            this.hunger = this.atCafeteria
+              ? 0
+              : Math.max(0, this.hunger - HUNGER_PER_MEAL);
           }
+          this.atCafeteria = false;
           this.toIdle();
         }
         break;
@@ -252,10 +289,52 @@ export class Villager {
   }
 
   private decide(world: World, buildings: Building[]): void {
-    // 1) Acıkmışsa ve yemek varsa: ye
+    // 1) Acıkmışsa ve yemek varsa: ye (varsa yemekhanede — tokluk tam dolar)
     if (this.hunger > EAT_THRESHOLD && foodTotal() >= FOOD_PER_MEAL) {
+      if (!this.baby) {
+        let cafe: Building | null = null;
+        let cafeDist = Infinity;
+        for (const b of buildings) {
+          if (b.type !== BuildingType.Cafeteria || !b.done) continue;
+          const d = Math.abs(b.x + 1 - this.tileX) + Math.abs(b.y + 1 - this.tileY);
+          if (d < cafeDist) {
+            cafeDist = d;
+            cafe = b;
+          }
+        }
+        if (cafe) {
+          const path = findPathAdjacentRect(
+            world, this.tileX, this.tileY, cafe.x, cafe.y, cafe.size
+          );
+          if (path) {
+            this.job = { kind: "eat", building: cafe };
+            this.startPath(path);
+            return;
+          }
+        }
+      }
       this.state = "eating";
       this.timer = EAT_TIME;
+      return;
+    }
+
+    // Bebekler çalışmaz: evlerinin (varsa bakımevinin) etrafında oyalanır
+    if (this.baby) {
+      const nursery = buildings.find((b) => b.type === BuildingType.Nursery && b.done);
+      const anchor = nursery ?? this.home;
+      const ax = anchor ? Math.floor(anchor.centerX / TILE_SIZE) : this.tileX;
+      const ay = anchor ? Math.floor(anchor.centerY / TILE_SIZE) : this.tileY;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const tx = ax + Math.floor((Math.random() * 2 - 1) * 3);
+        const ty = ay + Math.floor((Math.random() * 2 - 1) * 3);
+        if (!world.walkableAt(tx, ty)) continue;
+        const path = findPath(world, this.tileX, this.tileY, tx, ty);
+        if (path) {
+          this.startPath(path);
+          return;
+        }
+      }
+      this.timer = 1.5 + Math.random() * 2;
       return;
     }
 
@@ -441,6 +520,8 @@ export class Villager {
       case "build":
       case "worship":
         return !night || isLit(buildings, this.job.building.centerX, this.job.building.centerY);
+      case "eat":
+        return foodTotal() >= FOOD_PER_MEAL; // hayatta kalma: ışık aranmaz
       default:
         return true;
     }
@@ -463,7 +544,8 @@ export class Villager {
     const dx = targetX - this.x;
     const dy = targetY - this.y;
     const dist = Math.hypot(dx, dy);
-    const speed = this.starving ? WALK_SPEED * 0.5 : WALK_SPEED;
+    let speed = this.starving ? WALK_SPEED * 0.5 : WALK_SPEED;
+    if (this.baby) speed *= 0.55; // bebekler tıpış tıpış yürür
     const step = speed * dt;
 
     if (dx !== 0) this.facing = dx > 0 ? 1 : -1;
@@ -508,6 +590,12 @@ export class Villager {
         this.state = "worshipping";
         this.timer = WORSHIP_TIME;
         this.faceTowards(this.job.building.centerX);
+        break;
+      case "eat":
+        this.atCafeteria = true;
+        this.job = null;
+        this.state = "eating";
+        this.timer = EAT_TIME;
         break;
       case "deposit":
         this.doDeposit(world);

@@ -22,6 +22,11 @@ export function dateString(): string {
   return `${gameTime.day}.${gameTime.month}.${gameTime.year}`;
 }
 
+// Başlangıçtan beri geçen toplam gün (bebek yaşı vb. için)
+export function totalDays(): number {
+  return Math.floor(gameTime.total / DAY_LENGTH);
+}
+
 // Gün içindeki konum: 0 = sabah, 1 = ertesi sabah
 export function dayFrac(): number {
   return (gameTime.total % DAY_LENGTH) / DAY_LENGTH;

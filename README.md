@@ -20,7 +20,7 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | Köylüye sol tık | Profilini aç (kimlik, durum, çanta, meslek atama) |
 | Binaya sol tık | Detay paneli (depo içeriği, inşaat ilerlemesi vb.) |
 | N / "Nüfus" düğmesi | Nüfus yönetim menüsü: tüm köylüler tek listede |
-| 1-6 | Bina seç (Ev, Depo, Oduncu, Toplayıcı, Meşale, Tapınak) |
+| 1-8 | Bina seç (Ev, Depo, Oduncu, Toplayıcı, Meşale, Tapınak, Yemekhane, Bakımevi) |
 | Esc / sağ tık | Seçimi iptal et |
 | Space | Duraklat / devam et |
 | X | Oyun hızı (1x / 2x / 4x) |
@@ -30,7 +30,21 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
-## Şu anki özellikler (v0.5)
+## Şu anki özellikler (v0.6)
+
+### v0.6: Konutlar, doğumlar, bebekler ve yeni binalar
+
+- **Konut sistemi**: ev ve kamp 4'er kişilik konuttur; köylüler otomatik
+  yerleştirilir (bina panelinde "Sakinler: 3/4")
+- **Doğumlar**: her gün dönümünde, boş yeri olan konut başına %35 bebek
+  doğma şansı (en az 2 yetişkin gerekir)
+- **Bebekler**: çalışamaz, evin (varsa bakımevinin) etrafında dolanır,
+  küçük çizilir; 4 günde büyüyüp işçi olur
+- **Otomatik meslek atama**: oduncu/toplayıcı kulübesi tamamlanınca en
+  yakın boştaki işçi otomatik o mesleğe atanır (menüden değiştirilebilir)
+- **Yemekhane (14 odun)**: köylüler acıkınca buraya gelir; yemekhanede
+  yenen yemek tokluğu tamamen doldurur (yerinde yemek %55 doldurur)
+- **Bakımevi (12 odun)**: bebekler acıkmaz ve iki kat hızlı büyür (2 gün)
 
 ### v0.5: Gün/gece, takvim, meşale ve tapınak
 

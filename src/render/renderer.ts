@@ -470,7 +470,65 @@ export class Renderer {
       case BuildingType.Camp: this.drawCamp(ctx, px, py); break;
       case BuildingType.Torch: this.drawTorch(ctx, px, py, time); break;
       case BuildingType.Temple: this.drawTemple(ctx, px, py); break;
+      case BuildingType.Cafeteria: this.drawCafeteria(ctx, px, py); break;
+      case BuildingType.Nursery: this.drawNursery(ctx, px, py); break;
     }
+  }
+
+  private drawCafeteria(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    // geniş yemek salonu
+    ctx.fillStyle = WALL;
+    ctx.fillRect(px + 2, py + 12, 28, 17);
+    this.outlineRect(ctx, px + 2, py + 12, 28, 17);
+    ctx.fillStyle = "#a85b32";
+    ctx.fillRect(px + 1, py + 7, 30, 6); // turuncu çatı
+    ctx.fillStyle = "#c07242";
+    ctx.fillRect(px + 1, py + 7, 30, 2);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 2, py + 13, 28, 2);
+    // baca ve duman
+    ctx.fillStyle = "#6e7178";
+    ctx.fillRect(px + 24, py + 2, 3, 6);
+    ctx.fillStyle = "rgba(220,220,220,0.5)";
+    ctx.fillRect(px + 25, py - 1, 2, 2);
+    ctx.fillRect(px + 27, py - 3, 2, 2);
+    // tezgah ve çorba kasesi
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(px + 6, py + 22, 20, 3);
+    ctx.fillStyle = "#e8e0cc";
+    ctx.fillRect(px + 13, py + 19, 6, 3);
+    ctx.fillStyle = "#d43f3f";
+    ctx.fillRect(px + 14, py + 19, 4, 1.5);
+    // kapı
+    ctx.fillStyle = "#4a2e1a";
+    ctx.fillRect(px + 4, py + 21, 5, 8);
+  }
+
+  private drawNursery(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    // bakımevi: açık duvar, pembe çatı
+    ctx.fillStyle = "#d8c9b0";
+    ctx.fillRect(px + 3, py + 12, 26, 17);
+    this.outlineRect(ctx, px + 3, py + 12, 26, 17);
+    ctx.fillStyle = "#c97a9a";
+    ctx.fillRect(px + 2, py + 7, 28, 6);
+    ctx.fillStyle = "#e09ab8";
+    ctx.fillRect(px + 2, py + 7, 28, 2);
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(px + 3, py + 13, 26, 2);
+    // beşik: yarım daire üstüne yatak
+    ctx.fillStyle = WOOD_DARK;
+    ctx.beginPath();
+    ctx.arc(px + 11, py + 24, 4, 0, Math.PI);
+    ctx.fill();
+    ctx.fillStyle = "#f0eaff";
+    ctx.fillRect(px + 7, py + 21, 8, 3);
+    ctx.fillStyle = "#ffb0d0";
+    ctx.fillRect(px + 9, py + 20, 4, 2);
+    // pencere ve kapı
+    ctx.fillStyle = "#bcd9f0";
+    ctx.fillRect(px + 20, py + 16, 5, 4);
+    ctx.fillStyle = "#4a2e1a";
+    ctx.fillRect(px + 19, py + 22, 5, 7);
   }
 
   private drawSmallSite(ctx: CanvasRenderingContext2D, px: number, py: number, t: number): void {
@@ -686,6 +744,15 @@ export class Renderer {
     const y = v.y; // ayakların bastığı nokta
     const swing = v.state === "walking" ? Math.sin(v.walkPhase) * 2.2 : 0;
 
+    // bebekler ayak noktası etrafında küçültülerek çizilir
+    const k = v.baby ? 0.6 : 1;
+    if (k !== 1) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(k, k);
+      ctx.translate(-x, -y);
+    }
+
     ctx.lineCap = "round";
     ctx.lineWidth = 1.1;
 
@@ -803,5 +870,7 @@ export class Renderer {
       ctx.fillStyle = v.starving ? "#ff2222" : "#ff8844";
       ctx.fillRect(x - w / 2, y - 16, (w * v.hunger) / 100, 1.6);
     }
+
+    if (k !== 1) ctx.restore();
   }
 }
