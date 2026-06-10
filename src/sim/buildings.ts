@@ -161,6 +161,7 @@ const SCAN_INTERVAL = 2.5; // saniye
 
 export class Building {
   progress = 0;
+  removed = false; // yıkıldı: köylüler işlerini bırakır
   claimed = false; // bir inşaatçı bu şantiyeyi sahiplendi mi
   effectApplied = false; // tamamlanma etkisi (köylü gelmesi vb.) bir kez uygulanır
   worshipTimer = 8; // tapınak: bu sayaç bitince yeni ayin yapılabilir

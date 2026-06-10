@@ -421,11 +421,12 @@ let bpanel = { x: 12, y: 44, w: 252, h: 120 };
 // İşçi al/çıkar düğmeleri (istihdam eden binalarda çizilir)
 let bpanelHire: { x: number; y: number; w: number; h: number } | null = null;
 let bpanelFire: { x: number; y: number; w: number; h: number } | null = null;
+let bpanelDemolish: { x: number; y: number; w: number; h: number } | null = null;
 
 export function buildingPanelHitTest(
   sx: number,
   sy: number
-): "close" | "hire" | "fire" | "panel" | null {
+): "close" | "hire" | "fire" | "demolish" | "panel" | null {
   const cx = bpanel.x + bpanel.w - 24;
   const cy = bpanel.y + 6;
   if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return "close";
@@ -433,6 +434,7 @@ export function buildingPanelHitTest(
     r && sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h;
   if (inRect(bpanelHire)) return "hire";
   if (inRect(bpanelFire)) return "fire";
+  if (inRect(bpanelDemolish)) return "demolish";
   if (sx >= bpanel.x && sx <= bpanel.x + bpanel.w && sy >= bpanel.y && sy <= bpanel.y + bpanel.h) {
     return "panel";
   }
@@ -496,9 +498,11 @@ export function drawBuildingPanel(
       b.type === BuildingType.Temple
     ) h += 22;
   }
+  if (b.type !== BuildingType.Camp) h += 32; // yık düğmesi satırı
   bpanel = { x, y, w, h };
   bpanelHire = null;
   bpanelFire = null;
+  bpanelDemolish = null;
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
   ctx.fillRect(x, y, w, h);
@@ -521,6 +525,23 @@ export function drawBuildingPanel(
     ly += 14;
   }
   ly += 4;
+
+  // yık düğmesi (kamp hariç; yarı odun iadesi)
+  if (b.type !== BuildingType.Camp) {
+    const refund = Math.floor(b.def.cost / 2);
+    bpanelDemolish = { x: x + 12, y: y + h - 30, w: w - 24, h: 22 };
+    ctx.fillStyle = "rgba(212, 69, 63, 0.18)";
+    ctx.fillRect(bpanelDemolish.x, bpanelDemolish.y, bpanelDemolish.w, bpanelDemolish.h);
+    ctx.strokeStyle = "#d4453f";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bpanelDemolish.x + 0.5, bpanelDemolish.y + 0.5, bpanelDemolish.w - 1, bpanelDemolish.h - 1);
+    ctx.fillStyle = "#f0a09a";
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(`✕ Yık (+${refund} odun iade)`, x + w / 2, y + h - 19);
+    ctx.textAlign = "left";
+    ctx.font = "11px monospace";
+  }
 
   if (!b.done) {
     // inşaat ilerlemesi
@@ -927,6 +948,19 @@ export function techButtonHitTest(sx: number, sy: number): boolean {
     sy >= techButtonRect.y && sy <= techButtonRect.y + techButtonRect.h;
 }
 
+let pauseButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+let speedButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+
+export function pauseButtonHitTest(sx: number, sy: number): boolean {
+  return sx >= pauseButtonRect.x && sx <= pauseButtonRect.x + pauseButtonRect.w &&
+    sy >= pauseButtonRect.y && sy <= pauseButtonRect.y + pauseButtonRect.h;
+}
+
+export function speedButtonHitTest(sx: number, sy: number): boolean {
+  return sx >= speedButtonRect.x && sx <= speedButtonRect.x + speedButtonRect.w &&
+    sy >= speedButtonRect.y && sy <= speedButtonRect.y + speedButtonRect.h;
+}
+
 export function drawHud(
   ctx: CanvasRenderingContext2D,
   population: number,
@@ -1072,15 +1106,46 @@ export function drawHud(
     cx += bw;
   }
 
-  // sağda hız; yardım metni yalnızca sığıyorsa
+  // sağda duraklat ve hız düğmeleri
+  pauseButtonRect = { x: w - 92, y: 4, w: 26, h: 26 };
+  speedButtonRect = { x: w - 60, y: 4, w: 48, h: 26 };
+  // duraklat / devam
+  ctx.fillStyle = paused ? "rgba(255, 210, 60, 0.25)" : "rgba(255,255,255,0.08)";
+  ctx.fillRect(pauseButtonRect.x, pauseButtonRect.y, pauseButtonRect.w, pauseButtonRect.h);
+  ctx.strokeStyle = paused ? "#ffd23c" : "#4a4f58";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(pauseButtonRect.x + 0.5, pauseButtonRect.y + 0.5, pauseButtonRect.w - 1, pauseButtonRect.h - 1);
+  ctx.fillStyle = paused ? "#ffd23c" : "#e8e2d0";
+  if (paused) {
+    // oynat üçgeni
+    ctx.beginPath();
+    ctx.moveTo(pauseButtonRect.x + 9, pauseButtonRect.y + 7);
+    ctx.lineTo(pauseButtonRect.x + 19, pauseButtonRect.y + 13);
+    ctx.lineTo(pauseButtonRect.x + 9, pauseButtonRect.y + 19);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.fillRect(pauseButtonRect.x + 8, pauseButtonRect.y + 7, 3.5, 12);
+    ctx.fillRect(pauseButtonRect.x + 14.5, pauseButtonRect.y + 7, 3.5, 12);
+  }
+  // hız
+  ctx.fillStyle = speed > 1 ? "rgba(255, 210, 60, 0.18)" : "rgba(255,255,255,0.08)";
+  ctx.fillRect(speedButtonRect.x, speedButtonRect.y, speedButtonRect.w, speedButtonRect.h);
+  ctx.strokeStyle = speed > 1 ? "#ffd23c" : "#4a4f58";
+  ctx.strokeRect(speedButtonRect.x + 0.5, speedButtonRect.y + 0.5, speedButtonRect.w - 1, speedButtonRect.h - 1);
+  ctx.fillStyle = speed > 1 ? "#ffd23c" : "#e8e2d0";
+  ctx.font = "bold 13px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(`${speed}x ▸`, speedButtonRect.x + speedButtonRect.w / 2, 18);
+  ctx.textAlign = "left";
+
+  // yardım metni yalnızca sığıyorsa
   ctx.textAlign = "right";
-  ctx.fillStyle = speed > 1 ? "#ffd23c" : "#9a9488";
   ctx.font = "12px monospace";
-  ctx.fillText(`Hız: ${speed}x`, w - 12, 10);
   const help = "N: nüfus • T: teknoloji • Space: durdur • X: hız";
-  if (w - 12 - ctx.measureText(help).width > cx + 16) {
+  if (w - 100 - ctx.measureText(help).width > cx + 16) {
     ctx.fillStyle = "#9a9488";
-    ctx.fillText(help, w - 12, 25);
+    ctx.fillText(help, w - 100, 18);
   }
   ctx.textAlign = "left";
 

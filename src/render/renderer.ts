@@ -1023,6 +1023,15 @@ export class Renderer {
     ctx.lineTo(x - swing, y);
     ctx.stroke();
 
+    // eşya taşıyorsa sırtında çanta (bakış yönünün tersinde)
+    if (v.inventoryTotal > 0 && !v.baby) {
+      ctx.fillStyle = "#8a6a43";
+      ctx.fillRect(x - v.facing * 3.5 - 1.5, y - 9, 3, 4);
+      ctx.strokeStyle = "#5a4226";
+      ctx.lineWidth = 0.6;
+      ctx.strokeRect(x - v.facing * 3.5 - 1.5, y - 9, 3, 4);
+    }
+
     // gövde (gömlek rengi)
     ctx.strokeStyle = v.shirt;
     ctx.lineWidth = 1.8;

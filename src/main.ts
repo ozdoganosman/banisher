@@ -12,8 +12,10 @@ import {
   isOverToolbar,
   popButtonHitTest,
   popPanelHitTest,
+  pauseButtonHitTest,
   popScrollBy,
   profileHitTest,
+  speedButtonHitTest,
   drawTechPanel,
   techButtonHitTest,
   techPanelHitTest,
@@ -33,7 +35,7 @@ import {
   placeBuilding,
   ROLE_NAMES,
 } from "./sim/buildings";
-import { gameTime, totalDays, updateTime } from "./sim/time";
+import { gameTime, season, totalDays, updateTime } from "./sim/time";
 import { addFloater } from "./render/effects";
 import {
   foodTotal,
@@ -153,6 +155,29 @@ function fire(target: Building | null): void {
   }
 }
 
+// Binayı yık: blokları aç, çalışanları/sakinleri serbest bırak, yarı iade
+function demolishBuilding(b: Building): void {
+  if (b.type === BuildingType.Camp) return;
+  b.removed = true;
+  for (let dy = 0; dy < b.size; dy++) {
+    for (let dx = 0; dx < b.size; dx++) {
+      world.blocked.delete(world.index(b.x + dx, b.y + dy));
+    }
+  }
+  for (const v of villagers) {
+    if (v.assignment.kind === "building" && v.assignment.building === b) {
+      v.assignment = { kind: "laborer" };
+    }
+    if (v.home === b) v.home = null;
+  }
+  const idx = buildings.indexOf(b);
+  if (idx !== -1) buildings.splice(idx, 1);
+  const refund = Math.floor(b.def.cost / 2);
+  resources.wood = Math.min(resources.cap, resources.wood + refund);
+  addMessage(`${b.def.name} yıkıldı (+${refund} odun iade)`);
+  if (selectedBuilding === b) selectedBuilding = null;
+}
+
 // Tıklanan blok bir binanın ayak izindeyse o binayı döndür
 function buildingAt(tx: number, ty: number): Building | null {
   for (const b of buildings) {
@@ -233,6 +258,14 @@ input.onClick = (wx, wy, sx, sy) => {
     showPopulation = false;
     return;
   }
+  if (pauseButtonHitTest(sx, sy)) {
+    paused = !paused;
+    return;
+  }
+  if (speedButtonHitTest(sx, sy)) {
+    gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : 1;
+    return;
+  }
 
   // teknoloji paneli açıkken
   if (showTech) {
@@ -290,6 +323,7 @@ input.onClick = (wx, wy, sx, sy) => {
       if (hit === "close") selectedBuilding = null;
       else if (hit === "hire") hire(selectedBuilding);
       else if (hit === "fire") fire(selectedBuilding);
+      else if (hit === "demolish") demolishBuilding(selectedBuilding);
       return;
     }
   }
@@ -354,11 +388,17 @@ input.onCancel = () => {
   showTech = false;
 };
 
-// Sol tuş basılı sürükleme: üzerinden geçilen kaynakları topluca işaretle
+// Sol tuş basılı sürükleme: mini haritada kamera gezdirme,
+// dünyada ise üzerinden geçilen kaynakları topluca işaretleme
 input.onPaint = (wx, wy) => {
+  const mm = renderer.minimapHit(input.mouseX, input.mouseY);
+  if (mm) {
+    camera.x = mm.x;
+    camera.y = mm.y;
+    return;
+  }
   if (selected !== null || showPopulation || selectedVillager || selectedBuilding) return;
   if (isOverToolbar(input.mouseY, canvas.height)) return;
-  if (renderer.minimapHit(input.mouseX, input.mouseY)) return;
   const tx = Math.floor(wx / TILE_SIZE);
   const ty = Math.floor(wy / TILE_SIZE);
   if (!world.inBounds(tx, ty)) return;
@@ -466,6 +506,37 @@ const wasFull: Record<ItemType, boolean> = {
 
 let wasFamine = false;
 
+// Kilometre taşları: bir kez kutlanır
+const milestones = {
+  pop10: false, pop20: false, year1: false, firstWinter: false, knowledge50: false,
+};
+let prevSeason = 0;
+
+function checkMilestones() {
+  if (!milestones.pop10 && villagers.length >= 10) {
+    milestones.pop10 = true;
+    addMessage("🎉 Nüfus 10'a ulaştı!");
+  }
+  if (!milestones.pop20 && villagers.length >= 20) {
+    milestones.pop20 = true;
+    addMessage("🎉 Nüfus 20'ye ulaştı — gerçek bir köy!");
+  }
+  if (!milestones.year1 && gameTime.year >= 1) {
+    milestones.year1 = true;
+    addMessage("🎉 Koloni 1 yaşında!");
+  }
+  if (!milestones.knowledge50 && resources.knowledge >= 50) {
+    milestones.knowledge50 = true;
+    addMessage("🎉 50 bilgi birikti — bilgelik çağı!");
+  }
+  const s = season();
+  if (!milestones.firstWinter && prevSeason === 3 && s === 0 && villagers.length > 0) {
+    milestones.firstWinter = true;
+    addMessage("❄ İlk kışı atlattınız!");
+  }
+  prevSeason = s;
+}
+
 function checkStorageFull() {
   for (const item of ITEM_TYPES) {
     const full = isFull(item);
@@ -488,6 +559,7 @@ function step(dt: number) {
   world.update(dt);
   updateEffects(dt);
   checkStorageFull();
+  checkMilestones();
 
   // gün dönümü: doğumlar
   const days = totalDays();

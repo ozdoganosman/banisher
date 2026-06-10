@@ -610,9 +610,12 @@ export class Villager {
         return !isFull("fish") && tileLit(this.job.tile);
       case "build":
       case "worship":
-        return !night || isLit(buildings, this.job.building.centerX, this.job.building.centerY);
+        return !this.job.building.removed &&
+          (!night || isLit(buildings, this.job.building.centerX, this.job.building.centerY));
       case "eat":
         return foodTotal() >= FOOD_PER_MEAL; // hayatta kalma: ışık aranmaz
+      case "deposit":
+        return !this.job.building.removed;
       default:
         return true;
     }
@@ -706,7 +709,9 @@ export class Villager {
 
   private worship(dt: number): void {
     const job = this.job;
-    if (!job || job.kind !== "worship") {
+    if (!job || job.kind !== "worship" || job.building.removed) {
+      if (job?.kind === "worship") job.building.worshipClaimed = false;
+      this.job = null;
       this.toIdle();
       return;
     }
@@ -868,7 +873,9 @@ export class Villager {
 
   private build(dt: number): void {
     const job = this.job;
-    if (!job || job.kind !== "build") {
+    if (!job || job.kind !== "build" || job.building.removed) {
+      if (job?.kind === "build") job.building.claimed = false;
+      this.job = null;
       this.toIdle();
       return;
     }
