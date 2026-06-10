@@ -701,7 +701,7 @@ export class Villager {
     return true;
   }
 
-  // Eve, ev yoksa kampın yakınına gidip uyu (evsizler yerde yatar)
+  // Eve, ev yoksa kampın çevresine gidip uyu (evsizler yerde yatar)
   private goSleep(world: World, buildings: Building[]): void {
     const target =
       this.home ??
@@ -709,11 +709,28 @@ export class Villager {
       null;
     this.groundSleep = !this.home;
     if (target) {
+      const near = TILE_SIZE * (this.groundSleep ? 3.5 : 2.5);
       const d = Math.abs(this.x - target.centerX) + Math.abs(this.y - target.centerY);
-      if (d <= TILE_SIZE * 2.5) {
+      if (d <= near) {
         this.state = "sleeping";
         this.walkPhase = 0;
         return;
+      }
+      // evsizler kampın çevresine dağılarak yatar (üst üste yığılmasınlar)
+      if (this.groundSleep) {
+        const cx = Math.floor(target.centerX / TILE_SIZE);
+        const cy = Math.floor(target.centerY / TILE_SIZE);
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const tx = cx + Math.floor((Math.random() * 2 - 1) * 3.5);
+          const ty = cy + Math.floor((Math.random() * 2 - 1) * 3.5);
+          if (!world.walkableAt(tx, ty)) continue;
+          const path = findPath(world, this.tileX, this.tileY, tx, ty);
+          if (path) {
+            this.job = { kind: "sleep", building: target };
+            this.startPath(path);
+            return;
+          }
+        }
       }
       const path = findPathAdjacentRect(
         world, this.tileX, this.tileY, target.x, target.y, target.size

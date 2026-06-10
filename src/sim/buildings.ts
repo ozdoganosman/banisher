@@ -131,8 +131,9 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
 
 export const HOUSE_CAPACITY = 4;
 
+// Yalnızca evler konuttur; kampta konaklanmaz (evsizler dışarıda yatar)
 export function isHousing(b: Building): boolean {
-  return b.done && (b.type === BuildingType.House || b.type === BuildingType.Camp);
+  return b.done && b.type === BuildingType.House;
 }
 
 // Bina bazlı istihdamda çalışanların unvanı
