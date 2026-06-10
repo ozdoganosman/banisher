@@ -1,7 +1,9 @@
-// Oyun takvimi ve gün/gece döngüsü.
-// Tarih 0.0.0'dan başlar (gün.ay.yıl); 30 gün = 1 ay, 12 ay = 1 yıl.
+// Oyun takvimi, mevsimler ve gün/gece döngüsü.
+// Tarih 0.0.0'dan başlar (gün.ay.yıl); 5 gün = 1 ay, 12 ay = 1 yıl.
+// Mevsimler 3'er aydır: İlkbahar (0-2), Yaz (3-5), Sonbahar (6-8), Kış (9-11).
 
 export const DAY_LENGTH = 150; // bir oyun günü kaç gerçek saniye
+export const MONTH_DAYS = 5;
 
 export const gameTime = {
   total: 0, // toplam geçen saniye
@@ -13,9 +15,23 @@ export const gameTime = {
 export function updateTime(dt: number): void {
   gameTime.total += dt;
   const days = Math.floor(gameTime.total / DAY_LENGTH);
-  gameTime.day = days % 30;
-  gameTime.month = Math.floor(days / 30) % 12;
-  gameTime.year = Math.floor(days / 360);
+  gameTime.day = days % MONTH_DAYS;
+  gameTime.month = Math.floor(days / MONTH_DAYS) % 12;
+  gameTime.year = Math.floor(days / (MONTH_DAYS * 12));
+}
+
+export type Season = 0 | 1 | 2 | 3;
+
+export const SEASON_NAMES = ["İlkbahar", "Yaz", "Sonbahar", "Kış"] as const;
+export const SEASON_COLORS = ["#8fd05e", "#ffd23c", "#e8842c", "#bcd9f0"] as const;
+
+export function season(): Season {
+  return Math.floor(gameTime.month / 3) as Season;
+}
+
+// Bitki yeniden büyüme çarpanı: baharda hızlı, kışın durur
+export function regrowFactor(): number {
+  return [1.2, 1.3, 1, 0][season()];
 }
 
 export function dateString(): string {

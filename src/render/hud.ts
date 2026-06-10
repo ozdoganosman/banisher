@@ -14,7 +14,15 @@ import {
   resources,
   type ItemType,
 } from "../sim/resources";
-import { darkness, dateString, timeString } from "../sim/time";
+import { hasTech, TECHS, type TechId } from "../sim/tech";
+import {
+  darkness,
+  dateString,
+  season,
+  SEASON_COLORS,
+  SEASON_NAMES,
+  timeString,
+} from "../sim/time";
 import { assignmentLabel, type Villager } from "../sim/villager";
 import type { World } from "../world/world";
 
@@ -70,6 +78,23 @@ function drawItemIcon(ctx: CanvasRenderingContext2D, item: IconItem, x: number, 
       ctx.fillStyle = "#f0e8e0";
       ctx.fillRect(9, 7, 3, 3);
       ctx.fillRect(15, 9, 2, 2);
+      break;
+    case "fish":
+      // yana dönük balık: gövde + kuyruk + göz
+      ctx.fillStyle = "#6fa8c9";
+      ctx.beginPath();
+      ctx.ellipse(11, 12, 7, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(17, 12);
+      ctx.lineTo(21, 8);
+      ctx.lineTo(21, 16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#8fc4e0";
+      ctx.fillRect(7, 9, 5, 2);
+      ctx.fillStyle = "#1a2a36";
+      ctx.fillRect(6, 11, 1.6, 1.6);
       break;
     case "knowledge":
       ctx.fillStyle = "#b08fe0";
@@ -186,15 +211,16 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.Depot,
   BuildingType.Woodcutter,
   BuildingType.Gatherer,
+  BuildingType.Fisher,
   BuildingType.Torch,
   BuildingType.Temple,
   BuildingType.Cafeteria,
   BuildingType.Nursery,
 ];
 
-const BTN_W = 112;
+const BTN_W = 104;
 const BTN_H = 48;
-const BTN_GAP = 6;
+const BTN_GAP = 5;
 
 // Geçici bildirimler ("Yetersiz odun!", "Yeni köylüler geldi" vb.)
 const messages: { text: string; ttl: number }[] = [];
@@ -790,13 +816,115 @@ export function drawPopulationPanel(
   }
 }
 
+// ---- Teknoloji paneli ----
+
+const TECH_W = 480;
+let techRect = { x: 0, y: 0, w: TECH_W, h: 0 };
+const TECH_ROW_H = 52;
+
+export type TechHit =
+  | { kind: "close" }
+  | { kind: "buy"; id: TechId }
+  | { kind: "panel" }
+  | null;
+
+export function techPanelHitTest(sx: number, sy: number): TechHit {
+  const cx = techRect.x + techRect.w - 26;
+  const cy = techRect.y + 8;
+  if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
+  const rowsY = techRect.y + 56;
+  for (let i = 0; i < TECHS.length; i++) {
+    const ry = rowsY + i * TECH_ROW_H;
+    const bx = techRect.x + techRect.w - 110;
+    if (sx >= bx && sx <= bx + 96 && sy >= ry + 12 && sy <= ry + 38) {
+      return { kind: "buy", id: TECHS[i].id };
+    }
+  }
+  if (sx >= techRect.x && sx <= techRect.x + techRect.w &&
+      sy >= techRect.y && sy <= techRect.y + techRect.h) {
+    return { kind: "panel" };
+  }
+  return null;
+}
+
+export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
+  const w = TECH_W;
+  const h = 56 + TECHS.length * TECH_ROW_H + 12;
+  const x = (ctx.canvas.width - w) / 2;
+  const y = 54;
+  techRect = { x, y, w, h };
+
+  ctx.fillStyle = "rgba(10, 12, 16, 0.92)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#8a6cc0";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  drawCloseButton(ctx, x + w - 26, y + 8);
+
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#d8c8f0";
+  ctx.font = "bold 15px monospace";
+  ctx.fillText("Teknoloji Ağacı", x + 12, y + 18);
+  ctx.font = "12px monospace";
+  ctx.fillStyle = "#b08fe0";
+  ctx.fillText(`Bilgi: ${resources.knowledge}`, x + 12, y + 40);
+  ctx.fillStyle = "#9a9488";
+  ctx.font = "11px monospace";
+  ctx.fillText("(rahipler tapınakta üretir)", x + 110, y + 40);
+
+  const rowsY = y + 56;
+  TECHS.forEach((tech, i) => {
+    const ry = rowsY + i * TECH_ROW_H;
+    const owned = hasTech(tech.id);
+    if (i % 2 === 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      ctx.fillRect(x + 4, ry, w - 8, TECH_ROW_H);
+    }
+    drawItemIcon(ctx, "knowledge", x + 12, ry + 14, 24);
+    ctx.fillStyle = owned ? "#8fd05e" : "#e8e2d0";
+    ctx.font = "bold 13px monospace";
+    ctx.fillText(tech.name, x + 44, ry + 17);
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "11px monospace";
+    ctx.fillText(tech.desc, x + 44, ry + 35, w - 170);
+
+    // düğme: araştır / tamamlandı
+    const bx = x + w - 110;
+    if (owned) {
+      ctx.fillStyle = "#8fd05e";
+      ctx.font = "bold 12px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("✓ Tamam", bx + 48, ry + 26);
+      ctx.textAlign = "left";
+    } else {
+      const affordable = resources.knowledge >= tech.cost;
+      ctx.fillStyle = affordable ? "rgba(138, 108, 192, 0.4)" : "rgba(255,255,255,0.06)";
+      ctx.fillRect(bx, ry + 12, 96, 26);
+      ctx.strokeStyle = affordable ? "#b08fe0" : "#4a4f58";
+      ctx.strokeRect(bx + 0.5, ry + 12.5, 95, 25);
+      ctx.fillStyle = affordable ? "#e8defc" : "#7a7470";
+      ctx.font = "bold 11px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(`Araştır (${tech.cost})`, bx + 48, ry + 26);
+      ctx.textAlign = "left";
+    }
+  });
+}
+
 // ---- Üst bar, bildirimler, araç çubuğu ----
 
 let popButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+let techButtonRect = { x: 0, y: 0, w: 0, h: 0 };
 
 export function popButtonHitTest(sx: number, sy: number): boolean {
   return sx >= popButtonRect.x && sx <= popButtonRect.x + popButtonRect.w &&
     sy >= popButtonRect.y && sy <= popButtonRect.y + popButtonRect.h;
+}
+
+export function techButtonHitTest(sx: number, sy: number): boolean {
+  return sx >= techButtonRect.x && sx <= techButtonRect.x + techButtonRect.w &&
+    sy >= techButtonRect.y && sy <= techButtonRect.y + techButtonRect.h;
 }
 
 export function drawHud(
@@ -849,7 +977,24 @@ export function drawHud(
     ctx.stroke();
     ctx.fillStyle = "#e8e2d0";
     ctx.fillText(label, cx + 20, 18);
-    cx += bw + 16;
+    cx += bw + 10;
+  }
+
+  // teknoloji düğmesi (mor kitap)
+  {
+    const label = `Teknoloji ▾`;
+    ctx.font = "15px monospace";
+    const bw = 20 + ctx.measureText(label).width + 10;
+    techButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
+    ctx.fillStyle = "rgba(138, 108, 192, 0.18)";
+    ctx.fillRect(techButtonRect.x, techButtonRect.y, techButtonRect.w, techButtonRect.h);
+    ctx.strokeStyle = "#8a6cc0";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(techButtonRect.x + 0.5, techButtonRect.y + 0.5, techButtonRect.w - 1, techButtonRect.h - 1);
+    drawItemIcon(ctx, "knowledge", cx + 2, 7, 18);
+    ctx.fillStyle = "#d8c8f0";
+    ctx.fillText(label, cx + 22, 18);
+    cx += bw + 12;
   }
 
   // grup ayracı
@@ -907,7 +1052,24 @@ export function drawHud(
     ctx.font = "15px monospace";
     const saat = `Saat: ${timeString()}`;
     ctx.fillText(saat, cx + 20, 18);
-    cx += 20 + ctx.measureText(saat).width;
+    cx += 20 + ctx.measureText(saat).width + 14;
+  }
+
+  // mevsim rozeti
+  {
+    const sIdx = season();
+    const label = SEASON_NAMES[sIdx];
+    ctx.font = "bold 12px monospace";
+    const bw = ctx.measureText(label).width + 16;
+    ctx.fillStyle = "rgba(10, 12, 16, 0.5)";
+    ctx.fillRect(cx, 7, bw, 20);
+    ctx.strokeStyle = SEASON_COLORS[sIdx];
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx + 0.5, 7.5, bw - 1, 19);
+    ctx.fillStyle = SEASON_COLORS[sIdx];
+    ctx.fillText(label, cx + 8, 17.5);
+    ctx.font = "15px monospace";
+    cx += bw;
   }
 
   // sağda hız; yardım metni yalnızca sığıyorsa
@@ -915,7 +1077,7 @@ export function drawHud(
   ctx.fillStyle = speed > 1 ? "#ffd23c" : "#9a9488";
   ctx.font = "12px monospace";
   ctx.fillText(`Hız: ${speed}x`, w - 12, 10);
-  const help = "N: nüfus • Space: durdur • X: hız";
+  const help = "N: nüfus • T: teknoloji • Space: durdur • X: hız";
   if (w - 12 - ctx.measureText(help).width > cx + 16) {
     ctx.fillStyle = "#9a9488";
     ctx.fillText(help, w - 12, 25);

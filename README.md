@@ -32,7 +32,23 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
-## Şu anki özellikler (v0.9)
+## Şu anki özellikler (v1.0)
+
+### v1.0: Mevsimler, balıkçılık ve teknoloji ağacı
+
+- **Mevsimler**: takvim hızlandı (5 gün = 1 ay); 3'er aylık İlkbahar/Yaz/
+  Sonbahar/Kış üst barda renkli rozetle gösterilir. Baharda bitkiler hızlı
+  büyür, **kışın hiç büyümez**; kışın kar yağar ve harita soğuk tona bürünür,
+  sonbahar hafif turuncudur
+- **Balıkçı kulübesi (12 odun, 2 balıkçı)**: yalnızca su kenarına kurulur
+  (hayalette ve yerleştirmede doğrulanır); balıkçılar kıyıya gidip olta
+  sallar, **balık** yeni yemek türüdür ve kışın da tutulabilir — kış
+  kıtlığının cevabı
+- **Teknoloji ağacı (T)**: rahiplerin ürettiği bilgi harcanır —
+  Keskin Baltalar (hızlı kesim, +1 odun), Usta Toplayıcılık (+1 verim),
+  Hızlı İnşaat (%30), Büyük Çantalar (8→12), Geniş Ambarlar (+40 depo)
+
+### v0.9: Minecraft tarzı envanter ve mantık düzeltmeleri
 
 ### v0.9: Minecraft tarzı envanter ve mantık düzeltmeleri
 

@@ -7,7 +7,7 @@ import {
   LIGHT_RADIUS,
 } from "../sim/buildings";
 import { isFull, ITEM_INFO, ITEM_TYPES } from "../sim/resources";
-import { darkness } from "../sim/time";
+import { darkness, season } from "../sim/time";
 import { floaters, particles, FLOATER_TTL } from "./effects";
 import { hash2 } from "../world/noise";
 import { Tile, TILE_COLORS, TILE_SIZE } from "../world/tiles";
@@ -506,6 +506,26 @@ export class Renderer {
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
+    // Mevsim atmosferi: sonbaharda sıcak ton, kışta soğuk ton + kar
+    const s = season();
+    if (s === 2) {
+      ctx.fillStyle = "rgba(220, 140, 50, 0.06)";
+      ctx.fillRect(0, 0, vw, vh);
+    } else if (s === 3) {
+      ctx.fillStyle = "rgba(190, 215, 250, 0.13)";
+      ctx.fillRect(0, 0, vw, vh);
+      // süzülen kar taneleri (ekran uzayında, deterministik)
+      ctx.fillStyle = "rgba(245, 250, 255, 0.75)";
+      for (let i = 0; i < 70; i++) {
+        const speed = 26 + hash2(i, 1, 11) * 30;
+        const drift = Math.sin(time * 1.2 + i) * 18;
+        const fx = (hash2(i, 2, 12) * vw + drift + time * 9 + 4096) % vw;
+        const fy = (hash2(i, 3, 13) * vh + time * speed) % vh;
+        const fs = 1 + hash2(i, 4, 14) * 1.6;
+        ctx.fillRect(fx, fy, fs, fs);
+      }
+    }
+
     // Gece karanlığı: ışık kaynaklarının etrafında delikler açılır
     const dark = darkness();
     if (dark > 0.01) {
@@ -577,7 +597,40 @@ export class Renderer {
       case BuildingType.Temple: this.drawTemple(ctx, px, py); break;
       case BuildingType.Cafeteria: this.drawCafeteria(ctx, px, py); break;
       case BuildingType.Nursery: this.drawNursery(ctx, px, py); break;
+      case BuildingType.Fisher: this.drawFisher(ctx, px, py); break;
     }
+  }
+
+  private drawFisher(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 11, py + 29, 10);
+    // mavi çatılı kıyı kulübesi
+    ctx.fillStyle = WALL;
+    ctx.fillRect(px + 3, py + 12, 17, 17);
+    this.outlineRect(ctx, px + 3, py + 12, 17, 17);
+    ctx.fillStyle = "#3f7abd";
+    ctx.fillRect(px + 2, py + 8, 19, 5);
+    ctx.fillStyle = "#5b94d4";
+    ctx.fillRect(px + 2, py + 8, 19, 2);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 3, py + 13, 17, 2);
+    ctx.fillStyle = "#4a2e1a";
+    ctx.fillRect(px + 9, py + 21, 5, 8);
+    // duvarda asılı balık tabelası
+    ctx.fillStyle = "#6fa8c9";
+    ctx.fillRect(px + 5, py + 16, 5, 2);
+    ctx.fillRect(px + 10, py + 15, 1.5, 4);
+    // fıçı + olta kamışı
+    this.baseShadow(ctx, px + 26, py + 27, 4, 1.3);
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(px + 23, py + 22, 6, 6);
+    ctx.fillStyle = "#9a6c40";
+    ctx.fillRect(px + 23, py + 24, 6, 1);
+    ctx.strokeStyle = WOOD_DARK;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 28, py + 22);
+    ctx.lineTo(px + 31, py + 14);
+    ctx.stroke();
   }
 
   private drawCafeteria(ctx: CanvasRenderingContext2D, px: number, py: number): void {
@@ -956,6 +1009,29 @@ export class Renderer {
       ctx.moveTo(x, y - 8.5);
       ctx.lineTo(x + v.facing * 2.5, y - 8.5 + reach + 2);
       ctx.stroke();
+    } else if (v.state === "fishing") {
+      // olta: kol ileri uzanır, kamış suya eğilir, şamandıra yüzer
+      const bob = Math.sin(v.walkPhase * 3) * 0.8;
+      const hx = x + 3 * v.facing;
+      const hy = y - 7.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 8.5);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      ctx.strokeStyle = WOOD_DARK;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(x + 10 * v.facing, y - 11);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(230,240,250,0.7)";
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(x + 10 * v.facing, y - 11);
+      ctx.lineTo(x + 12 * v.facing, y + 2 + bob);
+      ctx.stroke();
+      ctx.lineWidth = 1.1;
+      ctx.fillStyle = "#d4453f";
+      ctx.fillRect(x + 12 * v.facing - 1, y + 1.5 + bob, 2, 2);
     } else if (v.state === "worshipping") {
       // dua: iki kol yukarı kalkık, hafifçe sallanır
       const sway = Math.sin(v.walkPhase) * 0.8;

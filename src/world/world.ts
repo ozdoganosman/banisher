@@ -1,3 +1,4 @@
+import { regrowFactor } from "../sim/time";
 import { fractalNoise, hash2 } from "./noise";
 import { Tile, isWalkable, TILE_SIZE } from "./tiles";
 
@@ -71,9 +72,11 @@ export class World {
   }
 
   update(dt: number): void {
+    // mevsim etkisi: bitkiler baharda hızlı büyür, kışın hiç büyümez
+    const growth = dt * regrowFactor();
     for (let i = this.regrow.length - 1; i >= 0; i--) {
       const r = this.regrow[i];
-      r.t -= dt;
+      r.t -= growth;
       if (r.t <= 0) {
         this.regrow.splice(i, 1);
         // arada bina yapılmadıysa aynı tipte geri gelsin
@@ -240,6 +243,45 @@ export class World {
       for (let x = Math.max(0, cx - r); x <= Math.min(this.width - 1, cx + r); x++) {
         if (this.get(x, y) !== type || exclude.has(this.index(x, y))) continue;
         const d = Math.abs(x - cx) + Math.abs(y - cy);
+        if (d < bestDist) {
+          bestDist = d;
+          best = { x, y };
+        }
+      }
+    }
+    return best;
+  }
+
+  // Ayak izinin çevresinde (çapraz dahil) su var mı? (balıkçı yerleşimi)
+  hasAdjacentWater(tx: number, ty: number, size: number): boolean {
+    for (let y = ty - 1; y <= ty + size; y++) {
+      for (let x = tx - 1; x <= tx + size; x++) {
+        if (this.inBounds(x, y) && this.get(x, y) === Tile.Water) return true;
+      }
+    }
+    return false;
+  }
+
+  // Verilen merkeze yakın, su komşusu olan yürünebilir kıyı bloğu bul
+  findShoreNear(
+    cx: number,
+    cy: number,
+    r: number,
+    fromX: number,
+    fromY: number
+  ): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestDist = Infinity;
+    for (let y = Math.max(0, cy - r); y <= Math.min(this.height - 1, cy + r); y++) {
+      for (let x = Math.max(0, cx - r); x <= Math.min(this.width - 1, cx + r); x++) {
+        if (!this.walkableAt(x, y)) continue;
+        const water =
+          (this.inBounds(x + 1, y) && this.get(x + 1, y) === Tile.Water) ||
+          (this.inBounds(x - 1, y) && this.get(x - 1, y) === Tile.Water) ||
+          (this.inBounds(x, y + 1) && this.get(x, y + 1) === Tile.Water) ||
+          (this.inBounds(x, y - 1) && this.get(x, y - 1) === Tile.Water);
+        if (!water) continue;
+        const d = Math.abs(x - fromX) + Math.abs(y - fromY);
         if (d < bestDist) {
           bestDist = d;
           best = { x, y };

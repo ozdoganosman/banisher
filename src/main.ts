@@ -14,11 +14,15 @@ import {
   popPanelHitTest,
   popScrollBy,
   profileHitTest,
+  drawTechPanel,
+  techButtonHitTest,
+  techPanelHitTest,
   TOOLBAR_HEIGHT,
   TOOLBAR_TYPES,
   toolbarHitTest,
   updateMessages,
 } from "./render/hud";
+import { buyTech } from "./sim/tech";
 import {
   Building,
   BUILDING_DEFS,
@@ -31,7 +35,14 @@ import {
 } from "./sim/buildings";
 import { gameTime, totalDays, updateTime } from "./sim/time";
 import { addFloater } from "./render/effects";
-import { isFull, ITEM_INFO, ITEM_TYPES, resources, type ItemType } from "./sim/resources";
+import {
+  foodTotal,
+  isFull,
+  ITEM_INFO,
+  ITEM_TYPES,
+  resources,
+  type ItemType,
+} from "./sim/resources";
 import { Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
 import { TILE_SIZE } from "./world/tiles";
@@ -77,6 +88,7 @@ let selected: BuildingType | null = null;
 let selectedVillager: Villager | null = null;
 let selectedBuilding: Building | null = null;
 let showPopulation = false;
+let showTech = false;
 let paused = false;
 let gameSpeed = 1;
 
@@ -210,9 +222,29 @@ input.onClick = (wx, wy, sx, sy) => {
     return;
   }
 
-  // üst bardaki nüfus düğmesi
+  // üst bardaki nüfus ve teknoloji düğmeleri
   if (popButtonHitTest(sx, sy)) {
     showPopulation = !showPopulation;
+    showTech = false;
+    return;
+  }
+  if (techButtonHitTest(sx, sy)) {
+    showTech = !showTech;
+    showPopulation = false;
+    return;
+  }
+
+  // teknoloji paneli açıkken
+  if (showTech) {
+    const hit = techPanelHitTest(sx, sy);
+    if (hit) {
+      if (hit.kind === "close") showTech = false;
+      else if (hit.kind === "buy") {
+        if (!buyTech(hit.id)) addMessage("Yetersiz bilgi!");
+      }
+      return;
+    }
+    showTech = false;
     return;
   }
 
@@ -278,6 +310,10 @@ input.onClick = (wx, wy, sx, sy) => {
       addMessage("Buraya inşa edilemez!");
       return;
     }
+    if (def.needsWater && !world.hasAdjacentWater(tx, ty, def.size)) {
+      addMessage(`${def.name} su kenarına kurulmalı!`);
+      return;
+    }
     if (resources.wood < def.cost) {
       addMessage(`Yetersiz odun! (${def.name}: ${def.cost} odun)`);
       return;
@@ -315,6 +351,7 @@ input.onCancel = () => {
   selectedVillager = null;
   selectedBuilding = null;
   showPopulation = false;
+  showTech = false;
 };
 
 // Sol tuş basılı sürükleme: üzerinden geçilen kaynakları topluca işaretle
@@ -346,6 +383,7 @@ window.addEventListener("keydown", (e) => {
     selectedVillager = null;
     selectedBuilding = null;
     showPopulation = false;
+    showTech = false;
   } else if (e.code === "Space") {
     e.preventDefault();
     paused = !paused;
@@ -353,6 +391,10 @@ window.addEventListener("keydown", (e) => {
     gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : 1;
   } else if (e.code === "KeyN") {
     showPopulation = !showPopulation;
+    showTech = false;
+  } else if (e.code === "KeyT") {
+    showTech = !showTech;
+    showPopulation = false;
   }
   else if (e.code.startsWith("Digit")) {
     const n = Number(e.code.slice(5));
@@ -419,7 +461,7 @@ function nightlyBirths(): void {
 
 // Depo dolduğunda bir kez bildirim göster (boşalınca sıfırlanır)
 const wasFull: Record<ItemType, boolean> = {
-  wood: false, stone: false, berry: false, mushroom: false,
+  wood: false, stone: false, berry: false, mushroom: false, fish: false,
 };
 
 let wasFamine = false;
@@ -434,7 +476,7 @@ function checkStorageFull() {
     wasFull[item] = full;
   }
   // kıtlık uyarısı: yemek tamamen bitti
-  const famine = resources.berry + resources.mushroom <= 0;
+  const famine = foodTotal() <= 0;
   if (famine && !wasFamine) {
     addMessage("⚠ Yemek stoğu tükendi! Köylüler açlıktan ölebilir.");
   }
@@ -540,10 +582,14 @@ function frame(now: number) {
 
   let ghost: Ghost | null = null;
   if (selected !== null && hoverValid && !overToolbar) {
-    const size = BUILDING_DEFS[selected].size;
+    const def = BUILDING_DEFS[selected];
+    const size = def.size;
     const gx = Math.min(Math.max(hoverTile.x, 0), MAP_W - size);
     const gy = Math.min(Math.max(hoverTile.y, 0), MAP_H - size);
-    ghost = { type: selected, tileX: gx, tileY: gy, size, valid: canPlace(world, gx, gy, size) };
+    const valid =
+      canPlace(world, gx, gy, size) &&
+      (!def.needsWater || world.hasAdjacentWater(gx, gy, size));
+    ghost = { type: selected, tileX: gx, tileY: gy, size, valid };
   }
 
   renderer.render(
@@ -563,6 +609,7 @@ function frame(now: number) {
     if (selectedVillager) drawProfile(ctx, selectedVillager);
     if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers);
     if (showPopulation) drawPopulationPanel(ctx, villagers, buildings);
+    if (showTech) drawTechPanel(ctx);
   }
 
   requestAnimationFrame(frame);

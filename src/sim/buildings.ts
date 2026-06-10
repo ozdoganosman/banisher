@@ -13,6 +13,7 @@ export const enum BuildingType {
   Temple = 6, // köylüler tapınarak bilgi üretir
   Cafeteria = 7, // köylüler burada yemek yer: tokluk tamamen dolar
   Nursery = 8, // bebekler burada bakılır: hızlı büyür, acıkmaz
+  Fisher = 9, // su kenarına kurulur; balıkçılar kıyıdan balık tutar
 }
 
 export interface BuildingDef {
@@ -21,6 +22,7 @@ export interface BuildingDef {
   buildTime: number; // saniye (tek inşaatçı ile)
   size: number; // kapladığı kare kenarı (blok)
   maxWorkers: number; // bu binada istihdam edilebilecek işçi sayısı
+  needsWater?: boolean; // su kenarına kurulmak zorunda
   desc: string;
 }
 
@@ -99,6 +101,15 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     maxWorkers: 0,
     desc: "Bebekler acıkmaz ve iki kat hızlı büyür",
   },
+  [BuildingType.Fisher]: {
+    name: "Balıkçı",
+    cost: 12,
+    buildTime: 9,
+    size: 2,
+    maxWorkers: 2,
+    needsWater: true,
+    desc: "2 balıkçı istihdam eder; su kenarına kurulur, kışın da çalışır",
+  },
 };
 
 // ---- Konut sistemi ----
@@ -114,6 +125,7 @@ export const ROLE_NAMES: Partial<Record<BuildingType, string>> = {
   [BuildingType.Woodcutter]: "Oduncu",
   [BuildingType.Gatherer]: "Toplayıcı",
   [BuildingType.Temple]: "Rahip",
+  [BuildingType.Fisher]: "Balıkçı",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları
