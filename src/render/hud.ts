@@ -123,26 +123,53 @@ function drawSlotCount(ctx: CanvasRenderingContext2D, x: number, y: number, s: n
   ctx.textBaseline = "middle";
 }
 
-// Koloni envanteri: araç çubuğunun üstünde slot çubuğu
+// Koloni envanteri: araç çubuğunun üstünde slot çubuğu.
+// Minecraft gibi: slotlar boş başlar, edinilen eşya ilk boş slota
+// yerleşir ve stok bitince slot yeniden boşalır.
+const HOTBAR_SLOTS = 8;
+const hotbarAssign: (IconItem | null)[] = new Array(HOTBAR_SLOTS).fill(null);
+
+function itemCount(item: IconItem): number {
+  return item === "knowledge" ? resources.knowledge : resources[item];
+}
+
+function updateHotbar(): void {
+  for (let i = 0; i < HOTBAR_SLOTS; i++) {
+    const it = hotbarAssign[i];
+    if (it && itemCount(it) <= 0) hotbarAssign[i] = null;
+  }
+  const all: IconItem[] = [...ITEM_TYPES, "knowledge"];
+  for (const it of all) {
+    if (itemCount(it) > 0 && !hotbarAssign.includes(it)) {
+      const free = hotbarAssign.indexOf(null);
+      if (free !== -1) hotbarAssign[free] = it;
+    }
+  }
+}
+
 function drawInventoryBar(ctx: CanvasRenderingContext2D): void {
+  updateHotbar();
   const slotS = 44;
   const gap = 5;
-  const items: IconItem[] = [...ITEM_TYPES, "knowledge"];
-  const total = items.length * slotS + (items.length - 1) * gap;
+  const total = HOTBAR_SLOTS * slotS + (HOTBAR_SLOTS - 1) * gap;
   const x0 = (ctx.canvas.width - total) / 2;
   const y0 = ctx.canvas.height - TOOLBAR_HEIGHT - slotS - 10;
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.6)";
   ctx.fillRect(x0 - 6, y0 - 6, total + 12, slotS + 12);
 
-  items.forEach((item, i) => {
+  for (let i = 0; i < HOTBAR_SLOTS; i++) {
     const x = x0 + i * (slotS + gap);
+    const item = hotbarAssign[i];
+    if (!item) {
+      drawSlot(ctx, x, y0, slotS); // boş slot
+      continue;
+    }
     const isKnowledge = item === "knowledge";
     const full = !isKnowledge && isFull(item as ItemType);
     drawSlot(ctx, x, y0, slotS, full ? "#d4453f" : isKnowledge ? "#8a6cc0" : undefined);
     drawItemIcon(ctx, item, x + 7, y0 + 5, 30);
-    const count = isKnowledge ? resources.knowledge : resources[item as ItemType];
-    drawSlotCount(ctx, x, y0, slotS, count);
+    drawSlotCount(ctx, x, y0, slotS, itemCount(item));
     // depolanabilirlerde kapasite çizgisi
     if (!isKnowledge) {
       const ratio = Math.min(1, resources[item as ItemType] / resources.cap);
@@ -151,7 +178,7 @@ function drawInventoryBar(ctx: CanvasRenderingContext2D): void {
       ctx.fillStyle = full ? "#d4453f" : "#8fd05e";
       ctx.fillRect(x + 4, y0 + slotS - 5, (slotS - 8) * ratio, 2);
     }
-  });
+  }
 }
 
 export const TOOLBAR_TYPES: BuildingType[] = [
@@ -337,19 +364,20 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.strokeStyle = "#3a3f48";
   ctx.strokeRect(barX + 0.5, y + 110.5, barW - 1, 11);
 
-  // çanta: Minecraft tarzı slot ızgarası (boş slotlar soluk)
+  // çanta: Minecraft tarzı — taşınan eşyalar sırayla slotlara dolar,
+  // gerisi boş kalır
   ctx.fillStyle = "#e8e2d0";
   ctx.fillText("Çanta", x + 10, y + 145);
   const slotS = 28;
-  ITEM_TYPES.forEach((item, i) => {
+  const held = ITEM_TYPES.filter((it) => v.inventory[it] > 0);
+  for (let i = 0; i < ITEM_TYPES.length; i++) {
     const sx = x + 66 + i * (slotS + 4);
     drawSlot(ctx, sx, y + 130, slotS);
-    const n = v.inventory[item];
-    ctx.globalAlpha = n > 0 ? 1 : 0.25;
+    const item = held[i];
+    if (!item) continue;
     drawItemIcon(ctx, item, sx + 4, y + 134, 20);
-    ctx.globalAlpha = 1;
-    if (n > 0) drawSlotCount(ctx, sx, y + 130, slotS, n);
-  });
+    drawSlotCount(ctx, sx, y + 130, slotS, v.inventory[item]);
+  }
 
   // görev ataması iş panelinden (N) ve bina panellerinden yapılır
   ctx.fillStyle = "#9a9488";
