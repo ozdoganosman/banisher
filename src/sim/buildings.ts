@@ -7,6 +7,7 @@ export const enum BuildingType {
   Depot = 1,
   Woodcutter = 2,
   Gatherer = 3,
+  Camp = 4, // başlangıç kampı: hazır kurulu küçük depo (inşa edilemez)
 }
 
 export interface BuildingDef {
@@ -41,9 +42,20 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     name: "Toplayıcı",
     cost: 10,
     buildTime: 8,
-    desc: "Çevredeki çalıları otomatik işaretler",
+    desc: "Çevredeki çalı ve mantarları otomatik işaretler",
+  },
+  [BuildingType.Camp]: {
+    name: "Kamp",
+    cost: 0,
+    buildTime: 0,
+    desc: "Koloninin başlangıç noktası; eşyalar buraya teslim edilir",
   },
 };
+
+// Köylülerin topladıklarını teslim edebileceği bina mı?
+export function isDepositPoint(b: Building): boolean {
+  return b.done && (b.type === BuildingType.Depot || b.type === BuildingType.Camp);
+}
 
 const AUTO_MARK_RADIUS = 9; // blok
 const AUTO_MARK_MAX = 4; // aynı anda en fazla bu kadar işaret tut
@@ -93,8 +105,10 @@ export class Building {
       if (t) world.markTree(t.x, t.y);
     } else {
       if (world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS) >= AUTO_MARK_MAX) return;
-      const b = world.findNearestTileOfType(Tile.Bush, cx, cy, AUTO_MARK_RADIUS, world.markedBushes);
-      if (b) world.markBush(b.x, b.y);
+      const b =
+        world.findNearestTileOfType(Tile.Bush, cx, cy, AUTO_MARK_RADIUS, world.markedBushes) ??
+        world.findNearestTileOfType(Tile.Mushroom, cx, cy, AUTO_MARK_RADIUS, world.markedBushes);
+      if (b) world.markFood(b.x, b.y);
     }
   }
 }

@@ -2,6 +2,7 @@ import { fractalNoise, hash2 } from "./noise";
 import { Tile, isWalkable, TILE_SIZE } from "./tiles";
 
 const BUSH_REGROW_TIME = 75; // saniye
+const MUSHROOM_REGROW_TIME = 95;
 
 export class World {
   readonly width: number;
@@ -10,17 +11,20 @@ export class World {
   // Yükseklik haritası: kabartma gölgelendirme ve su derinliği için
   readonly heights: Float32Array;
 
-  // Kesilmek/toplanmak üzere işaretlenen ve bir köylünün sahiplendiği bloklar
+  // Kesilmek/toplanmak/kazılmak üzere işaretlenen ve sahiplenilen bloklar
+  // (markedBushes hem çalı hem mantar içerir: ikisi de yemek toplama işidir)
   readonly markedTrees = new Set<number>();
   readonly claimedTrees = new Set<number>();
   readonly markedBushes = new Set<number>();
   readonly claimedBushes = new Set<number>();
+  readonly markedStones = new Set<number>();
+  readonly claimedStones = new Set<number>();
 
   // Bina kaplayan bloklar: yürünemez
   readonly blocked = new Set<number>();
 
-  // Toplanan çalılar bir süre sonra yeniden büyür
-  private regrow: { x: number; y: number; t: number }[] = [];
+  // Toplanan çalı/mantarlar bir süre sonra yeniden büyür
+  private regrow: { x: number; y: number; t: number; tile: Tile }[] = [];
 
   // Bir blok değiştiğinde (örn. ağaç kesildi) renderer'ın haberi olsun
   onTileChange: ((x: number, y: number) => void) | null = null;
@@ -71,9 +75,9 @@ export class World {
       r.t -= dt;
       if (r.t <= 0) {
         this.regrow.splice(i, 1);
-        // arada bina yapılmadıysa çalı geri gelsin
+        // arada bina yapılmadıysa aynı tipte geri gelsin
         if (this.get(r.x, r.y) === Tile.Grass && !this.blocked.has(this.index(r.x, r.y))) {
-          this.set(r.x, r.y, Tile.Bush);
+          this.set(r.x, r.y, r.tile);
         }
       }
     }
@@ -96,6 +100,9 @@ export class World {
           if (f > 0.55 && hash2(x, y, seed + 13) > 0.35) {
             // orman kuşakları
             t = Tile.Tree;
+          } else if (f > 0.55 && hash2(x, y, seed + 61) > 0.8) {
+            // orman içlerinde mantarlar (ağaç çıkmayan boşluklarda)
+            t = Tile.Mushroom;
           } else if (f > 0.46 && hash2(x, y, seed + 31) > 0.82) {
             // orman kenarlarında meyve çalıları
             t = Tile.Bush;
@@ -109,34 +116,32 @@ export class World {
     }
   }
 
-  // Ağacı/çalıyı işaretle veya işareti kaldır (oyuncu tıklaması)
+  // Ağaç/çalı/mantar/taş işaretle veya işareti kaldır (oyuncu tıklaması)
   toggleMark(x: number, y: number): void {
     if (!this.inBounds(x, y)) return;
     const t = this.get(x, y);
     const i = this.index(x, y);
-    if (t === Tile.Tree) {
-      if (this.markedTrees.has(i)) {
-        this.markedTrees.delete(i);
-        this.claimedTrees.delete(i);
+    const toggle = (marked: Set<number>, claimed: Set<number>) => {
+      if (marked.has(i)) {
+        marked.delete(i);
+        claimed.delete(i);
       } else {
-        this.markedTrees.add(i);
+        marked.add(i);
       }
-    } else if (t === Tile.Bush) {
-      if (this.markedBushes.has(i)) {
-        this.markedBushes.delete(i);
-        this.claimedBushes.delete(i);
-      } else {
-        this.markedBushes.add(i);
-      }
-    }
+    };
+    if (t === Tile.Tree) toggle(this.markedTrees, this.claimedTrees);
+    else if (t === Tile.Bush || t === Tile.Mushroom) toggle(this.markedBushes, this.claimedBushes);
+    else if (t === Tile.Stone) toggle(this.markedStones, this.claimedStones);
   }
 
   markTree(x: number, y: number): void {
     if (this.get(x, y) === Tile.Tree) this.markedTrees.add(this.index(x, y));
   }
 
-  markBush(x: number, y: number): void {
-    if (this.get(x, y) === Tile.Bush) this.markedBushes.add(this.index(x, y));
+  // Çalı veya mantar: ikisi de yemek toplama işaretine girer
+  markFood(x: number, y: number): void {
+    const t = this.get(x, y);
+    if (t === Tile.Bush || t === Tile.Mushroom) this.markedBushes.add(this.index(x, y));
   }
 
   chopTree(x: number, y: number): void {
@@ -146,12 +151,30 @@ export class World {
     this.set(x, y, Tile.Grass);
   }
 
-  harvestBush(x: number, y: number): void {
+  harvestFood(x: number, y: number): void {
     const i = this.index(x, y);
+    const t = this.get(x, y) as Tile;
     this.markedBushes.delete(i);
     this.claimedBushes.delete(i);
     this.set(x, y, Tile.Grass);
-    this.regrow.push({ x, y, t: BUSH_REGROW_TIME });
+    this.regrow.push({
+      x, y,
+      t: t === Tile.Mushroom ? MUSHROOM_REGROW_TIME : BUSH_REGROW_TIME,
+      tile: t,
+    });
+  }
+
+  // Taş kazıldığında blok toprağa döner (taş ocağı); yükseklik de düşer ki
+  // kabartma gölgelendirme kazılmış çukur gibi görünsün
+  mineStone(x: number, y: number): void {
+    const i = this.index(x, y);
+    this.markedStones.delete(i);
+    this.claimedStones.delete(i);
+    this.heights[i] = Math.min(this.heights[i], 0.6);
+    this.set(x, y, Tile.Dirt);
+    // komşuların kabartması bu bloğa bağlı: onları da yeniden boyat
+    if (this.inBounds(x + 1, y)) this.onTileChange?.(x + 1, y);
+    if (this.inBounds(x, y + 1)) this.onTileChange?.(x, y + 1);
   }
 
   // Verilen konuma en yakın, sahiplenilmemiş işaretli bloğu bul

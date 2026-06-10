@@ -16,17 +16,34 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 | Girdi | İşlev |
 |---|---|
-| Sol tık | Ağaç/çalı işaretle veya seçili binayı yerleştir |
-| Köylüye sol tık | Profilini aç (ad, yaş, meslek, durum, tokluk) |
+| Sol tık | Ağaç/çalı/mantar/taş işaretle veya seçili binayı yerleştir |
+| Köylüye sol tık | Profilini aç (kimlik, durum, çanta, meslek atama) |
 | 1-4 | Bina seç (Ev, Depo, Oduncu, Toplayıcı) |
-| Esc / sağ tık | Bina seçimini iptal et |
+| Esc / sağ tık | Seçimi iptal et |
+| Space | Duraklat / devam et |
+| X | Oyun hızı (1x / 2x / 4x) |
 | WASD / Ok tuşları | Kamerayı kaydır |
 | Fare tekerleği | Yakınlaş / uzaklaş (imlece doğru) |
 | Sağ/orta tık sürükle | Kamerayı sürükleyerek kaydır |
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
-## Şu anki özellikler (v0.2)
+## Şu anki özellikler (v0.3)
+
+### v0.3: Envanter, meslekler, madencilik, yemek çeşitliliği
+
+- **Kişisel envanter (çanta)**: köylüler topladıklarını çantalarında taşır
+  (kapasite 8) ve dolunca kampa/depoya teslim eder; profilde görünür
+- **Meslekler**: profil panelinden atanır — İşçi (her işi yapar), Oduncu,
+  Toplayıcı, Madenci, İnşaatçı (sadece kendi işini yapar)
+- **Taş madenciliği**: taş bloklara tıklayıp işaretle; madenci kazmayla kazar,
+  blok toprağa dönüşür (taş ocağı), 3 taş verir
+- **Mantarlar**: orman içlerinde yetişir, toplanınca 3 mantar verir, yeniden
+  büyür; meyveyle birlikte yemek sayılır
+- **Kamp**: oyun hazır kurulu bir kampla başlar (çadır + kamp ateşi);
+  teslimat noktasıdır
+- **Detaylar**: uçan kazanç yazıları (+4 odun), balta/kazma parçacık efektleri,
+  duraklatma (Space) ve oyun hızı (X ile 1x/2x/4x)
 
 - Value-noise ile prosedürel harita: su, kum, çimen, toprak, taş, ormanlar ve meyve çalıları
 - Offscreen canvas'a önbelleklenmiş pixel-art zemin (hızlı render)

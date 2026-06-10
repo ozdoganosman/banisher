@@ -20,6 +20,7 @@ import {
 } from "./sim/buildings";
 import { resources } from "./sim/resources";
 import { Villager } from "./sim/villager";
+import { updateEffects } from "./render/effects";
 import { TILE_SIZE } from "./world/tiles";
 import { World } from "./world/world";
 
@@ -45,6 +46,7 @@ const seedParam = Number(new URLSearchParams(location.search).get("seed"));
 const seed = Number.isFinite(seedParam) && seedParam > 0
   ? seedParam
   : Math.floor(Math.random() * 2 ** 31);
+document.title = `Banisher — tohum ${seed}`;
 const world = new World(MAP_W, MAP_H, seed);
 const renderer = new Renderer(world);
 
@@ -61,6 +63,8 @@ const villagers: Villager[] = [];
 const buildings: Building[] = [];
 let selected: BuildingType | null = null;
 let selectedVillager: Villager | null = null;
+let paused = false;
+let gameSpeed = 1;
 
 // Tıklanan dünya noktasına en yakın köylüyü bul (vücut hizasında, ~9 piksel tolerans)
 function villagerAt(wx: number, wy: number): Villager | null {
@@ -94,7 +98,28 @@ function spawnVillagersAround(cx: number, cy: number, count: number): number {
   return placed;
 }
 
-spawnVillagersAround(spawn.x, spawn.y, VILLAGER_COUNT);
+// Başlangıç kampı: koloninin hazır kurulu teslimat noktası
+let campCenter = spawn;
+outer: for (let r = 0; r < 20; r++) {
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const x = spawn.x + dx;
+      const y = spawn.y + dy;
+      if (!canPlace(world, x, y)) continue;
+      const camp = new Building(BuildingType.Camp, x, y);
+      camp.effectApplied = true; // hazır kurulu: tamamlanma mesajı çıkmasın
+      placeBuilding(world, camp);
+      buildings.push(camp);
+      campCenter = { x: x + 1, y: y + 1 };
+      break outer;
+    }
+  }
+}
+
+spawnVillagersAround(campCenter.x, campCenter.y, VILLAGER_COUNT);
+camera.x = (campCenter.x + 0.5) * TILE_SIZE;
+camera.y = (campCenter.y + 0.5) * TILE_SIZE;
 
 // ---- Girdi ----
 
@@ -109,11 +134,14 @@ input.onClick = (wx, wy, sx, sy) => {
   // profil paneli açıkken üzerine gelen tıklamalar dünyaya geçmesin
   if (selectedVillager) {
     const hit = profileHitTest(sx, sy);
-    if (hit === "close") {
-      selectedVillager = null;
+    if (hit) {
+      if (hit.kind === "close") {
+        selectedVillager = null;
+      } else if (hit.kind === "profession") {
+        selectedVillager.profession = hit.profession;
+      }
       return;
     }
-    if (hit === "panel") return;
   }
 
   // bina yerleştirirken hayalet önizlemeyle aynı hizalama (harita kenarına sıkıştır)
@@ -157,6 +185,11 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "Escape") {
     selected = null;
     selectedVillager = null;
+  } else if (e.code === "Space") {
+    e.preventDefault();
+    paused = !paused;
+  } else if (e.code === "KeyX") {
+    gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : 1;
   }
   else if (e.code.startsWith("Digit")) {
     const n = Number(e.code.slice(5));
@@ -175,9 +208,8 @@ window.addEventListener("keydown", (e) => {
 // ---- Simülasyon adımı ----
 
 function step(dt: number) {
-  input.update(dt);
   world.update(dt);
-  updateMessages(dt);
+  updateEffects(dt);
 
   for (const v of villagers) v.update(dt, world, buildings);
 
@@ -200,8 +232,7 @@ function step(dt: number) {
         const n = spawnVillagersAround(b.x + 1, b.y + 1, VILLAGERS_PER_HOUSE);
         addMessage(`Ev tamamlandı: ${n} yeni köylü geldi!`);
       } else if (b.type === BuildingType.Depot) {
-        resources.woodCap += DEPOT_CAP_BONUS;
-        resources.foodCap += DEPOT_CAP_BONUS;
+        resources.cap += DEPOT_CAP_BONUS;
         addMessage(`Depo tamamlandı: kapasite +${DEPOT_CAP_BONUS}`);
       } else {
         addMessage(`${def.name} tamamlandı`);
@@ -226,11 +257,18 @@ let accumulator = 0;
 function frame(now: number) {
   const elapsed = Math.min((now - last) / 1000, 0.25);
   last = now;
-  accumulator += elapsed;
 
-  while (accumulator >= FIXED_DT) {
+  // kamera ve mesaj zamanlayıcıları duraklatmadan etkilenmez
+  input.update(elapsed);
+  updateMessages(elapsed);
+
+  accumulator += elapsed * (paused ? 0 : gameSpeed);
+  // yüksek hızda kare başına daha fazla adım gerekir
+  let steps = 0;
+  while (accumulator >= FIXED_DT && steps < 16) {
     step(FIXED_DT);
     accumulator -= FIXED_DT;
+    steps++;
   }
 
   const hover = camera.screenToWorld(input.mouseX, input.mouseY, canvas.width, canvas.height);
@@ -255,7 +293,7 @@ function frame(now: number) {
     selectedVillager,
     now / 1000
   );
-  drawHud(ctx, villagers.length, selected);
+  drawHud(ctx, villagers.length, selected, paused, gameSpeed);
   if (selectedVillager) drawProfile(ctx, selectedVillager);
 
   requestAnimationFrame(frame);

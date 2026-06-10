@@ -1,6 +1,7 @@
 import type { Camera } from "../engine/camera";
 import type { Villager } from "../sim/villager";
 import { Building, BuildingType, BUILDING_SIZE } from "../sim/buildings";
+import { floaters, particles, FLOATER_TTL } from "./effects";
 import { hash2 } from "../world/noise";
 import { Tile, TILE_COLORS, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
@@ -92,6 +93,29 @@ export class Renderer {
 
     if (t === Tile.Tree) this.paintTree(px, py, x, y);
     else if (t === Tile.Bush) this.paintBush(px, py, x, y);
+    else if (t === Tile.Mushroom) this.paintMushroom(px, py, x, y);
+  }
+
+  private paintMushroom(px: number, py: number, x: number, y: number): void {
+    const c = this.tctx;
+    // 2-3 kırmızı şapkalı orman mantarı
+    const n = 2 + (Math.floor(hash2(x, y, 88) * 2) | 0);
+    for (let k = 0; k < n; k++) {
+      const mx = px + 3 + Math.floor(hash2(x * 5 + k, y, 89) * 9);
+      const my = py + 5 + Math.floor(hash2(x, y * 5 + k, 90) * 7);
+      // gölge ve sap
+      c.fillStyle = "rgba(10,20,10,0.2)";
+      c.fillRect(mx - 1, my + 3, 4, 1);
+      c.fillStyle = "#e8e0cc";
+      c.fillRect(mx, my + 1, 2, 3);
+      // şapka
+      c.fillStyle = "#c43030";
+      c.fillRect(mx - 1, my - 1, 4, 2);
+      c.fillRect(mx, my - 2, 2, 1);
+      // benek
+      c.fillStyle = "#f0e8e0";
+      c.fillRect(mx + Math.floor(hash2(x + k, y + k, 91) * 3) - 1, my - 1, 1, 1);
+    }
   }
 
   // Kabartma gölgelendirme: ışık kuzeybatıdan gelir; yokuş yukarı bakan
@@ -232,16 +256,17 @@ export class Renderer {
       }
     }
 
-    // İşaretli bloklar: yanıp sönen çerçeveler (ağaç sarı, çalı turuncu)
+    // İşaretli bloklar: yanıp sönen çerçeveler (ağaç sarı, yemek turuncu, taş mavi)
     const pulse = 0.45 + 0.3 * Math.sin(time * 5);
     ctx.lineWidth = 1;
     this.strokeMarked(ctx, this.world.markedTrees, `rgba(255, 210, 60, ${pulse})`);
     this.strokeMarked(ctx, this.world.markedBushes, `rgba(255, 130, 60, ${pulse})`);
+    this.strokeMarked(ctx, this.world.markedStones, `rgba(110, 200, 255, ${pulse})`);
 
-    // İmleç altındaki ağaca/çalıya beyaz çerçeve (bina yerleştirilmiyorken)
+    // İmleç altındaki toplanabilir bloğa beyaz çerçeve (bina yerleştirilmiyorken)
     if (!ghost && hoverTile) {
       const t = this.world.get(hoverTile.x, hoverTile.y);
-      if (t === Tile.Tree || t === Tile.Bush) {
+      if (t === Tile.Tree || t === Tile.Bush || t === Tile.Mushroom || t === Tile.Stone) {
         ctx.strokeStyle = "rgba(255,255,255,0.8)";
         ctx.strokeRect(
           hoverTile.x * TILE_SIZE + 0.5,
@@ -276,6 +301,27 @@ export class Renderer {
     }
     drawables.sort((a, b) => a.baseY - b.baseY);
     for (const d of drawables) d.draw();
+
+    // parçacıklar (talaş, taş kırıntısı) ve uçan kazanç yazıları
+    for (const p of particles) {
+      ctx.globalAlpha = Math.min(1, p.ttl * 2.5);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, 1.2, 1.2);
+    }
+    ctx.globalAlpha = 1;
+    ctx.font = "bold 5px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    for (const f of floaters) {
+      const a = Math.min(1, f.ttl / (FLOATER_TTL * 0.5));
+      ctx.globalAlpha = a;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillText(f.text, f.x + 0.5, f.y + 0.5);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
 
     // Hayalet bina (yerleştirme önizlemesi)
     if (ghost) {
@@ -322,7 +368,36 @@ export class Renderer {
       case BuildingType.Depot: this.drawDepot(ctx, px, py); break;
       case BuildingType.Woodcutter: this.drawWoodcutter(ctx, px, py); break;
       case BuildingType.Gatherer: this.drawGatherer(ctx, px, py); break;
+      case BuildingType.Camp: this.drawCamp(ctx, px, py); break;
     }
+  }
+
+  private drawCamp(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    // çadır (sol): katmanlı üçgen
+    for (let r = 0; r < 11; r++) {
+      const w = 2 + r * 1.3;
+      ctx.fillStyle = r < 4 ? "#9a8868" : "#7a6a4e";
+      ctx.fillRect(px + 9 - w / 2, py + 12 + r, w, 1.4);
+    }
+    ctx.fillStyle = "#3a3026";
+    ctx.fillRect(px + 7, py + 18, 4, 5); // çadır girişi
+    // kamp ateşi (sağ): taş çember + alev
+    ctx.fillStyle = "#6e7178";
+    for (const [dx, dy] of [[-3, 1], [3, 1], [-2, 3], [2, 3], [0, 4]] as const) {
+      ctx.fillRect(px + 24 + dx, py + 21 + dy, 2, 2);
+    }
+    ctx.fillStyle = "#5a3a1e";
+    ctx.fillRect(px + 22, py + 22, 5, 2); // odunlar
+    ctx.fillStyle = "#e8842c";
+    ctx.fillRect(px + 23, py + 19, 3, 3);
+    ctx.fillStyle = "#ffc83c";
+    ctx.fillRect(px + 24, py + 18, 1, 2);
+    // erzak sandığı (üst sağ)
+    ctx.fillStyle = "#c9a35a";
+    ctx.fillRect(px + 22, py + 8, 6, 5);
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 22.5, py + 8.5, 5, 4);
   }
 
   private drawSite(ctx: CanvasRenderingContext2D, px: number, py: number, t: number): void {
@@ -493,8 +568,8 @@ export class Renderer {
     // kollar
     ctx.strokeStyle = LINE;
     ctx.lineWidth = 1.1;
-    if (v.state === "chopping" || v.state === "building") {
-      // alet sallayan kol: omuzdan dönen tek çizgi + balta/çekiç
+    if (v.state === "chopping" || v.state === "building" || v.state === "mining") {
+      // alet sallayan kol: omuzdan dönen tek çizgi + balta/çekiç/kazma
       const a = -1.4 + Math.sin(v.walkPhase) * 0.8; // omuz açısı
       const hx = x + Math.cos(a) * 3.5 * v.facing;
       const hy = y - 8.5 + Math.sin(a) * 3.5;
@@ -509,8 +584,19 @@ export class Renderer {
       ctx.moveTo(hx, hy);
       ctx.lineTo(ax, ay);
       ctx.stroke();
-      ctx.fillStyle = v.state === "chopping" ? "#9aa0a8" : "#6e7178";
-      ctx.fillRect(ax - 1, ay - 1, 2, 2);
+      if (v.state === "mining") {
+        // kazma: sapın ucunda enine çubuk
+        ctx.strokeStyle = "#9aa0a8";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(ax - 2, ay + 1);
+        ctx.lineTo(ax + 2, ay - 1);
+        ctx.stroke();
+        ctx.lineWidth = 1.1;
+      } else {
+        ctx.fillStyle = v.state === "chopping" ? "#9aa0a8" : "#6e7178";
+        ctx.fillRect(ax - 1, ay - 1, 2, 2);
+      }
     } else if (v.state === "gathering") {
       // eğilip toplama: kollar aşağı uzanır
       const reach = 1.5 + Math.sin(v.walkPhase) * 1.5;

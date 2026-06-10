@@ -1,6 +1,11 @@
 import { BUILDING_DEFS, BuildingType } from "../sim/buildings";
-import { resources } from "../sim/resources";
-import type { Villager } from "../sim/villager";
+import { ITEM_INFO, ITEM_TYPES, resources } from "../sim/resources";
+import {
+  PROFESSION_NAMES,
+  PROFESSIONS,
+  type Profession,
+  type Villager,
+} from "../sim/villager";
 
 export const TOOLBAR_HEIGHT = 64;
 
@@ -64,16 +69,40 @@ export function isOverToolbar(sy: number, canvasH: number): boolean {
 
 // ---- Köylü profil paneli ----
 
-const PROFILE = { x: 12, y: 44, w: 248, h: 148 };
+const PROFILE = { x: 12, y: 44, w: 252, h: 232 };
 const CLOSE = { x: PROFILE.x + PROFILE.w - 24, y: PROFILE.y + 6, w: 18, h: 18 };
 
-// Panel açıkken tıklama paneli mi hedefliyor? ("close" = X düğmesi)
-export function profileHitTest(sx: number, sy: number): "close" | "panel" | null {
+// Meslek düğmeleri: 2 satır x 3 sütun ızgara (5 meslek)
+function professionButtons() {
+  const bw = (PROFILE.w - 20 - 8) / 3;
+  const bh = 20;
+  return PROFESSIONS.map((p, i) => ({
+    profession: p,
+    x: PROFILE.x + 10 + (i % 3) * (bw + 4),
+    y: PROFILE.y + 178 + Math.floor(i / 3) * (bh + 4),
+    w: bw,
+    h: bh,
+  }));
+}
+
+export type ProfileHit =
+  | { kind: "close" }
+  | { kind: "profession"; profession: Profession }
+  | { kind: "panel" }
+  | null;
+
+// Panel açıkken tıklama paneli mi hedefliyor?
+export function profileHitTest(sx: number, sy: number): ProfileHit {
   if (sx >= CLOSE.x && sx <= CLOSE.x + CLOSE.w && sy >= CLOSE.y && sy <= CLOSE.y + CLOSE.h) {
-    return "close";
+    return { kind: "close" };
+  }
+  for (const b of professionButtons()) {
+    if (sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) {
+      return { kind: "profession", profession: b.profession };
+    }
   }
   if (sx >= PROFILE.x && sx <= PROFILE.x + PROFILE.w && sy >= PROFILE.y && sy <= PROFILE.y + PROFILE.h) {
-    return "panel";
+    return { kind: "panel" };
   }
   return null;
 }
@@ -160,81 +189,166 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.fillText(v.fullName, tx, y + 24, w - 82 - 34);
   ctx.font = "13px monospace";
   ctx.fillStyle = "#e8e2d0";
-  ctx.fillText(`Yaş: ${v.identity.age}`, tx, y + 46);
-  ctx.fillText(v.identity.female ? "Kadın" : "Erkek", tx, y + 64);
-  ctx.fillText("Meslek: İşçi", tx, y + 82);
+  ctx.fillText(`Yaş: ${v.identity.age} • ${v.identity.female ? "Kadın" : "Erkek"}`, tx, y + 46);
+  ctx.fillStyle = "#c9a35a";
+  ctx.fillText(`Meslek: ${PROFESSION_NAMES[v.profession]}`, tx, y + 64);
   ctx.fillStyle = "#9ad0ff";
-  ctx.fillText(v.statusText, tx, y + 100, w - 82 - 12);
+  ctx.fillText(v.statusText, tx, y + 82, w - 82 - 12);
 
-  // açlık barı
+  // tokluk barı
   ctx.fillStyle = "#e8e2d0";
   ctx.font = "12px monospace";
-  ctx.fillText("Tokluk", x + 10, y + 122);
+  ctx.fillText("Tokluk", x + 10, y + 116);
   const barX = x + 72;
   const barW = w - 72 - 14;
   ctx.fillStyle = "rgba(255,255,255,0.12)";
-  ctx.fillRect(barX, y + 116, barW, 12);
+  ctx.fillRect(barX, y + 110, barW, 12);
   const fullness = 1 - v.hunger / 100;
   ctx.fillStyle = fullness > 0.5 ? "#6fbf4a" : fullness > 0.2 ? "#e0a83c" : "#d4453f";
-  ctx.fillRect(barX + 1, y + 117, (barW - 2) * fullness, 10);
+  ctx.fillRect(barX + 1, y + 111, (barW - 2) * fullness, 10);
   ctx.strokeStyle = "#3a3f48";
-  ctx.strokeRect(barX + 0.5, y + 116.5, barW - 1, 11);
+  ctx.strokeRect(barX + 0.5, y + 110.5, barW - 1, 11);
+
+  // çanta (kişisel envanter)
+  ctx.fillStyle = "#e8e2d0";
+  ctx.fillText("Çanta", x + 10, y + 140);
+  if (v.inventoryTotal === 0) {
+    ctx.fillStyle = "#8a8478";
+    ctx.fillText("boş", x + 72, y + 140);
+  } else {
+    let ix = x + 72;
+    for (const item of ITEM_TYPES) {
+      const n = v.inventory[item];
+      if (n <= 0) continue;
+      ctx.fillStyle = ITEM_INFO[item].color;
+      ctx.fillRect(ix, y + 134, 10, 10);
+      ctx.strokeStyle = "#3a3f48";
+      ctx.strokeRect(ix + 0.5, y + 134.5, 9, 9);
+      ctx.fillStyle = "#e8e2d0";
+      ctx.fillText(`${n}`, ix + 14, y + 140);
+      ix += 14 + ctx.measureText(`${n}`).width + 10;
+    }
+  }
+
+  // meslek seçimi
+  ctx.fillStyle = "#9a9488";
+  ctx.font = "11px monospace";
+  ctx.fillText("Meslek ata:", x + 10, y + 168);
+  ctx.font = "11px monospace";
+  for (const b of professionButtons()) {
+    const active = v.profession === b.profession;
+    ctx.fillStyle = active ? "rgba(90, 143, 60, 0.5)" : "rgba(255,255,255,0.07)";
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = active ? "#8fd05e" : "#4a4f58";
+    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    ctx.fillStyle = active ? "#d8f0c0" : "#c8c2b0";
+    ctx.textAlign = "center";
+    ctx.fillText(PROFESSION_NAMES[b.profession], b.x + b.w / 2, b.y + b.h / 2 + 1);
+    ctx.textAlign = "left";
+  }
 }
+
+// ---- Üst bar, bildirimler, araç çubuğu ----
 
 export function drawHud(
   ctx: CanvasRenderingContext2D,
   population: number,
-  selected: BuildingType | null
+  selected: BuildingType | null,
+  paused: boolean,
+  speed: number
 ): void {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
 
-  // ---- üst kaynak çubuğu ----
   ctx.fillStyle = "rgba(10, 12, 16, 0.7)";
   ctx.fillRect(0, 0, w, 34);
   ctx.font = "15px monospace";
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
 
-  // odun ikonu
-  ctx.fillStyle = "#8a5a2b";
-  ctx.fillRect(14, 11, 12, 12);
-  ctx.fillStyle = "#6b4422";
-  ctx.fillRect(14, 15, 12, 2);
-  ctx.fillStyle = "#e8e2d0";
-  ctx.fillText(`Odun: ${resources.wood}/${resources.woodCap}`, 34, 18);
+  let cx = 14;
+  const entry = (drawIcon: (ix: number) => void, text: string) => {
+    drawIcon(cx);
+    ctx.fillStyle = "#e8e2d0";
+    ctx.font = "15px monospace";
+    ctx.fillText(text, cx + 20, 18);
+    cx += 20 + ctx.measureText(text).width + 22;
+  };
 
-  // yemek ikonu (meyve)
-  ctx.fillStyle = "#d43f3f";
-  ctx.beginPath();
-  ctx.arc(186, 18, 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#4a7a3a";
-  ctx.fillRect(185, 9, 2, 4);
-  ctx.fillStyle = "#e8e2d0";
-  ctx.fillText(`Yemek: ${resources.food}/${resources.foodCap}`, 200, 18);
+  // odun
+  entry((ix) => {
+    ctx.fillStyle = "#8a5a2b";
+    ctx.fillRect(ix, 11, 12, 12);
+    ctx.fillStyle = "#6b4422";
+    ctx.fillRect(ix, 15, 12, 2);
+  }, `Odun: ${resources.wood}/${resources.cap}`);
 
-  // nüfus ikonu (mini çöp adam)
-  ctx.strokeStyle = "#e8e2d0";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(366, 12, 3, 0, Math.PI * 2);
-  ctx.moveTo(366, 15);
-  ctx.lineTo(366, 22);
-  ctx.moveTo(362, 26);
-  ctx.lineTo(366, 22);
-  ctx.lineTo(370, 26);
-  ctx.stroke();
-  ctx.fillText(`Nüfus: ${population}`, 378, 18);
+  // taş
+  entry((ix) => {
+    ctx.fillStyle = "#9aa0a8";
+    ctx.fillRect(ix + 1, 12, 10, 9);
+    ctx.fillStyle = "#7c7f86";
+    ctx.fillRect(ix + 3, 14, 4, 3);
+  }, `Taş: ${resources.stone}/${resources.cap}`);
 
-  // sağda kısa yardım
+  // meyve
+  entry((ix) => {
+    ctx.fillStyle = "#d43f3f";
+    ctx.beginPath();
+    ctx.arc(ix + 6, 18, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#4a7a3a";
+    ctx.fillRect(ix + 5, 9, 2, 4);
+  }, `Meyve: ${resources.berry}`);
+
+  // mantar
+  entry((ix) => {
+    ctx.fillStyle = "#e8e0cc";
+    ctx.fillRect(ix + 4, 16, 4, 6);
+    ctx.fillStyle = "#c43030";
+    ctx.fillRect(ix + 1, 12, 10, 5);
+    ctx.fillStyle = "#f0e8e0";
+    ctx.fillRect(ix + 4, 13, 2, 2);
+  }, `Mantar: ${resources.mushroom}`);
+
+  // nüfus
+  entry((ix) => {
+    ctx.strokeStyle = "#e8e2d0";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(ix + 6, 12, 3, 0, Math.PI * 2);
+    ctx.moveTo(ix + 6, 15);
+    ctx.lineTo(ix + 6, 22);
+    ctx.moveTo(ix + 2, 26);
+    ctx.lineTo(ix + 6, 22);
+    ctx.lineTo(ix + 10, 26);
+    ctx.stroke();
+  }, `Nüfus: ${population}`);
+
+  // sağda hız ve kısa yardım
   ctx.textAlign = "right";
-  ctx.fillStyle = "#9a9488";
+  ctx.fillStyle = speed > 1 ? "#ffd23c" : "#9a9488";
   ctx.font = "12px monospace";
-  ctx.fillText("1-4: bina seç • Esc/sağ tık: iptal • Sol tık: işaretle/yerleştir", w - 12, 18);
+  const help = "1-4: bina • Esc: iptal • Space: duraklat • X: hız";
+  ctx.fillText(`Hız: ${speed}x`, w - 12, 10);
+  ctx.fillStyle = "#9a9488";
+  ctx.fillText(help, w - 12, 25);
   ctx.textAlign = "left";
 
-  // ---- bildirimler ----
+  // duraklatma göstergesi
+  if (paused) {
+    ctx.textAlign = "center";
+    ctx.font = "bold 16px monospace";
+    const text = "❚❚ DURAKLATILDI (Space)";
+    const tw = ctx.measureText(text).width + 30;
+    ctx.fillStyle = "rgba(10, 12, 16, 0.8)";
+    ctx.fillRect(w / 2 - tw / 2, 90, tw, 30);
+    ctx.fillStyle = "#ffd23c";
+    ctx.fillText(text, w / 2, 105);
+    ctx.textAlign = "left";
+  }
+
+  // bildirimler
   ctx.textAlign = "center";
   ctx.font = "14px monospace";
   messages.forEach((m, i) => {
@@ -247,7 +361,7 @@ export function drawHud(
   });
   ctx.textAlign = "left";
 
-  // ---- alt araç çubuğu ----
+  // alt araç çubuğu
   ctx.fillStyle = "rgba(10, 12, 16, 0.8)";
   ctx.fillRect(0, h - TOOLBAR_HEIGHT, w, TOOLBAR_HEIGHT);
 
