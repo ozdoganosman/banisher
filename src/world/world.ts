@@ -21,6 +21,8 @@ export class World {
 
   // büyüyen fidanlar/filizler (target: olgunlaşınca dönüşeceği blok)
   private saplings: { x: number; y: number; t: number; target: Tile }[] = [];
+  // budanmış ağaçlar: zamanla Tree'ye döner
+  private prunedTrees: { x: number; y: number; t: number }[] = [];
 
   // Bina kaplayan bloklar: yürünemez
   readonly blocked = new Set<number>();
@@ -91,7 +93,7 @@ export class World {
 
         if (t === Tile.Grass) {
           const f = fractalNoise(x * 0.09, y * 0.09, seed + 7777, 3);
-          if (f > 0.55 && hash2(x, y, seed + 13) > 0.35) {
+          if (f > 0.55 && hash2(x, y, seed + 13) > 0.65) {
             // orman kuşakları
             t = Tile.Tree;
           } else if (f > 0.55 && hash2(x, y, seed + 61) > 0.8) {
@@ -99,7 +101,7 @@ export class World {
             t = Tile.Mushroom;
           } else if (f > 0.46 && hash2(x, y, seed + 31) > 0.82) {
             // orman kenarlarında meyve/yemiş çalıları
-            t = hash2(x, y, seed + 71) > 0.7 ? Tile.NutBush : Tile.Bush;
+            t = Tile.Bush;
           } else if (hash2(x, y, seed + 47) > 0.985) {
             // açık alanda seyrek çalılar
             t = Tile.Bush;
@@ -141,8 +143,24 @@ export class World {
     if (this.get(x, y) === Tile.Stone) this.markedStones.add(this.index(x, y));
   }
 
-  // Fidan/filizler zamanla hedef bloğa dönüşür
-  // (tek "yeniden büyüme" yolu ormancı/toplayıcı ekimleridir)
+  // Bloğun üzerindeki iş işaretini (varsa) kaldır; kaldırıldıysa true döner
+  unmark(x: number, y: number): boolean {
+    if (!this.inBounds(x, y)) return false;
+    const i = this.index(x, y);
+    let removed = false;
+    const drop = (marked: Set<number>, claimed: Set<number>) => {
+      if (marked.delete(i)) {
+        claimed.delete(i);
+        removed = true;
+      }
+    };
+    drop(this.markedTrees, this.claimedTrees);
+    drop(this.markedBushes, this.claimedBushes);
+    drop(this.markedStones, this.claimedStones);
+    return removed;
+  }
+
+  // Fidan/filizler ve budanmış ağaçlar zamanla hedef bloğa dönüşür
   update(dt: number): void {
     for (let i = this.saplings.length - 1; i >= 0; i--) {
       const s = this.saplings[i];
@@ -150,6 +168,15 @@ export class World {
       if (s.t <= 0) {
         this.saplings.splice(i, 1);
         if (this.get(s.x, s.y) === Tile.Sapling) this.set(s.x, s.y, s.target);
+      }
+    }
+    // Budanmış ağaçlar yeniden büyür
+    for (let i = this.prunedTrees.length - 1; i >= 0; i--) {
+      const p = this.prunedTrees[i];
+      p.t -= dt;
+      if (p.t <= 0) {
+        this.prunedTrees.splice(i, 1);
+        if (this.get(p.x, p.y) === Tile.PrunedTree) this.set(p.x, p.y, Tile.Tree);
       }
     }
   }
@@ -197,12 +224,13 @@ export class World {
     return n;
   }
 
-  // Kesilen/toplanan kaynaklar kalıcı olarak gider (yeniden büyümez)
-  chopTree(x: number, y: number): void {
+  // Dal toplama: ağaç budanır (PrunedTree), 3 oyun günü (450s) sonra yeniden büyür
+  pruneTree(x: number, y: number): void {
     const i = this.index(x, y);
     this.markedTrees.delete(i);
     this.claimedTrees.delete(i);
-    this.set(x, y, Tile.Grass);
+    this.set(x, y, Tile.PrunedTree);
+    this.prunedTrees.push({ x, y, t: 450 }); // 3 oyun günü = 3 × 150 sn
   }
 
   harvestFood(x: number, y: number): void {

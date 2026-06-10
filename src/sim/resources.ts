@@ -3,50 +3,54 @@
 
 export type ItemType =
   | "wood" | "stone"
-  | "berry" | "mushroom" | "fish"
-  | "apple" | "orange" | "tangerine" | "nut"
-  | "egg" | "milk" | "meat" | "wool";
+  | "berry" | "mushroom" | "fish";
 
 export const ITEM_TYPES: ItemType[] = [
   "wood", "stone",
   "berry", "mushroom", "fish",
-  "apple", "orange", "tangerine", "nut",
-  "egg", "milk", "meat", "wool",
 ];
 
 export const ITEM_INFO: Record<ItemType, { name: string; color: string }> = {
-  wood: { name: "odun", color: "#a06a35" },
+  wood: { name: "dal", color: "#8a6a43" },
   stone: { name: "taş", color: "#9aa0a8" },
-  berry: { name: "meyve", color: "#d43f3f" },
+  berry: { name: "yemiş", color: "#d43f3f" },
   mushroom: { name: "mantar", color: "#d9b06b" },
   fish: { name: "balık", color: "#6fa8c9" },
-  apple: { name: "elma", color: "#d43030" },
-  orange: { name: "portakal", color: "#f08a24" },
-  tangerine: { name: "mandalina", color: "#ffaa3c" },
-  nut: { name: "yemiş", color: "#9a6c40" },
-  egg: { name: "yumurta", color: "#f0ead8" },
-  milk: { name: "süt", color: "#eef2f5" },
-  meat: { name: "et", color: "#c05a50" },
-  wool: { name: "yün", color: "#e8e4d4" },
 };
 
 // Yenebilirler (tüketim önceliği sırasıyla)
 export const FOOD_TYPES: ItemType[] = [
-  "berry", "mushroom", "apple", "orange", "tangerine", "nut", "egg", "fish", "milk", "meat",
+  "berry", "mushroom", "fish",
 ];
+
+export const FOOD_NUTRITION: Record<ItemType, number> = {
+  berry: 13,
+  mushroom: 5,
+  fish: 15,
+  wood: 0,
+  stone: 0,
+};
 
 export const resources: Record<ItemType, number> & { cap: number; knowledge: number } = {
   ...(Object.fromEntries(ITEM_TYPES.map((t) => [t, 0])) as Record<ItemType, number>),
   wood: 20,
   berry: 20,
-  mushroom: 4,
-  cap: 60,
+  cap: 100,
   knowledge: 0, // tapınaklarda üretilir; depo kapasitesine tabi değildir
 };
 
+// Toplam depolanmış kaynak miktarı
+export function totalStored(): number {
+  let total = 0;
+  for (const item of ITEM_TYPES) {
+    total += resources[item];
+  }
+  return total;
+}
+
 // Stoğa ekle (kapasiteyle sınırlı); gerçekten eklenen miktarı döndürür
 export function addItem(item: ItemType, n: number): number {
-  const space = resources.cap - resources[item];
+  const space = resources.cap - totalStored();
   const added = Math.max(0, Math.min(space, n));
   resources[item] += added;
   return added;
@@ -54,7 +58,8 @@ export function addItem(item: ItemType, n: number): number {
 
 // Bu ürünün deposu dolu mu? Doluysa köylüler onu toplamayı bırakır
 export function isFull(item: ItemType): boolean {
-  return resources[item] >= resources.cap;
+  void item;
+  return totalStored() >= resources.cap;
 }
 
 // Yenebilir toplam

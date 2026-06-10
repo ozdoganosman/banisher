@@ -28,8 +28,10 @@ import {
   TOOLBAR_TYPES,
   toolbarHitTest,
   updateMessages,
+  drawTaskList,
+  type TaskCounts,
 } from "./render/hud";
-import { buyTech } from "./sim/tech";
+import { buyTech, hasTech } from "./sim/tech";
 import { Animal, ANIMAL_DEFS, BARN_HERD, WILD_POOL, type AnimalType } from "./sim/animals";
 import {
   Building,
@@ -40,10 +42,12 @@ import {
   isHousing,
   placeBuilding,
   ROLE_NAMES,
+  isBuildingUnlocked,
 } from "./sim/buildings";
 import { gameTime, season, totalDays, updateTime } from "./sim/time";
 import { addFloater } from "./render/effects";
 import {
+  addItem,
   foodTotal,
   isFull,
   ITEM_INFO,
@@ -61,6 +65,25 @@ const MAP_H = 128;
 const VILLAGER_COUNT = 6;
 const FIXED_DT = 1 / 60;
 const DEPOT_CAP_BONUS = 80;
+const COLLECTIVE_CAP_BONUS = 60;
+
+// İşaretli görev sayaçlarını hesapla
+function getTaskCounts(): TaskCounts {
+  let berry = 0, mushroom = 0;
+  for (const i of world.markedBushes) {
+    const tx = i % MAP_W;
+    const ty = Math.floor(i / MAP_W);
+    const item = foodItemOf(world.get(tx, ty));
+    if (item === "berry") berry++;
+    else if (item === "mushroom") mushroom++;
+  }
+  return {
+    wood: world.markedTrees.size,
+    berry,
+    mushroom,
+    stone: world.markedStones.size,
+  };
+}
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -222,6 +245,11 @@ const b2t = (px: number) => Math.floor(px / TILE_SIZE);
 function demolishBuilding(b: Building): void {
   if (b.type === BuildingType.Camp) return;
   b.removed = true;
+  if (b.type === BuildingType.Depot && b.done) {
+    resources.cap = Math.max(100, resources.cap - DEPOT_CAP_BONUS);
+  } else if (b.type === BuildingType.Collective && b.done) {
+    resources.cap = Math.max(100, resources.cap - COLLECTIVE_CAP_BONUS);
+  }
   // çiftlik yıkılırsa hayvanları da gider
   for (let i = animals.length - 1; i >= 0; i--) {
     if (animals[i].barn === b) animals.splice(i, 1);
@@ -240,7 +268,7 @@ function demolishBuilding(b: Building): void {
   const idx = buildings.indexOf(b);
   if (idx !== -1) buildings.splice(idx, 1);
   const refund = Math.floor(b.def.cost / 2);
-  resources.wood = Math.min(resources.cap, resources.wood + refund);
+  addItem("wood", refund);
   addMessage(`${b.def.name} yıkıldı (+${refund} odun iade)`);
   if (selectedBuilding === b) selectedBuilding = null;
 }
@@ -305,7 +333,13 @@ input.onClick = (wx, wy, sx, sy) => {
   // önce araç çubuğu
   if (isOverToolbar(sy, canvas.height)) {
     const hit = toolbarHitTest(sx, sy, canvas.width, canvas.height);
-    if (hit !== null) selected = selected === hit ? null : hit;
+    if (hit !== null) {
+      if (isBuildingUnlocked(hit)) {
+        selected = selected === hit ? null : hit;
+      } else {
+        addMessage(`${BUILDING_DEFS[hit].name} için gerekli teknoloji araştırılmadı!`);
+      }
+    }
     return;
   }
 
@@ -340,7 +374,7 @@ input.onClick = (wx, wy, sx, sy) => {
     return;
   }
   if (speedButtonHitTest(sx, sy)) {
-    gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : 1;
+    gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : gameSpeed === 4 ? 8 : gameSpeed === 8 ? 16 : 1;
     return;
   }
 
@@ -459,6 +493,20 @@ input.onClick = (wx, wy, sx, sy) => {
       selectedVillager = null;
       return;
     }
+    // iptal modunda tek tıklama yalnızca işaret kaldırır
+    if (markFilter === "cancel") {
+      world.unmark(tx, ty);
+      return;
+    }
+    const t = world.get(tx, ty);
+    if (t === Tile.Mushroom && !hasTech("mushroomology")) {
+      addMessage("Mantar toplamak için Mantaroloji araştırılmalı!");
+      return;
+    }
+    if (t === Tile.Stone && !hasTech("humanity")) {
+      addMessage("Taş kazmak için önce Beşer araştırılmalı!");
+      return;
+    }
     world.toggleMark(tx, ty);
   }
 };
@@ -477,8 +525,12 @@ input.onLeftDragStart = (wx, wy, sx, sy) => {
     selecting = { mode: "minimap" };
     return;
   }
-  if (selected !== null || showPopulation || showTech || selectedVillager || selectedBuilding) return;
+  if (selected !== null) return;
   if (isOverToolbar(sy, canvas.height)) return;
+  if (showPopulation && isOverPopPanel(sx, sy)) return;
+  if (showTech && techPanelHitTest(sx, sy) !== null) return;
+  if (selectedVillager && profileHitTest(sx, sy) !== null) return;
+  if (selectedBuilding && buildingPanelHitTest(sx, sy) !== null) return;
   selecting = { mode: "rect", x0: wx, y0: wy, x1: wx, y1: wy };
 };
 
@@ -498,14 +550,43 @@ input.onLeftDragMove = (wx, wy, sx, sy) => {
 
 input.onLeftDragEnd = () => {
   if (selecting?.mode === "rect") {
-    const n = markSelection(selecting);
-    if (n > 0) {
-      const label = MARK_FILTERS.find((f) => f.id === markFilter)?.label ?? "";
-      addMessage(`${n} blok işaretlendi (${label})`);
+    if (markFilter === "cancel") {
+      const n = cancelSelection(selecting);
+      if (n > 0) addMessage(`${n} iş iptal edildi`);
+    } else {
+      const n = markSelection(selecting);
+      if (n > 0) {
+        const label = MARK_FILTERS.find((f) => f.id === markFilter)?.label ?? "";
+        addMessage(`${n} blok işaretlendi (${label})`);
+      }
     }
   }
   selecting = null;
 };
+
+// Seçim karesindeki tüm iş işaretlerini (ve av işaretlerini) kaldır
+function cancelSelection(sel: { x0: number; y0: number; x1: number; y1: number }): number {
+  const tx0 = Math.max(0, Math.floor(Math.min(sel.x0, sel.x1) / TILE_SIZE));
+  const ty0 = Math.max(0, Math.floor(Math.min(sel.y0, sel.y1) / TILE_SIZE));
+  const tx1 = Math.min(MAP_W - 1, Math.floor(Math.max(sel.x0, sel.x1) / TILE_SIZE));
+  const ty1 = Math.min(MAP_H - 1, Math.floor(Math.max(sel.y0, sel.y1) / TILE_SIZE));
+  let n = 0;
+  for (let y = ty0; y <= ty1; y++) {
+    for (let x = tx0; x <= tx1; x++) {
+      if (world.unmark(x, y)) n++;
+    }
+  }
+  const wx0 = Math.min(sel.x0, sel.x1), wx1 = Math.max(sel.x0, sel.x1);
+  const wy0 = Math.min(sel.y0, sel.y1), wy1 = Math.max(sel.y0, sel.y1);
+  for (const a of animals) {
+    if (a.wild && a.hunted && a.x >= wx0 && a.x <= wx1 && a.y >= wy0 && a.y <= wy1) {
+      a.hunted = false;
+      a.claimed = false;
+      n++;
+    }
+  }
+  return n;
+}
 
 // Seçim karesindeki blokları say (canlı gösterge için)
 function countSelection(sel: { x0: number; y0: number; x1: number; y1: number }) {
@@ -513,16 +594,20 @@ function countSelection(sel: { x0: number; y0: number; x1: number; y1: number })
   const ty0 = Math.max(0, Math.floor(Math.min(sel.y0, sel.y1) / TILE_SIZE));
   const tx1 = Math.min(MAP_W - 1, Math.floor(Math.max(sel.x0, sel.x1) / TILE_SIZE));
   const ty1 = Math.min(MAP_H - 1, Math.floor(Math.max(sel.y0, sel.y1) / TILE_SIZE));
-  let trees = 0, food = 0, stone = 0;
+  let trees = 0, food = 0, stone = 0, marked = 0;
   for (let y = ty0; y <= ty1; y++) {
     for (let x = tx0; x <= tx1; x++) {
       const t = world.get(x, y);
       if (t === Tile.Tree) trees++;
       else if (foodItemOf(t)) food++;
       else if (t === Tile.Stone) stone++;
+      const i = world.index(x, y);
+      if (world.markedTrees.has(i) || world.markedBushes.has(i) || world.markedStones.has(i)) {
+        marked++;
+      }
     }
   }
-  return { trees, food, stone };
+  return { trees, food, stone, marked };
 }
 
 // Seçimi filtreye göre işaretle; işaretlenen blok sayısını döndürür
@@ -539,9 +624,11 @@ function markSelection(sel: { x0: number; y0: number; x1: number; y1: number }):
         if (!world.markedTrees.has(world.index(x, y))) n++;
         world.markTree(x, y);
       } else if ((markFilter === "all" || markFilter === "food") && foodItemOf(t)) {
+        if (t === Tile.Mushroom && !hasTech("mushroomology")) continue;
         if (!world.markedBushes.has(world.index(x, y))) n++;
         world.markFood(x, y);
       } else if ((markFilter === "all" || markFilter === "stone") && t === Tile.Stone) {
+        if (!hasTech("humanity")) continue;
         if (!world.markedStones.has(world.index(x, y))) n++;
         world.markStone(x, y);
       }
@@ -570,7 +657,7 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     paused = !paused;
   } else if (e.code === "KeyX") {
-    gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : 1;
+    gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : gameSpeed === 4 ? 8 : gameSpeed === 8 ? 16 : 1;
   } else if (e.code === "KeyN") {
     showPopulation = !showPopulation;
     showTech = false;
@@ -578,14 +665,17 @@ window.addEventListener("keydown", (e) => {
     showTech = !showTech;
     showPopulation = false;
   } else if (e.code === "KeyF") {
-    const i = MARK_FILTERS.findIndex((f) => f.id === markFilter);
-    markFilter = MARK_FILTERS[(i + 1) % MARK_FILTERS.length].id;
+    const visibleFilters = MARK_FILTERS.filter(f => f.id !== "stone" || hasTech("humanity"));
+    const i = visibleFilters.findIndex((f) => f.id === markFilter);
+    markFilter = visibleFilters[(i + 1) % visibleFilters.length].id;
   }
   else if (e.code.startsWith("Digit")) {
     const n = Number(e.code.slice(5));
     const idx = n === 0 ? 9 : n - 1; // 0 tuşu = 10. bina
-    if (idx >= 0 && idx < TOOLBAR_TYPES.length) {
-      selected = selected === TOOLBAR_TYPES[idx] ? null : TOOLBAR_TYPES[idx];
+    const unlockedTypes = TOOLBAR_TYPES.filter(isBuildingUnlocked);
+    if (idx >= 0 && idx < unlockedTypes.length) {
+      const type = unlockedTypes[idx];
+      selected = selected === type ? null : type;
     }
   }
 });
@@ -789,6 +879,9 @@ function step(dt: number) {
       } else if (b.type === BuildingType.Depot) {
         resources.cap += DEPOT_CAP_BONUS;
         addMessage(`Depo tamamlandı: kapasite +${DEPOT_CAP_BONUS}`);
+      } else if (b.type === BuildingType.Collective) {
+        resources.cap += COLLECTIVE_CAP_BONUS;
+        addMessage(`Kollektif tamamlandı: kapasite +${COLLECTIVE_CAP_BONUS}`);
       } else {
         addMessage(`${def.name} tamamlandı`);
       }
@@ -869,11 +962,13 @@ function frame(now: number) {
   renderer.drawMinimap(ctx, camera, villagers, buildings, TOOLBAR_HEIGHT);
   drawHud(ctx, villagers.length, selected, paused, gameSpeed);
   if (villagers.length > 0) drawMarkFilters(ctx, markFilter);
+  if (villagers.length > 0) drawTaskList(ctx, getTaskCounts());
 
   // alan seçerken imlecin yanında canlı sayım
   if (selecting?.mode === "rect") {
     const c = countSelection(selecting);
     const parts: string[] = [];
+    if (markFilter === "cancel") parts.push(`İptal ${c.marked}`);
     if (markFilter === "all" || markFilter === "wood") parts.push(`Ağaç ${c.trees}`);
     if (markFilter === "all" || markFilter === "food") parts.push(`Yiyecek ${c.food}`);
     if (markFilter === "all" || markFilter === "stone") parts.push(`Taş ${c.stone}`);

@@ -1,13 +1,8 @@
 import { TILE_SIZE } from "../world/tiles";
-import { Tile, foodItemOf } from "../world/tiles";
+import { Tile } from "../world/tiles";
 import type { World } from "../world/world";
 import { isFull } from "./resources";
-
-// Toplayıcı kulübesinin tarayacağı yemek blokları
-const FOOD_TILES: Tile[] = [
-  Tile.Bush, Tile.Mushroom, Tile.AppleTree,
-  Tile.OrangeTree, Tile.TangerineTree, Tile.NutBush,
-];
+import { hasTech } from "./tech";
 
 export const enum BuildingType {
   House = 0,
@@ -21,6 +16,8 @@ export const enum BuildingType {
   Nursery = 8, // bebekler burada bakılır: hızlı büyür, acıkmaz
   Fisher = 9, // su kenarına kurulur; balıkçılar kıyıdan balık tutar
   Barn = 10, // çiftlik: tavuk/inek/domuz besler, çiftçiler ürün toplar
+  Collective = 11, // Kollektif ambar (sadece gıda depolar)
+  MushroomGatherer = 12, // Mantarcı binası (mantar ekilip toplanır)
 }
 
 export interface BuildingDef {
@@ -54,19 +51,19 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   [BuildingType.Woodcutter]: {
     name: "Oduncu",
-    cost: 10,
+    cost: 6,
     buildTime: 8,
     size: 2,
     maxWorkers: 3,
-    desc: "3 oduncu: alanına fidan diker, büyüyen ağaçları keser",
+    desc: "3 oduncu: açlaçları buda, dal toplar; ağaçlar kend. büyür",
   },
   [BuildingType.Gatherer]: {
     name: "Toplayıcı",
-    cost: 10,
+    cost: 8,
     buildTime: 8,
     size: 2,
     maxWorkers: 3,
-    desc: "3 toplayıcı: alanına mantar/yemiş eker ve toplar",
+    desc: "3 toplayıcı: alanına yemiş eker ve toplar",
   },
   [BuildingType.Camp]: {
     name: "Kamp",
@@ -125,6 +122,22 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     maxWorkers: 2,
     desc: "Tavuk, inek ve domuz besler; çiftçiler yumurta, süt ve et toplar",
   },
+  [BuildingType.Collective]: {
+    name: "Kollektif",
+    cost: 10,
+    buildTime: 8,
+    size: 2,
+    maxWorkers: 0,
+    desc: "Gıda kapasitesi +60 (sadece gıda depolar)",
+  },
+  [BuildingType.MushroomGatherer]: {
+    name: "Mantarcı",
+    cost: 10,
+    buildTime: 8,
+    size: 2,
+    maxWorkers: 3,
+    desc: "3 mantarcı: alanına mantar eker ve toplar",
+  },
 };
 
 // ---- Konut sistemi ----
@@ -143,6 +156,7 @@ export const ROLE_NAMES: Partial<Record<BuildingType, string>> = {
   [BuildingType.Temple]: "Rahip",
   [BuildingType.Fisher]: "Balıkçı",
   [BuildingType.Barn]: "Çiftçi",
+  [BuildingType.MushroomGatherer]: "Mantarcı",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları
@@ -165,15 +179,15 @@ export function isLit(buildings: Building[], wx: number, wy: number): boolean {
 }
 
 export const WORSHIP_INTERVAL = 20; // saniye: tapınak yeni ayine bu arayla izin verir
-export const WORSHIP_TIME = 6;
+export const WORSHIP_TIME = 15;
 export const KNOWLEDGE_PER_WORSHIP = 1;
 
 // Köylülerin topladıklarını teslim edebileceği bina mı?
 export function isDepositPoint(b: Building): boolean {
-  return b.done && (b.type === BuildingType.Depot || b.type === BuildingType.Camp);
+  return b.done && (b.type === BuildingType.Depot || b.type === BuildingType.Camp || b.type === BuildingType.Collective);
 }
 
-export const AUTO_MARK_RADIUS = 9; // blok: kulübenin çalışma alanı
+export const AUTO_MARK_RADIUS = 6; // blok: kulübenin çalışma alanı
 const SCAN_INTERVAL = 1.5; // saniye
 
 export class Building {
@@ -214,8 +228,7 @@ export class Building {
   }
 
   get worshipReady(): boolean {
-    return this.type === BuildingType.Temple && this.done &&
-      this.worshipTimer <= 0 && !this.worshipClaimed;
+    return this.type === BuildingType.Temple && this.done;
   }
 
   // Üretim binaları çalışan sayısına göre çevrelerindeki kaynakları işaretler
@@ -225,7 +238,7 @@ export class Building {
     if (this.type === BuildingType.Temple && this.worshipTimer > 0) {
       this.worshipTimer -= dt;
     }
-    if (this.type !== BuildingType.Woodcutter && this.type !== BuildingType.Gatherer) return;
+    if (this.type !== BuildingType.Woodcutter && this.type !== BuildingType.Gatherer && this.type !== BuildingType.MushroomGatherer) return;
     this.scanTimer -= dt;
     if (this.scanTimer > 0) return;
     this.scanTimer = SCAN_INTERVAL;
@@ -235,29 +248,30 @@ export class Building {
     const cx = this.x + 1;
     const cy = this.y + 1;
     if (this.type === BuildingType.Woodcutter) {
+      // Sadece budanmamış (hazır) ağaçları işaretle
       const t = world.findNearestTileOfType(Tile.Tree, cx, cy, AUTO_MARK_RADIUS, world.markedTrees);
       const markedNear = world.countMarkedNear(world.markedTrees, cx, cy, AUTO_MARK_RADIUS);
-      this.outOfResources =
-        !t && markedNear === 0 && !world.findPlantSpot(cx, cy, AUTO_MARK_RADIUS, cx, cy);
-      if (isFull("wood")) return; // depo dolu: işaretlemeyi durdur
+      const anyTree = world.countTilesNear([Tile.Tree, Tile.PrunedTree], cx, cy, AUTO_MARK_RADIUS) > 0;
+      this.outOfResources = !t && markedNear === 0 && !anyTree;
+      if (isFull("wood")) return;
       if (markedNear >= maxMarks) return;
       if (t) world.markTree(t.x, t.y);
-    } else {
+    } else if (this.type === BuildingType.Gatherer) {
+      const t = world.findNearestTileOfType(Tile.Bush, cx, cy, AUTO_MARK_RADIUS, world.markedBushes);
       const markedNear = world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS);
-      let found = false;
-      for (const tile of FOOD_TILES) {
-        const item = foodItemOf(tile)!;
-        const b = world.findNearestTileOfType(tile, cx, cy, AUTO_MARK_RADIUS, world.markedBushes);
-        if (!b) continue;
-        found = true;
-        if (isFull(item)) continue;
-        if (markedNear < maxMarks) {
-          world.markFood(b.x, b.y);
-          break;
-        }
-      }
       this.outOfResources =
-        !found && markedNear === 0 && !world.findPlantSpot(cx, cy, AUTO_MARK_RADIUS, cx, cy);
+        !t && markedNear === 0 && !world.findPlantSpot(cx, cy, AUTO_MARK_RADIUS, cx, cy);
+      if (isFull("berry")) return;
+      if (markedNear >= maxMarks) return;
+      if (t) world.markFood(t.x, t.y);
+    } else if (this.type === BuildingType.MushroomGatherer) {
+      const t = world.findNearestTileOfType(Tile.Mushroom, cx, cy, AUTO_MARK_RADIUS, world.markedBushes);
+      const markedNear = world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS);
+      this.outOfResources =
+        !t && markedNear === 0 && !world.findPlantSpot(cx, cy, AUTO_MARK_RADIUS, cx, cy);
+      if (isFull("mushroom")) return;
+      if (markedNear >= maxMarks) return;
+      if (t) world.markFood(t.x, t.y);
     }
   }
 }
@@ -267,6 +281,19 @@ export function canPlace(world: World, tx: number, ty: number, size: number): bo
   for (let dy = 0; dy < size; dy++) {
     for (let dx = 0; dx < size; dx++) {
       if (!world.walkableAt(tx + dx, ty + dy)) return false;
+      const t = world.get(tx + dx, ty + dy);
+      if (
+        t === Tile.Tree ||
+        t === Tile.Bush ||
+        t === Tile.Mushroom ||
+        t === Tile.NutBush ||
+        t === Tile.Sapling ||
+        t === Tile.AppleTree ||
+        t === Tile.OrangeTree ||
+        t === Tile.TangerineTree
+      ) {
+        return false;
+      }
     }
   }
   return true;
@@ -278,4 +305,23 @@ export function placeBuilding(world: World, b: Building): void {
       world.blocked.add(world.index(b.x + dx, b.y + dy));
     }
   }
+}
+
+export function isBuildingUnlocked(type: BuildingType): boolean {
+  if (type === BuildingType.House || type === BuildingType.Temple || type === BuildingType.Camp) return true;
+  if (type === BuildingType.Depot) return hasTech("capital");
+  if (type === BuildingType.Woodcutter) return hasTech("humanity");
+  if (type === BuildingType.Gatherer) return hasTech("nature");
+  if (type === BuildingType.Collective) return hasTech("collective");
+  if (type === BuildingType.Fisher) return hasTech("fishing");
+  if (type === BuildingType.MushroomGatherer) return hasTech("mushroomology");
+  if (
+    type === BuildingType.Barn ||
+    type === BuildingType.Cafeteria ||
+    type === BuildingType.Nursery ||
+    type === BuildingType.Torch
+  ) {
+    return hasTech("humanity");
+  }
+  return false;
 }

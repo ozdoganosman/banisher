@@ -1,6 +1,6 @@
 import type { Camera } from "../engine/camera";
 import type { Animal } from "../sim/animals";
-import type { Villager } from "../sim/villager";
+import { EAT_THRESHOLD, type Villager } from "../sim/villager";
 import {
   AUTO_MARK_RADIUS,
   Building,
@@ -8,7 +8,7 @@ import {
   isDepositPoint,
   LIGHT_RADIUS,
 } from "../sim/buildings";
-import { isFull, ITEM_INFO, ITEM_TYPES } from "../sim/resources";
+import { isFull, ITEM_INFO, ITEM_TYPES, foodTotal } from "../sim/resources";
 import { darkness, season } from "../sim/time";
 import { floaters, particles, FLOATER_TTL } from "./effects";
 import { hash2 } from "../world/noise";
@@ -185,6 +185,7 @@ export class Renderer {
     this.paintRelief(px, py, x, y);
 
     if (t === Tile.Tree) this.paintTree(px, py, x, y);
+    else if (t === Tile.PrunedTree) this.paintPrunedTree(px, py);
     else if (t === Tile.Bush || t === Tile.NutBush) this.paintBush(px, py, x, y, t);
     else if (t === Tile.Mushroom) this.paintMushroom(px, py, x, y);
     else if (t === Tile.Sapling) this.paintSapling(px, py, x, y);
@@ -222,6 +223,7 @@ export class Renderer {
       case Tile.Dirt: color = DIRT_BY_SEASON[s][0]; break;
       case Tile.Stone: color = STONE_BY_SEASON[s][0]; break;
       case Tile.Tree: color = CANOPY_BY_SEASON[s][1]; break;
+      case Tile.PrunedTree: color = "#7a5a30"; break;
       case Tile.Sapling: color = "#6cbf4e"; break;
       case Tile.Bush: color = BUSH_BY_SEASON[s][1]; break;
       default: color = GRASS_BY_SEASON[s][0]; break;
@@ -365,6 +367,32 @@ export class Renderer {
     if (land(x, y + 1)) this.tctx.fillRect(px, py + TILE_SIZE - 2, TILE_SIZE, 2);
     if (land(x - 1, y)) this.tctx.fillRect(px, py, 2, TILE_SIZE);
     if (land(x + 1, y)) this.tctx.fillRect(px + TILE_SIZE - 2, py, 2, TILE_SIZE);
+  }
+
+  private paintPrunedTree(px: number, py: number): void {
+    const c = this.tctx;
+    // Kök gölgesi (küçük)
+    c.fillStyle = "rgba(10, 20, 10, 0.14)";
+    c.beginPath();
+    c.ellipse(px + 9, py + 14, 3.5, 1.4, 0, 0, Math.PI * 2);
+    c.fill();
+    // Ana gövde
+    c.fillStyle = "#6b4422";
+    c.fillRect(px + 7, py + 6, 2, 9);
+    c.fillStyle = "#57391f";
+    c.fillRect(px + 8, py + 6, 1, 9);
+    // Dal kalıntıları: sağa ve sola çıkan çıplak ince dallar
+    c.fillStyle = "#7a5230";
+    c.fillRect(px + 5, py + 7, 2, 1);  // sol dal
+    c.fillRect(px + 9, py + 7, 2, 1);  // sağ dal
+    c.fillRect(px + 4, py + 9, 3, 1);  // sol alt dal
+    c.fillRect(px + 9, py + 10, 3, 1); // sağ alt dal
+    c.fillRect(px + 6, py + 5, 1, 2);  // tepe dal
+    // Dal uçları (küçük parlama)
+    c.fillStyle = "#a07848";
+    c.fillRect(px + 4, py + 8, 1, 1);
+    c.fillRect(px + 11, py + 9, 1, 1);
+    c.fillRect(px + 6, py + 4, 1, 1);
   }
 
   private paintTree(px: number, py: number, x: number, y: number): void {
@@ -552,7 +580,7 @@ export class Renderer {
     for (const v of villagers) {
       // evinde uyuyan köylü içeridedir: çizilmez (evin üstünde z çıkar)
       if (v.state === "sleeping" && !v.groundSleep && v.home) continue;
-      drawables.push({ baseY: v.y, draw: () => this.drawVillager(ctx, v) });
+      drawables.push({ baseY: v.y, draw: () => this.drawVillager(ctx, v, time) });
     }
     for (const a of animals) {
       drawables.push({ baseY: a.y, draw: () => this.drawAnimal(ctx, a) });
@@ -672,6 +700,7 @@ export class Renderer {
       const isWorkHut =
         ghost.type === BuildingType.Woodcutter ||
         ghost.type === BuildingType.Gatherer ||
+        ghost.type === BuildingType.MushroomGatherer ||
         ghost.type === BuildingType.Fisher;
       const pr = lr ?? (isWorkHut ? AUTO_MARK_RADIUS * TILE_SIZE : 0);
       if (pr) {
@@ -771,6 +800,7 @@ export class Renderer {
     switch (b.type) {
       case BuildingType.House: this.drawHouse(ctx, px, py); break;
       case BuildingType.Depot: this.drawDepot(ctx, px, py); break;
+      case BuildingType.Collective: this.drawCollective(ctx, px, py); break;
       case BuildingType.Woodcutter: this.drawWoodcutter(ctx, px, py); break;
       case BuildingType.Gatherer: this.drawGatherer(ctx, px, py); break;
       case BuildingType.Camp: this.drawCamp(ctx, px, py); break;
@@ -780,6 +810,7 @@ export class Renderer {
       case BuildingType.Nursery: this.drawNursery(ctx, px, py); break;
       case BuildingType.Fisher: this.drawFisher(ctx, px, py); break;
       case BuildingType.Barn: this.drawBarn(ctx, px, py); break;
+      case BuildingType.MushroomGatherer: this.drawMushroomGatherer(ctx, px, py); break;
     }
   }
 
@@ -1085,32 +1116,60 @@ export class Renderer {
   }
 
   private drawTemple(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 16, py + 30, 15, 2);
-    // taban platformu
-    ctx.fillStyle = "#bba884";
-    ctx.fillRect(px + 2, py + 24, 28, 6);
-    this.outlineRect(ctx, px + 2, py + 24, 28, 6);
-    // sütunlar
-    ctx.fillStyle = "#d8c9a4";
-    ctx.fillRect(px + 5, py + 12, 3, 13);
-    ctx.fillRect(px + 24, py + 12, 3, 13);
-    ctx.fillRect(px + 14, py + 12, 3, 13);
-    ctx.fillStyle = "rgba(0,0,0,0.18)";
-    ctx.fillRect(px + 7, py + 12, 1, 13);
-    ctx.fillRect(px + 26, py + 12, 1, 13);
-    ctx.fillRect(px + 16, py + 12, 1, 13);
-    // alınlık (üçgen çatı)
-    for (let r = 0; r < 8; r++) {
-      const w = 6 + r * 3.2;
-      ctx.fillStyle = r < 3 ? "#d8c9a4" : "#bba884";
-      ctx.fillRect(px + 16 - w / 2, py + 3 + r, w, 1.4);
+    this.baseShadow(ctx, px + 16, py + 30, 14, 2.5);
+
+    // Kutsal alan zemini: çamur toprık çember
+    ctx.fillStyle = "#7a6040";
+    ctx.beginPath();
+    ctx.ellipse(px + 16, py + 27, 13, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Çevre kazıkları (8 adet ilkel direk)
+    const stakes = [
+      [4, 24], [8, 19], [14, 16], [20, 16],
+      [26, 19], [28, 24], [22, 27], [10, 27]
+    ] as const;
+    for (const [sx, sy] of stakes) {
+      ctx.fillStyle = "#4a3018";
+      ctx.fillRect(px + sx, py + sy - 9, 2, 10);
+      ctx.fillStyle = "#6b4820";
+      ctx.fillRect(px + sx, py + sy - 9, 1, 10);
+      // kazık tepesi (sivri uç)
+      ctx.fillStyle = "#3e2410";
+      ctx.fillRect(px + sx, py + sy - 10, 2, 1);
     }
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 3, py + 11, 26, 2); // saçak gölgesi
-    // kutsal sembol: mor elmas
-    ctx.fillStyle = "#b08fe0";
-    ctx.fillRect(px + 15, py + 6, 2, 2);
-    ctx.fillRect(px + 14.5, py + 6.5, 3, 1);
+
+    // Kazıkları bağlayan yatay örgü dallar
+    ctx.strokeStyle = "#5a3820";
+    ctx.lineWidth = 1;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(px + 5,  py + 17); ctx.lineTo(px + 9,  py + 13);
+    ctx.moveTo(px + 9,  py + 13); ctx.lineTo(px + 15, py + 10);
+    ctx.moveTo(px + 15, py + 10); ctx.lineTo(px + 21, py + 10);
+    ctx.moveTo(px + 21, py + 10); ctx.lineTo(px + 27, py + 13);
+    ctx.moveTo(px + 27, py + 13); ctx.lineTo(px + 29, py + 17);
+    ctx.stroke();
+
+    // Orta totem direği
+    ctx.fillStyle = "#3e2410";
+    ctx.fillRect(px + 14, py + 9, 4, 18);
+    ctx.fillStyle = "#6b4820";
+    ctx.fillRect(px + 14, py + 9, 2, 18);
+    // Totem yüzü (basit)
+    ctx.fillStyle = "#c98c3c";
+    ctx.fillRect(px + 13, py + 10, 6, 5); // yüz kabı
+    ctx.fillStyle = "#3e2410";
+    ctx.fillRect(px + 14, py + 11, 1, 1); // sol göz
+    ctx.fillRect(px + 17, py + 11, 1, 1); // sağ göz
+    ctx.fillRect(px + 14, py + 13, 3, 1); // ağız
+    // Totem baş süslükleri (yan dallar)
+    ctx.fillStyle = "#5a3820";
+    ctx.fillRect(px + 10, py + 11, 3, 1);
+    ctx.fillRect(px + 19, py + 11, 3, 1);
+    // Kük semül: kırmızı ügen leke
+    ctx.fillStyle = "#c0392b";
+    ctx.fillRect(px + 15, py + 16, 2, 2);
   }
 
   private drawCamp(ctx: CanvasRenderingContext2D, px: number, py: number): void {
@@ -1187,28 +1246,65 @@ export class Renderer {
   }
 
   private drawHouse(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 16, py + 29, 13);
-    // duvarlar
-    ctx.fillStyle = WALL;
-    ctx.fillRect(px + 4, py + 13, 24, 16);
-    ctx.fillStyle = WOOD_MID;
-    ctx.fillRect(px + 4, py + 20, 24, 1);
-    this.outlineRect(ctx, px + 4, py + 13, 24, 16);
-    // çatı (üçgen, katmanlı; üst sıralar ışık alır)
-    for (let r = 0; r < 10; r++) {
-      const w = 4 + r * 2.6;
-      ctx.fillStyle = r < 3 ? "#9c4f3c" : r < 7 ? "#7a3b2e" : "#5e2c22";
-      ctx.fillRect(px + 16 - w / 2, py + 3 + r, w, 1.5);
+    this.baseShadow(ctx, px + 15, py + 29, 12);
+
+    // Duvarlar: çamur-sıva, düzensiz görünümlü
+    ctx.fillStyle = "#9c7f58"; // çamur
+    ctx.fillRect(px + 5, py + 15, 22, 14);
+    ctx.fillStyle = "#8a6c40";
+    ctx.fillRect(px + 5, py + 22, 22, 1); // kirş
+    ctx.fillRect(px + 12, py + 15, 2, 14); // orta direk
+    ctx.fillRect(px + 20, py + 15, 2, 14); // yan direk
+    // Düzensiz çamur doku (küçük lekeler)
+    ctx.fillStyle = "#7a5c34";
+    ctx.fillRect(px + 7,  py + 17, 3, 1);
+    ctx.fillRect(px + 15, py + 20, 4, 1);
+    ctx.fillRect(px + 8,  py + 24, 2, 1);
+    ctx.fillRect(px + 22, py + 18, 2, 1);
+    ctx.fillRect(px + 18, py + 25, 3, 1);
+
+    // Çatı: eğrili çapraz dallar
+    ctx.strokeStyle = "#5a3820";
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = "round";
+    // sol taraf çatı döşeşi
+    for (let r = 0; r < 8; r++) {
+      const w = 3 + r * 2.6;
+      ctx.fillStyle = r < 2 ? "#7a5230" : r < 5 ? "#5a3820" : "#3e2410";
+      ctx.fillRect(px + 15 - w / 2, py + 5 + r * 1.2, w, 1.5);
     }
-    // çatı saçağının duvara düşen gölgesi
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 4, py + 13, 24, 2);
-    // kapı ve pencere
-    ctx.fillStyle = "#4a2e1a";
-    ctx.fillRect(px + 13, py + 21, 6, 8);
-    ctx.fillStyle = "#bcd9f0";
-    ctx.fillRect(px + 7, py + 16, 4, 4);
-    ctx.fillRect(px + 21, py + 16, 4, 4);
+    // çatı üzerine dagınık dallar
+    ctx.strokeStyle = "#7a5230";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 5,  py + 14); ctx.lineTo(px + 11, py + 6);
+    ctx.moveTo(px + 27, py + 14); ctx.lineTo(px + 20, py + 5);
+    ctx.moveTo(px + 8,  py + 14); ctx.lineTo(px + 15, py + 5);
+    ctx.moveTo(px + 22, py + 14); ctx.lineTo(px + 15, py + 5);
+    ctx.stroke();
+
+    // Çatı üst direk
+    ctx.fillStyle = "#5a3820";
+    ctx.fillRect(px + 14, py + 4, 3, 12);
+
+    // Kapı: ham tahtadan yapılmış
+    ctx.fillStyle = "#3e2410";
+    ctx.fillRect(px + 14, py + 21, 5, 8);
+    ctx.strokeStyle = "#5a3820";
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(px + 14.5, py + 21.5, 4, 7);
+    // Kapı üzerine yatay tahta çizgileri
+    ctx.beginPath();
+    ctx.moveTo(px + 14, py + 23.5); ctx.lineTo(px + 19, py + 23.5);
+    ctx.moveTo(px + 14, py + 25.5); ctx.lineTo(px + 19, py + 25.5);
+    ctx.stroke();
+
+    // Küçük ham pencere (tek)
+    ctx.fillStyle = "rgba(180, 160, 100, 0.5)";
+    ctx.fillRect(px + 7, py + 17, 4, 3);
+    ctx.strokeStyle = "#5a3820";
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(px + 7.5, py + 17.5, 3, 2);
   }
 
   private drawDepot(ctx: CanvasRenderingContext2D, px: number, py: number): void {
@@ -1233,6 +1329,35 @@ export class Renderer {
     ctx.lineWidth = 1;
     ctx.strokeRect(px + 4.5, py + 23.5, 4, 4);
     ctx.strokeRect(px + 23.5, py + 23.5, 4, 4);
+  }
+
+  private drawCollective(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 16, py + 29, 15);
+    // gıda ambarı: kollektif
+    ctx.fillStyle = "#6b8e4e"; // doğa temalı yeşilimsi duvar rengi
+    ctx.fillRect(px + 2, py + 11, 28, 18);
+    this.outlineRect(ctx, px + 2, py + 11, 28, 18);
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(px + 1, py + 6, 30, 6); // düz çatı bandı
+    ctx.fillStyle = "#7d5835";
+    ctx.fillRect(px + 1, py + 6, 30, 2); // çatı ışığı
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 2, py + 12, 28, 2); // saçak gölgesi
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(px + 12, py + 18, 8, 11); // kapı
+    
+    // yandaki gıda çuvalları/sepetleri (meyve/mantar)
+    ctx.fillStyle = "#b87c53"; // çuval rengi 1
+    ctx.fillRect(px + 4, py + 22, 6, 6);
+    ctx.fillStyle = "#d43f3f"; // kırmızı elmalar
+    ctx.fillRect(px + 5, py + 21, 2, 2);
+    ctx.fillRect(px + 7, py + 21, 2, 2);
+    
+    ctx.fillStyle = "#b87c53"; // çuval rengi 2
+    ctx.fillRect(px + 22, py + 22, 6, 6);
+    ctx.fillStyle = "#e0a83c"; // sarı meyveler/balıklar
+    ctx.fillRect(px + 23, py + 21, 2, 2);
+    ctx.fillRect(px + 25, py + 21, 2, 2);
   }
 
   private drawWoodcutter(ctx: CanvasRenderingContext2D, px: number, py: number): void {
@@ -1281,9 +1406,33 @@ export class Renderer {
     ctx.fillRect(px + 27, py + 22, 1, 1);
   }
 
+  private drawMushroomGatherer(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 11, py + 29, 10);
+    this.baseShadow(ctx, px + 26, py + 27, 4, 1.3); // basket
+    // brownish-yellow roofed hut
+    ctx.fillStyle = WALL;
+    ctx.fillRect(px + 3, py + 12, 17, 17);
+    this.outlineRect(ctx, px + 3, py + 12, 17, 17);
+    ctx.fillStyle = "#8a6c40"; // brown roof
+    ctx.fillRect(px + 2, py + 8, 19, 5);
+    ctx.fillStyle = "#a88452";
+    ctx.fillRect(px + 2, py + 8, 19, 2);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 3, py + 13, 17, 2);
+    ctx.fillStyle = "#4a2e1a";
+    ctx.fillRect(px + 9, py + 21, 5, 8);
+    // mushroom basket
+    ctx.fillStyle = "#b8884a";
+    ctx.fillRect(px + 23, py + 23, 6, 4);
+    ctx.fillStyle = "#d9b06b"; // mushroom cap color
+    ctx.fillRect(px + 24, py + 21, 2, 2);
+    ctx.fillStyle = "#e8e0cc"; // mushroom stem/gills color
+    ctx.fillRect(px + 27, py + 22, 1, 1);
+  }
+
   // ---- Cin Ali tarzı çöp adam ----
 
-  private drawVillager(ctx: CanvasRenderingContext2D, v: Villager): void {
+  private drawVillager(ctx: CanvasRenderingContext2D, v: Villager, time: number): void {
     const x = v.x;
     const y = v.y; // ayakların bastığı nokta
     const swing = v.state === "walking" ? Math.sin(v.walkPhase) * 2.2 : 0;
@@ -1308,7 +1457,7 @@ export class Renderer {
 
     // uyuyan köylü: yerde yatar, üstünde "z" harfleri süzülür
     if (v.state === "sleeping") {
-      ctx.strokeStyle = v.shirt;
+      ctx.strokeStyle = v.shirtColor;
       ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.moveTo(x - 3, y - 1.5);
@@ -1359,7 +1508,7 @@ export class Renderer {
     }
 
     // gövde (gömlek rengi)
-    ctx.strokeStyle = v.shirt;
+    ctx.strokeStyle = v.shirtColor;
     ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.moveTo(x, y - 5);
@@ -1368,7 +1517,7 @@ export class Renderer {
 
     // kadın köylülerde küçük etek
     if (v.identity.female) {
-      ctx.fillStyle = v.shirt;
+      ctx.fillStyle = v.shirtColor;
       ctx.beginPath();
       ctx.moveTo(x - 2.5, y - 3.5);
       ctx.lineTo(x + 2.5, y - 3.5);
@@ -1380,7 +1529,7 @@ export class Renderer {
     // kollar
     ctx.strokeStyle = LINE;
     ctx.lineWidth = 1.1;
-    if (v.state === "chopping" || v.state === "building" || v.state === "mining") {
+    if (v.state === "building" || v.state === "mining") {
       // alet sallayan kol: omuzdan dönen tek çizgi + balta/çekiç/kazma
       const a = -1.4 + Math.sin(v.walkPhase) * 0.8; // omuz açısı
       const hx = x + Math.cos(a) * 3.5 * v.facing;
@@ -1406,11 +1555,11 @@ export class Renderer {
         ctx.stroke();
         ctx.lineWidth = 1.1;
       } else {
-        ctx.fillStyle = v.state === "chopping" ? "#9aa0a8" : "#6e7178";
+        ctx.fillStyle = "#6e7178";
         ctx.fillRect(ax - 1, ay - 1, 2, 2);
       }
-    } else if (v.state === "gathering" || v.state === "tending" || v.state === "planting") {
-      // eğilip toplama / hayvan bakımı / ekim: kollar aşağı uzanır
+    } else if (v.state === "chopping" || v.state === "gathering" || v.state === "tending" || v.state === "planting") {
+      // eğilip toplama (dal/yemiş) / hayvan bakımı / ekim: kollar aşağı uzanır
       const reach = 1.5 + Math.sin(v.walkPhase) * 1.5;
       ctx.beginPath();
       ctx.moveTo(x, y - 8.5);
@@ -1466,21 +1615,187 @@ export class Renderer {
     ctx.fill();
     ctx.stroke();
 
+    drawVillagerJobAccessories(ctx, x, y, v.facing, v.assignment, 1);
+
     // yemek yerken kafanın yanında lokma
     if (v.state === "eating") {
       ctx.fillStyle = "#d43f3f";
       ctx.fillRect(x + 2.5 * v.facing, y - 10, 1.5, 1.5);
     }
 
+    const noFood = v.getFoodInInventory() === 0 && foodTotal() === 0;
+    const showHungerBar = v.hunger > 50 || (v.hunger > EAT_THRESHOLD && noFood);
+
     // açlık göstergesi: aç köylülerin tepesinde kırmızı bar
-    if (v.hunger > 50) {
+    if (showHungerBar) {
       const w = 6;
       ctx.fillStyle = "rgba(0,0,0,0.6)";
       ctx.fillRect(x - w / 2, y - 16, w, 1.6);
-      ctx.fillStyle = v.starving ? "#ff2222" : "#ff8844";
+      
+      let barColor = v.starving ? "#ff2222" : "#ff8844";
+      if (v.hunger > EAT_THRESHOLD && noFood) {
+        const flash = Math.floor(time * 8) % 2 === 0;
+        barColor = flash ? "#ff3333" : "#ffff33";
+      }
+      ctx.fillStyle = barColor;
       ctx.fillRect(x - w / 2, y - 16, (w * v.hunger) / 100, 1.6);
+
+      // yanlarında veya depolarda yemek kalmadığında açlık uyarısı çıksın üstlerinde
+      if (noFood) {
+        const bob = Math.sin(time * 8) * 1.2;
+        const wx = x;
+        const wy = y - 21.5 + bob;
+        ctx.fillStyle = "#ff2222";
+        ctx.beginPath();
+        ctx.arc(wx, wy, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 4px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("!", wx, wy);
+      }
     }
 
     if (k !== 1) ctx.restore();
+  }
+}
+
+export function drawVillagerJobAccessories(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  facing: number,
+  assignment: any,
+  s: number
+): void {
+  if (assignment.kind === "building") {
+    const type = assignment.building.type;
+
+    // 1. Woodcutter (Oduncu)
+    if (type === 2) { // BuildingType.Woodcutter
+      // Kırmızı oduncu beresi (Hat)
+      ctx.fillStyle = "#c0392b";
+      ctx.fillRect(x - 2 * s, y - 14.5 * s, 4 * s, 2 * s);
+      // Bere ponponu
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(x - 0.6 * s, y - 15.5 * s, 1.2 * s, 1.2 * s);
+      
+      // Kahverengi pantolon askısı (torso details)
+      ctx.fillStyle = "#5c3d24";
+      ctx.fillRect(x - 0.8 * s, y - 9 * s, 0.5 * s, 4 * s);
+      ctx.fillRect(x + 0.3 * s, y - 9 * s, 0.5 * s, 4 * s);
+    }
+    
+    // 2. Gatherer (Toplayıcı)
+    else if (type === 3) { // BuildingType.Gatherer
+      // Hasır şapka (straw hat)
+      ctx.fillStyle = "#e5c158";
+      // Şapka kubbesi
+      ctx.fillRect(x - 1.5 * s, y - 14.8 * s, 3 * s, 2 * s);
+      // Şapka siperliği (wide brim)
+      ctx.fillRect(x - 3.5 * s, y - 13 * s, 7 * s, 0.8 * s);
+      
+      // Hasır şapka bandı
+      ctx.fillStyle = "#a04000";
+      ctx.fillRect(x - 1.5 * s, y - 13.6 * s, 3 * s, 0.6 * s);
+
+      // Çapraz deri çanta askısı
+      ctx.strokeStyle = "#5a3825";
+      ctx.lineWidth = 0.6 * s;
+      ctx.beginPath();
+      ctx.moveTo(x - 1 * s * facing, y - 9 * s);
+      ctx.lineTo(x + 1 * s * facing, y - 5 * s);
+      ctx.stroke();
+    }
+    
+    // 3. Fisher (Balıkçı)
+    else if (type === 9) { // BuildingType.Fisher
+      // Sarı balıkçı yağmurluk şapkası (yellow southwester hat)
+      ctx.fillStyle = "#f1c40f";
+      ctx.beginPath();
+      // Kafa üstü kubbe
+      ctx.arc(x, y - 12.5 * s, 2.2 * s, Math.PI, 0);
+      ctx.fill();
+      // Geriye doğru siperlik
+      ctx.fillRect(x - 2.8 * s, y - 12.8 * s, 5.6 * s, 0.8 * s);
+      ctx.fillRect(x - 3.2 * s * facing, y - 12.8 * s, 1.2 * s, 1.6 * s); // arka ense koruması
+      
+      // Sarı su geçirmez iş önlüğü/tulum (apron/overalls)
+      ctx.fillStyle = "#f1c40f";
+      ctx.fillRect(x - 0.9 * s, y - 8 * s, 1.8 * s, 3 * s);
+      // Tulum askıları
+      ctx.strokeStyle = "#d4ac0d";
+      ctx.lineWidth = 0.5 * s;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.7 * s, y - 9 * s);
+      ctx.lineTo(x - 0.7 * s, y - 8 * s);
+      ctx.moveTo(x + 0.7 * s, y - 9 * s);
+      ctx.lineTo(x + 0.7 * s, y - 8 * s);
+      ctx.stroke();
+    }
+    
+    // 4. Temple Priest (Rahip)
+    else if (type === 6) { // BuildingType.Temple
+      // Kutsal kafa bandı / hale (halo)
+      ctx.strokeStyle = "#ffd700";
+      ctx.lineWidth = 0.7 * s;
+      ctx.beginPath();
+      ctx.arc(x, y - 13.5 * s, 1.8 * s, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Cübbe altın işlemeleri (robe details)
+      ctx.fillStyle = "#ffd700";
+      ctx.fillRect(x - 0.6 * s, y - 8.5 * s, 1.2 * s, 1.2 * s);
+    }
+    
+    // 5. Farmer (Çiftçi)
+    else if (type === 10) { // BuildingType.Barn
+      // Düz köylü kasketi (flat cap)
+      ctx.fillStyle = "#4a4f58";
+      ctx.fillRect(x - 2 * s, y - 13.8 * s, 4 * s, 1.2 * s);
+      ctx.fillRect(x - 0.5 * s * facing, y - 13.8 * s, 2.5 * s * facing, 0.8 * s); // kasket siperi
+      
+      // Yeşil işçi önlüğü
+      ctx.fillStyle = "#1e8449";
+      ctx.fillRect(x - 0.8 * s, y - 7.5 * s, 1.6 * s, 2.5 * s);
+    }
+    
+    // 6. Mushroom Gatherer (Mantarcı)
+    else if (type === 12) { // BuildingType.MushroomGatherer
+      // Kırmızı mantar şapka (mushroom cap)
+      ctx.fillStyle = "#c43030";
+      ctx.beginPath();
+      ctx.arc(x, y - 12.5 * s, 2.8 * s, Math.PI, 0);
+      ctx.fill();
+      // Alt taban düzlüğü
+      ctx.fillRect(x - 2.8 * s, y - 12.8 * s, 5.6 * s, 0.8 * s);
+      // Beyaz benekler
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(x - 1.2 * s, y - 14.5 * s, 0.6 * s, 0.6 * s);
+      ctx.fillRect(x + 1.2 * s, y - 14.5 * s, 0.6 * s, 0.6 * s);
+      ctx.fillRect(x, y - 13.5 * s, 0.6 * s, 0.6 * s);
+    }
+  }
+  
+  // 6. Builder (İnşaatçı)
+  else if (assignment.kind === "builder") {
+    // Sarı güvenlik bareti (hard hat)
+    ctx.fillStyle = "#f1c40f";
+    ctx.beginPath();
+    ctx.arc(x, y - 12.8 * s, 2.2 * s, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(x - 2.8 * s, y - 12.8 * s, 5.6 * s, 0.6 * s); // siperlik
+    
+    // Turuncu reflektörlü yelek (safety vest)
+    ctx.fillStyle = "#e67e22";
+    ctx.fillRect(x - 0.9 * s, y - 8.5 * s, 1.8 * s, 3.5 * s);
+    // Gri yansıtıcı şeritler
+    ctx.fillStyle = "#bdc3c7";
+    ctx.fillRect(x - 0.9 * s, y - 7 * s, 1.8 * s, 0.6 * s);
   }
 }

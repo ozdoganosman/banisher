@@ -5,6 +5,7 @@ import {
   isDepositPoint,
   isHousing,
   type Building,
+  isBuildingUnlocked,
 } from "../sim/buildings";
 import { ROLE_NAMES } from "../sim/buildings";
 import {
@@ -12,9 +13,11 @@ import {
   ITEM_INFO,
   ITEM_TYPES,
   resources,
+  totalStored,
   type ItemType,
+  FOOD_TYPES,
 } from "../sim/resources";
-import { hasTech, TECHS, type TechId } from "../sim/tech";
+import { hasTech, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
   darkness,
   dateString,
@@ -25,8 +28,65 @@ import {
 } from "../sim/time";
 import { assignmentLabel, type Villager } from "../sim/villager";
 import type { World } from "../world/world";
+import { drawVillagerJobAccessories } from "./renderer";
 
 export const TOOLBAR_HEIGHT = 64;
+
+// ---- Sol üst görev listesi (işaretli iş sayaçları) ----
+
+export interface TaskCounts {
+  wood: number;
+  berry: number;
+  mushroom: number;
+  stone: number;
+}
+
+export function drawTaskList(ctx: CanvasRenderingContext2D, tasks: TaskCounts): void {
+  const entries: { label: string; color: string; count: number }[] = [];
+  if (tasks.wood     > 0) entries.push({ label: "Dal",    color: "#8a6a43", count: tasks.wood });
+  if (tasks.berry    > 0) entries.push({ label: "Yemiş",  color: "#d43f3f", count: tasks.berry });
+  if (tasks.mushroom > 0) entries.push({ label: "Mantar", color: "#d9b06b", count: tasks.mushroom });
+  if (tasks.stone    > 0) entries.push({ label: "Taş",    color: "#9aa0a8", count: tasks.stone });
+
+  if (entries.length === 0) return;
+
+  const x = 12;
+  const y = 42;
+  const W = 128;
+  const ROW_H = 22;
+  const PAD  = 8;
+  const H = entries.length * ROW_H + PAD;
+
+  // arka plan
+  ctx.fillStyle = "rgba(10, 12, 16, 0.78)";
+  ctx.fillRect(x, y, W, H);
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, W - 1, H - 1);
+
+  ctx.font = "bold 12px monospace";
+  ctx.textBaseline = "middle";
+
+  entries.forEach((e, i) => {
+    const ry = y + PAD / 2 + i * ROW_H + ROW_H / 2;
+
+    // renk şeridi
+    ctx.fillStyle = e.color;
+    ctx.fillRect(x + 4, ry - 5, 3, 10);
+
+    // etiket
+    ctx.fillStyle = "#d8d2c0";
+    ctx.textAlign = "left";
+    ctx.fillText(e.label, x + 12, ry);
+
+    // sayaç (sağa hizalı)
+    ctx.fillStyle = "#ffe296";
+    ctx.textAlign = "right";
+    ctx.fillText(`x${e.count}`, x + W - 6, ry);
+  });
+
+  ctx.textAlign = "left";
+}
 
 // ---- Minecraft tarzı eşya slotları ----
 
@@ -39,15 +99,30 @@ function drawItemIcon(ctx: CanvasRenderingContext2D, item: IconItem, x: number, 
   ctx.scale(s / 24, s / 24);
   switch (item) {
     case "wood":
-      // kütük: gövde + halkalar
-      ctx.fillStyle = "#8a5a2b";
-      ctx.fillRect(3, 8, 18, 9);
-      ctx.fillStyle = "#6b4422";
-      ctx.fillRect(3, 11, 18, 2);
-      ctx.fillStyle = "#c9a35a";
-      ctx.fillRect(17, 9, 3, 7);
-      ctx.fillStyle = "#8a5a2b";
-      ctx.fillRect(18, 11, 1, 3);
+      // dal: iki çapraz ince dal + tomurcuk noktaları
+      ctx.strokeStyle = "#7a5230";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      // sol alt → sağ üst çapraz
+      ctx.beginPath();
+      ctx.moveTo(5, 18); ctx.lineTo(19, 6);
+      ctx.stroke();
+      // sağ alt → sol üst çapraz
+      ctx.beginPath();
+      ctx.moveTo(19, 18); ctx.lineTo(7, 8);
+      ctx.stroke();
+      // küçük yan dallar
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(9, 9); ctx.lineTo(6, 6);   // sol tepe
+      ctx.moveTo(15, 9); ctx.lineTo(19, 7);  // sağ tepe
+      ctx.moveTo(12, 14); ctx.lineTo(9, 17); // sol alt
+      ctx.stroke();
+      // tomurcuk uçları
+      ctx.fillStyle = "#a07848";
+      ctx.fillRect(5, 5, 2, 2);
+      ctx.fillRect(19, 5, 2, 2);
+      ctx.fillRect(8, 17, 2, 2);
       break;
     case "stone":
       ctx.fillStyle = "#9aa0a8";
@@ -59,15 +134,29 @@ function drawItemIcon(ctx: CanvasRenderingContext2D, item: IconItem, x: number, 
       ctx.fillRect(9, 7, 4, 2);
       break;
     case "berry":
-      ctx.fillStyle = "#4a7a3a";
-      ctx.fillRect(11, 3, 2, 5);
-      ctx.fillRect(13, 5, 4, 2);
-      ctx.fillStyle = "#d43f3f";
+      // leaf/stem
+      ctx.fillStyle = "#4a8a2c";
+      ctx.fillRect(11, 3, 2, 4);
+      ctx.fillRect(13, 4, 3, 2);
+      // three circles clustered together
+      ctx.fillStyle = "#d43f3f"; // primary red
+      // left berry
       ctx.beginPath();
-      ctx.arc(12, 14, 6.5, 0, Math.PI * 2);
+      ctx.arc(9, 11, 4, 0, Math.PI * 2);
       ctx.fill();
+      // right berry
+      ctx.beginPath();
+      ctx.arc(15, 11, 4, 0, Math.PI * 2);
+      ctx.fill();
+      // bottom berry
+      ctx.beginPath();
+      ctx.arc(12, 16, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      // highlights
       ctx.fillStyle = "#f08080";
-      ctx.fillRect(9, 11, 3, 2);
+      ctx.fillRect(7, 9, 2, 2);
+      ctx.fillRect(13, 9, 2, 2);
+      ctx.fillRect(10, 14, 2, 2);
       break;
     case "mushroom":
       ctx.fillStyle = "#e8e0cc";
@@ -95,100 +184,6 @@ function drawItemIcon(ctx: CanvasRenderingContext2D, item: IconItem, x: number, 
       ctx.fillRect(7, 9, 5, 2);
       ctx.fillStyle = "#1a2a36";
       ctx.fillRect(6, 11, 1.6, 1.6);
-      break;
-    case "apple":
-      ctx.fillStyle = "#6b4a2b";
-      ctx.fillRect(11, 3, 2, 4);
-      ctx.fillStyle = "#4a8a2c";
-      ctx.fillRect(13, 4, 4, 2);
-      ctx.fillStyle = "#d43030";
-      ctx.beginPath();
-      ctx.arc(12, 14, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#f08080";
-      ctx.fillRect(8, 10, 3, 2);
-      break;
-    case "orange":
-      ctx.fillStyle = "#f08a24";
-      ctx.beginPath();
-      ctx.arc(12, 13, 7.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#4a8a2c";
-      ctx.fillRect(10, 4, 4, 2);
-      ctx.fillStyle = "#ffc080";
-      ctx.fillRect(8, 9, 3, 2);
-      break;
-    case "tangerine":
-      ctx.fillStyle = "#ffaa3c";
-      ctx.beginPath();
-      ctx.ellipse(12, 14, 7, 5.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#4a8a2c";
-      ctx.fillRect(11, 6, 2, 3);
-      ctx.fillStyle = "#ffd9a0";
-      ctx.fillRect(8, 11, 3, 2);
-      break;
-    case "nut":
-      // palamut: koyu başlık + gövde
-      ctx.fillStyle = "#6b4a2b";
-      ctx.fillRect(7, 6, 10, 4);
-      ctx.fillRect(11, 4, 2, 2);
-      ctx.fillStyle = "#9a6c40";
-      ctx.beginPath();
-      ctx.ellipse(12, 14, 5, 6, 0, 0, Math.PI);
-      ctx.fill();
-      ctx.fillRect(7, 10, 10, 4);
-      break;
-    case "egg":
-      ctx.fillStyle = "#f0ead8";
-      ctx.beginPath();
-      ctx.ellipse(12, 13, 5.5, 7, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#fffaf0";
-      ctx.fillRect(9, 8, 3, 4);
-      break;
-    case "milk":
-      // süt kovası
-      ctx.fillStyle = "#8a8f96";
-      ctx.fillRect(6, 9, 12, 10);
-      ctx.fillStyle = "#aab0b8";
-      ctx.fillRect(7, 10, 4, 8);
-      ctx.fillStyle = "#eef2f5";
-      ctx.fillRect(7, 9, 10, 2.5);
-      ctx.strokeStyle = "#6e7178";
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(12, 9, 6, Math.PI, 0);
-      ctx.stroke();
-      break;
-    case "meat":
-      // but: et + kemik
-      ctx.fillStyle = "#c05a50";
-      ctx.beginPath();
-      ctx.ellipse(10, 11, 6.5, 5.5, -0.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#e8e2d0";
-      ctx.save();
-      ctx.translate(15, 16);
-      ctx.rotate(-0.7);
-      ctx.fillRect(0, -1, 7, 2);
-      ctx.fillRect(6, -2.5, 2.5, 2.5);
-      ctx.fillRect(6, 0.5, 2.5, 2.5);
-      ctx.restore();
-      break;
-    case "wool":
-      // yün yumağı: kabarık bulut
-      ctx.fillStyle = "#e8e4d4";
-      ctx.beginPath();
-      ctx.arc(9, 13, 5, 0, Math.PI * 2);
-      ctx.arc(15, 13, 5, 0, Math.PI * 2);
-      ctx.arc(12, 10, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#c8c4b4";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(12, 13, 3, 0.5, 2.5);
-      ctx.stroke();
       break;
     case "knowledge":
       ctx.fillStyle = "#b08fe0";
@@ -242,57 +237,72 @@ function drawSlotCount(ctx: CanvasRenderingContext2D, x: number, y: number, s: n
   ctx.textBaseline = "middle";
 }
 
-// Koloni envanteri: araç çubuğunun üstünde slot çubuğu.
-// Minecraft gibi: slotlar boş başlar, edinilen eşya ilk boş slota
-// yerleşir ve stok bitince slot yeniden boşalır.
-const HOTBAR_SLOTS = 13;
-const hotbarAssign: (IconItem | null)[] = new Array(HOTBAR_SLOTS).fill(null);
+// Koloni envanteri: araç çubuğunun üstünde tüm kaynakların gösterildiği slot çubuğu.
+const hotbarAssign: IconItem[] = [...ITEM_TYPES, "knowledge"];
+
+function isItemVisible(item: IconItem): boolean {
+  if (item === "wood" || item === "berry" || item === "knowledge") {
+    return true;
+  }
+  if (item === "stone") {
+    return hasTech("humanity") || resources.stone > 0;
+  }
+  if (item === "mushroom") {
+    return hasTech("mushroomology") || resources.mushroom > 0;
+  }
+  if (item === "fish") {
+    return hasTech("fishing") || resources.fish > 0;
+  }
+  return false;
+}
 
 function itemCount(item: IconItem): number {
   return item === "knowledge" ? resources.knowledge : resources[item];
 }
 
-function updateHotbar(): void {
-  for (let i = 0; i < HOTBAR_SLOTS; i++) {
-    const it = hotbarAssign[i];
-    if (it && itemCount(it) <= 0) hotbarAssign[i] = null;
-  }
-  const all: IconItem[] = [...ITEM_TYPES, "knowledge"];
-  for (const it of all) {
-    if (itemCount(it) > 0 && !hotbarAssign.includes(it)) {
-      const free = hotbarAssign.indexOf(null);
-      if (free !== -1) hotbarAssign[free] = it;
-    }
-  }
-}
-
 function drawInventoryBar(ctx: CanvasRenderingContext2D): void {
-  updateHotbar();
+  const visibleItems = hotbarAssign.filter(isItemVisible);
+  const numSlots = visibleItems.length;
   const gap = 5;
   // dar pencerede slotlar küçülür
   const slotS = Math.min(
     44,
-    Math.floor((ctx.canvas.width - 24 - (HOTBAR_SLOTS - 1) * gap) / HOTBAR_SLOTS)
+    Math.floor((ctx.canvas.width - 24 - (numSlots - 1) * gap) / numSlots)
   );
-  const total = HOTBAR_SLOTS * slotS + (HOTBAR_SLOTS - 1) * gap;
+  const total = numSlots * slotS + (numSlots - 1) * gap;
   const x0 = (ctx.canvas.width - total) / 2;
   const y0 = ctx.canvas.height - TOOLBAR_HEIGHT - slotS - 10;
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.6)";
-  ctx.fillRect(x0 - 6, y0 - 6, total + 12, slotS + 12);
+  ctx.fillRect(x0 - 6, y0 - 14, total + 12, slotS + 20);
 
-  for (let i = 0; i < HOTBAR_SLOTS; i++) {
+  for (let i = 0; i < numSlots; i++) {
     const x = x0 + i * (slotS + gap);
-    const item = hotbarAssign[i];
-    if (!item) {
-      drawSlot(ctx, x, y0, slotS); // boş slot
-      continue;
-    }
+    const item = visibleItems[i];
     const isKnowledge = item === "knowledge";
     const full = !isKnowledge && isFull(item as ItemType);
+    
+    // Draw name above slot
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "8px monospace";
+    ctx.textAlign = "center";
+    const name = isKnowledge ? "bilgi" : ITEM_INFO[item as ItemType].name;
+    ctx.fillText(name, x + slotS / 2, y0 - 4);
+    ctx.textAlign = "left";
+    
     drawSlot(ctx, x, y0, slotS, full ? "#d4453f" : isKnowledge ? "#8a6cc0" : undefined);
+    
+    const count = itemCount(item);
+    if (count <= 0) {
+      ctx.globalAlpha = 0.25; // Stokta yoksa ikonu yarı saydam yap
+    }
     drawItemIcon(ctx, item, x + slotS * 0.16, y0 + slotS * 0.11, slotS * 0.68);
-    drawSlotCount(ctx, x, y0, slotS, itemCount(item));
+    if (count <= 0) {
+      ctx.globalAlpha = 1.0;
+    }
+    
+    drawSlotCount(ctx, x, y0, slotS, count);
+    
     // depolanabilirlerde kapasite çizgisi
     if (!isKnowledge) {
       const ratio = Math.min(1, resources[item as ItemType] / resources.cap);
@@ -307,8 +317,10 @@ function drawInventoryBar(ctx: CanvasRenderingContext2D): void {
 export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.House,
   BuildingType.Depot,
+  BuildingType.Collective,
   BuildingType.Woodcutter,
   BuildingType.Gatherer,
+  BuildingType.MushroomGatherer,
   BuildingType.Fisher,
   BuildingType.Barn,
   BuildingType.Torch,
@@ -336,9 +348,8 @@ export function updateMessages(dt: number): void {
   }
 }
 
-function buttonRect(slot: number, canvasW: number, canvasH: number) {
+function buttonRect(slot: number, canvasW: number, canvasH: number, n: number) {
   // dar pencerede düğmeler ekrana sığacak şekilde daralır
-  const n = TOOLBAR_TYPES.length;
   const bw = Math.min(BTN_W, Math.floor((canvasW - 16 - (n - 1) * BTN_GAP) / n));
   const total = n * bw + (n - 1) * BTN_GAP;
   const x0 = (canvasW - total) / 2;
@@ -358,10 +369,12 @@ export function toolbarHitTest(
   canvasH: number
 ): BuildingType | null {
   if (sy < canvasH - TOOLBAR_HEIGHT) return null;
-  for (let i = 0; i < TOOLBAR_TYPES.length; i++) {
-    const r = buttonRect(i, canvasW, canvasH);
+  const unlockedTypes = TOOLBAR_TYPES.filter(isBuildingUnlocked);
+  const n = unlockedTypes.length;
+  for (let i = 0; i < n; i++) {
+    const r = buttonRect(i, canvasW, canvasH, n);
     if (sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h) {
-      return TOOLBAR_TYPES[i];
+      return unlockedTypes[i];
     }
   }
   return null;
@@ -373,13 +386,14 @@ export function isOverToolbar(sy: number, canvasH: number): boolean {
 
 // ---- İşaretleme filtresi (alan seçimi neyi işaretlesin?) ----
 
-export type MarkFilter = "all" | "wood" | "food" | "stone";
+export type MarkFilter = "all" | "wood" | "food" | "stone" | "cancel";
 
 export const MARK_FILTERS: { id: MarkFilter; label: string; color: string }[] = [
   { id: "all", label: "Tümü", color: "#e8e2d0" },
   { id: "wood", label: "Odun", color: "#c9a35a" },
   { id: "food", label: "Yiyecek", color: "#8fd05e" },
   { id: "stone", label: "Taş", color: "#9ad0ff" },
+  { id: "cancel", label: "✕ İptal", color: "#e88a7a" },
 ];
 
 let filterRects: { id: MarkFilter; x: number; y: number; w: number; h: number }[] = [];
@@ -399,7 +413,8 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(10, 12, 16, 0.7)";
-  const totalW = 64 + MARK_FILTERS.reduce(
+  const visibleFilters = MARK_FILTERS.filter(f => f.id !== "stone" || hasTech("humanity"));
+  const totalW = 64 + visibleFilters.reduce(
     (s, f) => s + ctx.measureText(f.label).width + 22, 0
   );
   ctx.fillRect(x - 6, y - 4, totalW, 28);
@@ -407,7 +422,7 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
   ctx.fillText("İşaretle:", x, y + 10);
   x += 60;
   filterRects = [];
-  for (const f of MARK_FILTERS) {
+  for (const f of visibleFilters) {
     const w = ctx.measureText(f.label).width + 16;
     const active = current === f.id;
     ctx.fillStyle = active ? "rgba(90, 143, 60, 0.45)" : "rgba(255,255,255,0.07)";
@@ -426,6 +441,8 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
 
 const PROFILE = { x: 12, y: 44, w: 262, h: 206 };
 const CLOSE = { x: PROFILE.x + PROFILE.w - 24, y: PROFILE.y + 6, w: 18, h: 18 };
+// Moral dökümü satırlarına göre panel uzar; hit-test son çizilen yüksekliği kullanır
+let profileDrawnH = PROFILE.h;
 
 export type ProfileHit = { kind: "close" } | { kind: "panel" } | null;
 
@@ -434,7 +451,7 @@ export function profileHitTest(sx: number, sy: number): ProfileHit {
   if (sx >= CLOSE.x && sx <= CLOSE.x + CLOSE.w && sy >= CLOSE.y && sy <= CLOSE.y + CLOSE.h) {
     return { kind: "close" };
   }
-  if (sx >= PROFILE.x && sx <= PROFILE.x + PROFILE.w && sy >= PROFILE.y && sy <= PROFILE.y + PROFILE.h) {
+  if (sx >= PROFILE.x && sx <= PROFILE.x + PROFILE.w && sy >= PROFILE.y && sy <= PROFILE.y + profileDrawnH) {
     return { kind: "panel" };
   }
   return null;
@@ -454,14 +471,14 @@ function drawPortrait(ctx: CanvasRenderingContext2D, v: Villager, cx: number, cy
   ctx.lineTo(cx + 1.5 * s, cy);
   ctx.stroke();
   // gövde
-  ctx.strokeStyle = v.shirt;
+  ctx.strokeStyle = v.shirtColor;
   ctx.lineWidth = 1.8 * s;
   ctx.beginPath();
   ctx.moveTo(cx, cy - 5 * s);
   ctx.lineTo(cx, cy - 9 * s);
   ctx.stroke();
   if (v.identity.female) {
-    ctx.fillStyle = v.shirt;
+    ctx.fillStyle = v.shirtColor;
     ctx.beginPath();
     ctx.moveTo(cx - 2.5 * s, cy - 3.5 * s);
     ctx.lineTo(cx + 2.5 * s, cy - 3.5 * s);
@@ -485,10 +502,19 @@ function drawPortrait(ctx: CanvasRenderingContext2D, v: Villager, cx: number, cy
   ctx.arc(cx, cy - 11 * s, 2 * s, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+
+  drawVillagerJobAccessories(ctx, cx, cy, 1, v.assignment, s);
 }
 
 export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
-  const { x, y, w, h } = PROFILE;
+  const { x, y, w } = PROFILE;
+  // moral dökümü satırları (en çok etkiden aza sıralı); panel buna göre uzar
+  const moraleEntries = [...v.moraleLog]
+    .filter(([, d]) => Math.abs(d) >= 0.05)
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const breakdownH = moraleEntries.length > 0 ? moraleEntries.length * 14 + 6 : 0;
+  const h = PROFILE.h + breakdownH;
+  profileDrawnH = h;
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
   ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = "#5a5f68";
@@ -555,19 +581,34 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.strokeStyle = "#3a3f48";
   ctx.strokeRect(barX + 0.5, y + 130.5, barW - 1, 11);
 
+  // moral dökümü: neden bazında birikimli artış/azalışlar
+  ctx.font = "11px monospace";
+  for (let i = 0; i < moraleEntries.length; i++) {
+    const [reason, delta] = moraleEntries[i];
+    const ly = y + 150 + i * 14;
+    ctx.fillStyle = "#9a9488";
+    ctx.fillText(reason, x + 24, ly);
+    ctx.fillStyle = delta > 0 ? "#8fd05e" : "#e07a6a";
+    const text = `${delta > 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)}`;
+    ctx.textAlign = "right";
+    ctx.fillText(text, x + w - 14, ly);
+    ctx.textAlign = "left";
+  }
+
   // çanta: Minecraft tarzı — taşınan eşyalar sırayla slotlara dolar,
   // gerisi boş kalır
+  ctx.font = "12px monospace";
   ctx.fillStyle = "#e8e2d0";
-  ctx.fillText("Çanta", x + 10, y + 165);
+  ctx.fillText("Çanta", x + 10, y + breakdownH + 165);
   const slotS = 26;
   const held = ITEM_TYPES.filter((it) => v.inventory[it] > 0);
   for (let i = 0; i < 6; i++) {
     const sx = x + 64 + i * (slotS + 4);
-    drawSlot(ctx, sx, y + 150, slotS);
+    drawSlot(ctx, sx, y + breakdownH + 150, slotS);
     const item = held[i];
     if (!item) continue;
-    drawItemIcon(ctx, item, sx + 3, y + 153, 20);
-    drawSlotCount(ctx, sx, y + 150, slotS, v.inventory[item]);
+    drawItemIcon(ctx, item, sx + 3, y + breakdownH + 153, 20);
+    drawSlotCount(ctx, sx, y + breakdownH + 150, slotS, v.inventory[item]);
   }
 
   // görev ataması iş panelinden (N) ve bina panellerinden yapılır
@@ -575,7 +616,7 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.font = "11px monospace";
   ctx.fillText(
     v.baby ? "Bebekler büyüyünce çalışmaya başlar." : "Görevler binalardan ve N menüsünden atanır.",
-    x + 10, y + 192, w - 20
+    x + 10, y + breakdownH + 192, w - 20
   );
 }
 
@@ -656,10 +697,15 @@ export function drawBuildingPanel(
   else {
     if (isHousing(b)) h += 20;
     if (b.def.maxWorkers > 0) h += 26;
-    if (isDepositPoint(b)) h += 14 + ITEM_TYPES.length * 17 + 6;
+    if (isDepositPoint(b)) {
+      const itemsList = b.type === BuildingType.Collective ? FOOD_TYPES : ITEM_TYPES;
+      const itemCount = itemsList.filter(isItemVisible).length;
+      h += 34 + itemCount * 17 + 6;
+    }
     else if (
       b.type === BuildingType.Woodcutter ||
       b.type === BuildingType.Gatherer ||
+      b.type === BuildingType.MushroomGatherer ||
       b.type === BuildingType.Temple
     ) h += 22;
   }
@@ -703,7 +749,7 @@ export function drawBuildingPanel(
     ctx.fillStyle = "#f0a09a";
     ctx.font = "bold 12px monospace";
     ctx.textAlign = "center";
-    ctx.fillText(`✕ Yık (+${refund} odun iade)`, x + w / 2, y + h - 19);
+    ctx.fillText(`✕ Yık (+${refund} dal iade)`, x + w / 2, y + h - 19);
     ctx.textAlign = "left";
     ctx.font = "11px monospace";
   }
@@ -760,8 +806,22 @@ export function drawBuildingPanel(
 
   if (isDepositPoint(b)) {
     // depo içeriği: her ürün ayrı satır, dolanlar kırmızı "DOLU" etiketli
+    ctx.font = "bold 12px monospace";
+    ctx.fillStyle = "#e8e2d0";
+    ctx.fillText(
+      `Toplam: ${totalStored()}/${resources.cap}`,
+      x + 12, ly
+    );
+    if (totalStored() >= resources.cap) {
+      ctx.fillStyle = "#ff6655";
+      ctx.fillText("DOLU!", x + 186, ly);
+    }
+    ly += 20;
+
+    const itemsList = b.type === BuildingType.Collective ? FOOD_TYPES : ITEM_TYPES;
+    const visibleItems = itemsList.filter(isItemVisible);
     ctx.font = "12px monospace";
-    for (const item of ITEM_TYPES) {
+    for (const item of visibleItems) {
       ctx.fillStyle = ITEM_INFO[item].color;
       ctx.fillRect(x + 12, ly - 5, 10, 10);
       ctx.strokeStyle = "#3a3f48";
@@ -769,18 +829,16 @@ export function drawBuildingPanel(
       const name = ITEM_INFO[item].name;
       ctx.fillStyle = "#e8e2d0";
       ctx.fillText(
-        `${name[0].toUpperCase()}${name.slice(1)}: ${resources[item]}/${resources.cap}`,
+        `${name[0].toUpperCase()}${name.slice(1)}: ${resources[item]}`,
         x + 30, ly
       );
-      if (isFull(item)) {
-        ctx.fillStyle = "#ff6655";
-        ctx.font = "bold 11px monospace";
-        ctx.fillText("DOLU!", x + 186, ly);
-        ctx.font = "12px monospace";
-      }
       ly += 17;
     }
-  } else if (b.type === BuildingType.Woodcutter || b.type === BuildingType.Gatherer) {
+  } else if (
+    b.type === BuildingType.Woodcutter ||
+    b.type === BuildingType.Gatherer ||
+    b.type === BuildingType.MushroomGatherer
+  ) {
     const marked = b.type === BuildingType.Woodcutter
       ? world.countMarkedNear(world.markedTrees, b.x + 1, b.y + 1, 9)
       : world.countMarkedNear(world.markedBushes, b.x + 1, b.y + 1, 9);
@@ -1002,11 +1060,9 @@ export function drawPopulationPanel(
   }
 }
 
-// ---- Teknoloji paneli ----
-
-const TECH_W = 480;
-let techRect = { x: 0, y: 0, w: TECH_W, h: 0 };
-const TECH_ROW_H = 52;
+const TECH_W = 640;
+const TECH_H = 520;
+let techRect = { x: 0, y: 0, w: TECH_W, h: TECH_H };
 
 export type TechHit =
   | { kind: "close" }
@@ -1014,18 +1070,36 @@ export type TechHit =
   | { kind: "panel" }
   | null;
 
+function getTechPos(tech: Tech, panelX: number, panelY: number) {
+  const colW = 190;
+  const rowH = 72;
+  const startX = panelX + 24;
+  const startY = panelY + 56;
+  return {
+    x: startX + tech.gridX * colW,
+    y: startY + tech.gridY * rowH,
+  };
+}
+
 export function techPanelHitTest(sx: number, sy: number): TechHit {
   const cx = techRect.x + techRect.w - 26;
   const cy = techRect.y + 8;
   if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
-  const rowsY = techRect.y + 56;
+
+  const cardW = 172;
+  const cardH = 56;
   for (let i = 0; i < TECHS.length; i++) {
-    const ry = rowsY + i * TECH_ROW_H;
-    const bx = techRect.x + techRect.w - 110;
-    if (sx >= bx && sx <= bx + 96 && sy >= ry + 12 && sy <= ry + 38) {
-      return { kind: "buy", id: TECHS[i].id };
+    const tech = TECHS[i];
+    const pos = getTechPos(tech, techRect.x, techRect.y);
+    if (sx >= pos.x && sx <= pos.x + cardW && sy >= pos.y && sy <= pos.y + cardH) {
+      const owned = hasTech(tech.id);
+      const locked = tech.prereq && !hasTech(tech.prereq);
+      if (!owned && !locked) {
+        return { kind: "buy", id: tech.id };
+      }
     }
   }
+
   if (sx >= techRect.x && sx <= techRect.x + techRect.w &&
       sy >= techRect.y && sy <= techRect.y + techRect.h) {
     return { kind: "panel" };
@@ -1035,12 +1109,12 @@ export function techPanelHitTest(sx: number, sy: number): TechHit {
 
 export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
   const w = TECH_W;
-  const h = 56 + TECHS.length * TECH_ROW_H + 12;
+  const h = TECH_H;
   const x = (ctx.canvas.width - w) / 2;
   const y = 54;
   techRect = { x, y, w, h };
 
-  ctx.fillStyle = "rgba(10, 12, 16, 0.92)";
+  ctx.fillStyle = "rgba(10, 12, 16, 0.95)";
   ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = "#8a6cc0";
   ctx.lineWidth = 1;
@@ -1059,42 +1133,92 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
   ctx.font = "11px monospace";
   ctx.fillText("(rahipler tapınakta üretir)", x + 110, y + 40);
 
-  const rowsY = y + 56;
-  TECHS.forEach((tech, i) => {
-    const ry = rowsY + i * TECH_ROW_H;
-    const owned = hasTech(tech.id);
-    if (i % 2 === 0) {
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
-      ctx.fillRect(x + 4, ry, w - 8, TECH_ROW_H);
-    }
-    drawItemIcon(ctx, "knowledge", x + 12, ry + 14, 24);
-    ctx.fillStyle = owned ? "#8fd05e" : "#e8e2d0";
-    ctx.font = "bold 13px monospace";
-    ctx.fillText(tech.name, x + 44, ry + 17);
-    ctx.fillStyle = "#9a9488";
-    ctx.font = "11px monospace";
-    ctx.fillText(tech.desc, x + 44, ry + 35, w - 170);
+  const cardW = 172;
+  const cardH = 56;
 
-    // düğme: araştır / tamamlandı
-    const bx = x + w - 110;
+  // 1. Bağlantı çizgilerini çiz (kartların arkasında kalması için)
+  TECHS.forEach((tech) => {
+    if (tech.prereq) {
+      const parent = TECHS.find((t) => t.id === tech.prereq);
+      if (parent) {
+        const pPos = getTechPos(parent, x, y);
+        const curPos = getTechPos(tech, x, y);
+        const pRightX = pPos.x + cardW;
+        const pRightY = pPos.y + cardH / 2;
+        const curLeftX = curPos.x;
+        const curLeftY = curPos.y + cardH / 2;
+
+        const isOwned = hasTech(tech.id);
+        const isParentOwned = hasTech(parent.id);
+
+        ctx.strokeStyle = isOwned
+          ? "rgba(143, 208, 94, 0.65)"
+          : isParentOwned
+          ? "rgba(176, 143, 224, 0.45)"
+          : "rgba(255, 255, 255, 0.1)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(pRightX, pRightY);
+        ctx.bezierCurveTo(
+          pRightX + 30,
+          pRightY,
+          curLeftX - 30,
+          curLeftY,
+          curLeftX,
+          curLeftY
+        );
+        ctx.stroke();
+      }
+    }
+  });
+
+  // 2. Kartları çiz
+  TECHS.forEach((tech) => {
+    const pos = getTechPos(tech, x, y);
+    const owned = hasTech(tech.id);
+    const locked = tech.prereq && !hasTech(tech.prereq);
+    const affordable = resources.knowledge >= tech.cost;
+
+    // Kart arka planı
+    if (owned) {
+      ctx.fillStyle = "rgba(90, 143, 60, 0.25)";
+      ctx.strokeStyle = "#8fd05e";
+    } else if (locked) {
+      ctx.fillStyle = "rgba(20, 20, 20, 0.45)";
+      ctx.strokeStyle = "#3a3d42";
+    } else {
+      ctx.fillStyle = affordable ? "rgba(138, 108, 192, 0.25)" : "rgba(255, 255, 255, 0.04)";
+      ctx.strokeStyle = affordable ? "#b08fe0" : "#5a5f68";
+    }
+    ctx.lineWidth = 1;
+    ctx.fillRect(pos.x, pos.y, cardW, cardH);
+    ctx.strokeRect(pos.x + 0.5, pos.y + 0.5, cardW - 1, cardH - 1);
+
+    // İsim
+    ctx.font = "bold 11px monospace";
+    if (owned) ctx.fillStyle = "#8fd05e";
+    else if (locked) ctx.fillStyle = "#6a6458";
+    else ctx.fillStyle = "#e8e2d0";
+    ctx.fillText(tech.name, pos.x + 8, pos.y + 14, cardW - 16);
+
+    // Maliyet / Durum
+    ctx.font = "9px monospace";
     if (owned) {
       ctx.fillStyle = "#8fd05e";
-      ctx.font = "bold 12px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText("✓ Tamam", bx + 48, ry + 26);
-      ctx.textAlign = "left";
+      ctx.fillText("✓ Araştırıldı", pos.x + 8, pos.y + 26);
+    } else if (locked) {
+      ctx.fillStyle = "#9a6055";
+      const parentName = TECHS.find((t) => t.id === tech.prereq)?.name ?? "";
+      ctx.fillText(`Kilitli (${parentName})`, pos.x + 8, pos.y + 26, cardW - 16);
     } else {
-      const affordable = resources.knowledge >= tech.cost;
-      ctx.fillStyle = affordable ? "rgba(138, 108, 192, 0.4)" : "rgba(255,255,255,0.06)";
-      ctx.fillRect(bx, ry + 12, 96, 26);
-      ctx.strokeStyle = affordable ? "#b08fe0" : "#4a4f58";
-      ctx.strokeRect(bx + 0.5, ry + 12.5, 95, 25);
-      ctx.fillStyle = affordable ? "#e8defc" : "#7a7470";
-      ctx.font = "bold 11px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(`Araştır (${tech.cost})`, bx + 48, ry + 26);
-      ctx.textAlign = "left";
+      ctx.fillStyle = affordable ? "#c9a35a" : "#9a6055";
+      ctx.fillText(`Maliyet: ${tech.cost} bilgi`, pos.x + 8, pos.y + 26);
     }
+
+    // Açıklama
+    ctx.font = "9px monospace";
+    ctx.fillStyle = locked ? "#5a5448" : "#9a9488";
+    ctx.fillText(tech.desc, pos.x + 8, pos.y + 42, cardW - 16);
   });
 }
 
@@ -1363,8 +1487,10 @@ export function drawHud(
   ctx.fillStyle = "rgba(10, 12, 16, 0.8)";
   ctx.fillRect(0, h - TOOLBAR_HEIGHT, w, TOOLBAR_HEIGHT);
 
-  TOOLBAR_TYPES.forEach((type, i) => {
-    const r = buttonRect(i, w, h);
+  const unlockedTypes = TOOLBAR_TYPES.filter(isBuildingUnlocked);
+  const n = unlockedTypes.length;
+  unlockedTypes.forEach((type, i) => {
+    const r = buttonRect(i, w, h, n);
     const def = BUILDING_DEFS[type];
     const isSelected = selected === type;
     const affordable = resources.wood >= def.cost;
@@ -1380,7 +1506,7 @@ export function drawHud(
     ctx.fillText(`${(i + 1) % 10}. ${def.name}`, r.x + 8, r.y + 14, r.w - 14);
     ctx.font = "12px monospace";
     ctx.fillStyle = affordable ? "#c9a35a" : "#9a6055";
-    ctx.fillText(`${def.cost} odun`, r.x + 10, r.y + 30);
+    ctx.fillText(`${def.cost} dal`, r.x + 10, r.y + 30);
     ctx.fillStyle = "#9a9488";
     ctx.font = "10px monospace";
     ctx.fillText(def.desc, r.x + 10, r.y + 43, r.w - 20);

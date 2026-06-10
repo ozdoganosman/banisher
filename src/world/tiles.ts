@@ -16,6 +16,7 @@ export const enum Tile {
   TangerineTree = 10, // mandalina ağacı
   NutBush = 11, // yemiş (fındık) çalısı
   Sapling = 12, // ormancının diktiği fidan: zamanla ağaca dönüşür
+  PrunedTree = 13, // budanmış ağaç: dal toplandıktan sonra; zamanla Tree'ye döner
 }
 
 // Toplanabilir yemek blokları hangi eşyayı verir?
@@ -24,10 +25,6 @@ export function foodItemOf(t: Tile): ItemType | null {
   switch (t) {
     case Tile.Bush: return "berry";
     case Tile.Mushroom: return "mushroom";
-    case Tile.AppleTree: return "apple";
-    case Tile.OrangeTree: return "orange";
-    case Tile.TangerineTree: return "tangerine";
-    case Tile.NutBush: return "nut";
     default: return null;
   }
 }
@@ -37,7 +34,7 @@ export function isFruitTree(t: Tile): boolean {
 }
 
 export function isWalkable(t: Tile): boolean {
-  return t === Tile.Sand || t === Tile.Grass || t === Tile.Dirt;
+  return t !== Tile.Water && t !== Tile.Stone && t !== Tile.PrunedTree;
 }
 
 // Her blok tipi için temel renk ve hafif ton varyasyonları (pixel-art dokusu için)
@@ -55,4 +52,5 @@ export const TILE_COLORS: Record<Tile, string[]> = {
   [Tile.TangerineTree]: ["#5a8f3c", "#558838", "#609541"],
   [Tile.NutBush]: ["#5a8f3c", "#558838", "#609541"],
   [Tile.Sapling]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.PrunedTree]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, çıplak gövde çizilir
 };

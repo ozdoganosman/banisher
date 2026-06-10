@@ -23,14 +23,14 @@ export interface AnimalDef {
 const NEVER = 1e9; // yabaniler "ürün" hazırlamaz (sahipsizler tüketilemez)
 
 export const ANIMAL_DEFS: Record<AnimalType, AnimalDef> = {
-  chicken: { name: "Tavuk", product: "egg", yieldAmount: 2, interval: 30, speed: 14, huntYield: 1 },
-  cow: { name: "İnek", product: "milk", yieldAmount: 2, interval: 45, speed: 9, huntYield: 4 },
-  pig: { name: "Domuz", product: "meat", yieldAmount: 4, interval: 70, speed: 11, slaughter: true, huntYield: 4 },
-  sheep: { name: "Koyun", product: "wool", yieldAmount: 2, interval: 50, speed: 10, huntYield: 2 },
-  goat: { name: "Keçi", product: "milk", yieldAmount: 2, interval: 40, speed: 12, huntYield: 2 },
-  rabbit: { name: "Tavşan", product: "meat", yieldAmount: 1, interval: NEVER, speed: 24, huntYield: 1 },
-  deer: { name: "Geyik", product: "meat", yieldAmount: 4, interval: NEVER, speed: 18, huntYield: 4 },
-  boar: { name: "Yaban Domuzu", product: "meat", yieldAmount: 3, interval: NEVER, speed: 13, huntYield: 3 },
+  chicken: { name: "Tavuk", product: "fish", yieldAmount: 2, interval: 30, speed: 14, huntYield: 1 },
+  cow: { name: "İnek", product: "fish", yieldAmount: 2, interval: 45, speed: 9, huntYield: 4 },
+  pig: { name: "Domuz", product: "fish", yieldAmount: 4, interval: 70, speed: 11, slaughter: true, huntYield: 4 },
+  sheep: { name: "Koyun", product: "fish", yieldAmount: 2, interval: 50, speed: 10, huntYield: 2 },
+  goat: { name: "Keçi", product: "fish", yieldAmount: 2, interval: 40, speed: 12, huntYield: 2 },
+  rabbit: { name: "Tavşan", product: "fish", yieldAmount: 1, interval: NEVER, speed: 24, huntYield: 1 },
+  deer: { name: "Geyik", product: "fish", yieldAmount: 4, interval: NEVER, speed: 18, huntYield: 4 },
+  boar: { name: "Yaban Domuzu", product: "fish", yieldAmount: 3, interval: NEVER, speed: 13, huntYield: 3 },
 };
 
 // Çiftlik tamamlanınca gelen sürü
@@ -102,10 +102,12 @@ export class Animal {
     // açlık ve telef
     this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
     if (this.hunger >= 100) {
-      this.starveTimer += dt;
-      if (this.starveTimer >= STARVE_TIME) {
-        this.dead = true;
-        return;
+      if (!this.wild) {
+        this.starveTimer += dt;
+        if (this.starveTimer >= STARVE_TIME) {
+          this.dead = true;
+          return;
+        }
       }
     } else {
       this.starveTimer = 0;

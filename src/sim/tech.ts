@@ -3,45 +3,76 @@
 
 import { resources } from "./resources";
 
-export type TechId = "axes" | "forage" | "bags" | "construction" | "storage";
+export type TechId =
+  | "humanity"
+  | "nature"
+  | "capital"
+  | "collective"
+  | "mushroomology"
+  | "fishing";
 
 export interface Tech {
   id: TechId;
   name: string;
   cost: number; // bilgi
   desc: string;
+  prereq?: TechId;
+  gridX: number;
+  gridY: number;
 }
 
 export const TECHS: Tech[] = [
   {
-    id: "axes",
-    name: "Keskin Baltalar",
-    cost: 10,
-    desc: "Ağaç kesimi %25 daha hızlı; ağaç başına +1 odun",
+    id: "humanity",
+    name: "Beşer",
+    cost: 6,
+    desc: "Oduncu, çiftlik, yemekhane, bakımevi ve meşaleyi açar",
+    gridX: 0,
+    gridY: 1,
   },
   {
-    id: "forage",
-    name: "Usta Toplayıcılık",
+    id: "nature",
+    name: "Doğa",
+    cost: 6,
+    desc: "Toplayıcıyı açar",
+    gridX: 0,
+    gridY: 3,
+  },
+  {
+    id: "capital",
+    name: "Sermaye",
     cost: 12,
-    desc: "Meyve, mantar ve balık verimi +1",
+    desc: "Depo binasını açar",
+    prereq: "humanity",
+    gridX: 1,
+    gridY: 0,
   },
   {
-    id: "construction",
-    name: "Hızlı İnşaat",
+    id: "collective",
+    name: "Kollektif",
     cost: 12,
-    desc: "İnşaatlar %30 daha hızlı tamamlanır",
+    desc: "Kollektif binasını açar (sadece gıda depolar)",
+    prereq: "nature",
+    gridX: 1,
+    gridY: 2,
   },
   {
-    id: "bags",
-    name: "Büyük Çantalar",
+    id: "fishing",
+    name: "Balıkçılık",
+    cost: 12,
+    desc: "Balıkçı kulübesini açar",
+    prereq: "nature",
+    gridX: 1,
+    gridY: 3,
+  },
+  {
+    id: "mushroomology",
+    name: "Mantaroloji",
     cost: 15,
-    desc: "Köylü çantası 8 → 12 eşya taşır",
-  },
-  {
-    id: "storage",
-    name: "Geniş Ambarlar",
-    cost: 20,
-    desc: "Depo kapasitesi anında +40",
+    desc: "Mantarcı binasını açar (mantar ekilip toplanır)",
+    prereq: "collective",
+    gridX: 2,
+    gridY: 2,
   },
 ];
 
@@ -55,8 +86,8 @@ export function hasTech(id: TechId): boolean {
 export function buyTech(id: TechId): boolean {
   const tech = TECHS.find((t) => t.id === id);
   if (!tech || purchased.has(id) || resources.knowledge < tech.cost) return false;
+  if (tech.prereq && !purchased.has(tech.prereq)) return false;
   resources.knowledge -= tech.cost;
   purchased.add(id);
-  if (id === "storage") resources.cap += 40;
   return true;
 }
