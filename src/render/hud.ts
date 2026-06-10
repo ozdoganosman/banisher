@@ -712,6 +712,15 @@ export function drawHud(
     ctx.fillRect(ix + 7, 17, 2, 1);
   }, `Bilgi: ${resources.knowledge}`);
 
+  // grup ayracı: kaynaklar | nüfus
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx + 0.5, 7);
+  ctx.lineTo(cx + 0.5, 27);
+  ctx.stroke();
+  cx += 14;
+
   // nüfus: tıklanabilir düğme (nüfus yönetim menüsünü açar)
   {
     const label = `Nüfus: ${population} ▾`;
@@ -738,48 +747,74 @@ export function drawHud(
     cx += bw + 16;
   }
 
-  // tarih ve gün/gece ikonu
+  // grup ayracı
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx + 0.5, 7);
+  ctx.lineTo(cx + 0.5, 27);
+  ctx.stroke();
+  cx += 14;
+
+  // tarih (takvim ikonu)
+  entry((ix) => {
+    ctx.fillStyle = "#e8e2d0";
+    ctx.fillRect(ix + 1, 12, 12, 11);
+    ctx.fillStyle = "#c0473f";
+    ctx.fillRect(ix + 1, 12, 12, 4);
+    ctx.fillStyle = "#3a3f48";
+    ctx.fillRect(ix + 3, 18, 2, 2);
+    ctx.fillRect(ix + 7, 18, 2, 2);
+    ctx.fillRect(ix + 3, 21, 2, 1);
+    ctx.fillRect(ix + 11, 18, 1, 2);
+  }, `Tarih: ${dateString()}`);
+
+  // saat (gündüz güneş / gece hilal ikonu)
   {
     const dark = darkness();
     if (dark < 0.5) {
       // güneş
       ctx.fillStyle = "#ffd23c";
       ctx.beginPath();
-      ctx.arc(cx + 8, 17, 5, 0, Math.PI * 2);
+      ctx.arc(cx + 7, 17, 4.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = "#ffd23c";
       ctx.lineWidth = 1;
       for (let k = 0; k < 8; k++) {
         const a = (k / 8) * Math.PI * 2;
         ctx.beginPath();
-        ctx.moveTo(cx + 8 + Math.cos(a) * 7, 17 + Math.sin(a) * 7);
-        ctx.lineTo(cx + 8 + Math.cos(a) * 9, 17 + Math.sin(a) * 9);
+        ctx.moveTo(cx + 7 + Math.cos(a) * 6.5, 17 + Math.sin(a) * 6.5);
+        ctx.lineTo(cx + 7 + Math.cos(a) * 8.5, 17 + Math.sin(a) * 8.5);
         ctx.stroke();
       }
     } else {
       // hilal
       ctx.fillStyle = "#d8e0f0";
       ctx.beginPath();
-      ctx.arc(cx + 8, 17, 6, 0, Math.PI * 2);
+      ctx.arc(cx + 7, 17, 5.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "rgba(10, 12, 16, 1)";
       ctx.beginPath();
-      ctx.arc(cx + 11, 15, 5.5, 0, Math.PI * 2);
+      ctx.arc(cx + 10, 15, 5, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.fillStyle = "#e8e2d0";
     ctx.font = "15px monospace";
-    ctx.fillText(`${dateString()} • ${timeString()}`, cx + 22, 18);
+    const saat = `Saat: ${timeString()}`;
+    ctx.fillText(saat, cx + 20, 18);
+    cx += 20 + ctx.measureText(saat).width;
   }
 
-  // sağda hız ve kısa yardım
+  // sağda hız; yardım metni yalnızca sığıyorsa
   ctx.textAlign = "right";
   ctx.fillStyle = speed > 1 ? "#ffd23c" : "#9a9488";
   ctx.font = "12px monospace";
-  const help = "N: nüfus • Space: durdur • X: hız";
   ctx.fillText(`Hız: ${speed}x`, w - 12, 10);
-  ctx.fillStyle = "#9a9488";
-  ctx.fillText(help, w - 12, 25);
+  const help = "N: nüfus • Space: durdur • X: hız";
+  if (w - 12 - ctx.measureText(help).width > cx + 16) {
+    ctx.fillStyle = "#9a9488";
+    ctx.fillText(help, w - 12, 25);
+  }
   ctx.textAlign = "left";
 
   // oyun sonu perdesi

@@ -567,12 +567,6 @@ export class Renderer {
       else this.drawSite(ctx, px, py, b.progress / b.def.buildTime);
       return;
     }
-    if (b.size === 2) {
-      // binanın güneydoğuya düşen gölgesi
-      ctx.fillStyle = "rgba(10, 15, 10, 0.2)";
-      ctx.fillRect(px + 4, py + 29, 28, 4);
-      ctx.fillRect(px + 29, py + 8, 4, 21);
-    }
     switch (b.type) {
       case BuildingType.House: this.drawHouse(ctx, px, py); break;
       case BuildingType.Depot: this.drawDepot(ctx, px, py); break;
@@ -587,6 +581,7 @@ export class Renderer {
   }
 
   private drawCafeteria(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 16, py + 29, 15);
     // geniş yemek salonu
     ctx.fillStyle = WALL;
     ctx.fillRect(px + 2, py + 12, 28, 17);
@@ -616,6 +611,7 @@ export class Renderer {
   }
 
   private drawNursery(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 16, py + 29, 14);
     // bakımevi: açık duvar, pembe çatı
     ctx.fillStyle = "#d8c9b0";
     ctx.fillRect(px + 3, py + 12, 26, 17);
@@ -672,6 +668,7 @@ export class Renderer {
   }
 
   private drawTemple(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 16, py + 30, 15, 2);
     // taban platformu
     ctx.fillStyle = "#bba884";
     ctx.fillRect(px + 2, py + 24, 28, 6);
@@ -700,6 +697,8 @@ export class Renderer {
   }
 
   private drawCamp(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 9, py + 23.5, 8, 2); // çadır
+    this.baseShadow(ctx, px + 25, py + 13.5, 4, 1.2); // sandık
     // çadır (sol): katmanlı üçgen
     for (let r = 0; r < 11; r++) {
       const w = 2 + r * 1.3;
@@ -759,7 +758,19 @@ export class Renderer {
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
   }
 
+  // Yapı tabanına oturan yumuşak gölge (hafifçe güneydoğuya kaymış elips)
+  private baseShadow(
+    ctx: CanvasRenderingContext2D,
+    cx: number, cy: number, rx: number, ry = 2.5
+  ): void {
+    ctx.fillStyle = "rgba(10, 15, 10, 0.22)";
+    ctx.beginPath();
+    ctx.ellipse(cx + 1, cy + 1, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   private drawHouse(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 16, py + 29, 13);
     // duvarlar
     ctx.fillStyle = WALL;
     ctx.fillRect(px + 4, py + 13, 24, 16);
@@ -784,6 +795,7 @@ export class Renderer {
   }
 
   private drawDepot(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 16, py + 29, 15);
     // geniş ambar
     ctx.fillStyle = WALL;
     ctx.fillRect(px + 2, py + 11, 28, 18);
@@ -807,6 +819,8 @@ export class Renderer {
   }
 
   private drawWoodcutter(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 11, py + 29, 10);
+    this.baseShadow(ctx, px + 26, py + 27, 5, 1.5); // kütük yığını
     // kulübe
     ctx.fillStyle = WALL;
     ctx.fillRect(px + 3, py + 12, 17, 17);
@@ -828,6 +842,8 @@ export class Renderer {
   }
 
   private drawGatherer(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 11, py + 29, 10);
+    this.baseShadow(ctx, px + 26, py + 27, 4, 1.3); // sepet
     // yeşil çatılı kulübe
     ctx.fillStyle = WALL;
     ctx.fillRect(px + 3, py + 12, 17, 17);
