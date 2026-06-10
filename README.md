@@ -17,15 +17,19 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | Girdi | İşlev |
 |---|---|
 | Sol tık | Ağaç/çalı/mantar/taş işaretle veya seçili binayı yerleştir |
-| Sol tık sürükle | Üzerinden geçilen kaynakları topluca işaretle |
-| Mini haritaya tık | Kamerayı o noktaya götür |
-| Köylüye sol tık | Profilini aç (kimlik, durum, çanta, meslek atama) |
-| Binaya sol tık | Detay paneli (depo içeriği, inşaat ilerlemesi vb.) |
+| Sol tık sürükle | Alan seçimi: filtreye göre kaynakları topluca işaretle |
+| İşaret filtresi çipleri / F | Tümü / Odun / Yiyecek / Taş / ✕ İptal modu arasında geçiş |
+| ✕ İptal modu | Tıklama veya alan seçimiyle iş ve av işaretlerini topluca kaldır |
+| Mini haritaya tık/sürükle | Kamerayı o noktaya götür / gezdir |
+| Köylüye sol tık | Profilini aç (kimlik, durum, tokluk, moral dökümü, çanta) |
+| Binaya sol tık | Detay paneli (depo içeriği, inşaat ilerlemesi, işçi al/çıkar) |
+| Yabani hayvana sol tık | Av işareti koy / kaldır |
 | N / "Nüfus" düğmesi | Nüfus yönetim menüsü: tüm köylüler tek listede |
-| 1-8 | Bina seç (Ev, Depo, Oduncu, Toplayıcı, Meşale, Tapınak, Yemekhane, Bakımevi) |
+| T / "Teknoloji" düğmesi | Teknoloji ağacı paneli |
+| 1-9, 0 | Araç çubuğundaki kilidi açık binalardan seç |
 | Esc / sağ tık | Seçimi iptal et |
 | Space | Duraklat / devam et |
-| X | Oyun hızı (1x / 2x / 4x) |
+| X | Oyun hızı (1x / 2x / 4x / 8x / 16x) |
 | WASD / Ok tuşları | Kamerayı kaydır |
 | Fare tekerleği | Yakınlaş / uzaklaş (imlece doğru) |
 | Sağ/orta tık sürükle | Kamerayı sürükleyerek kaydır |
@@ -36,7 +40,28 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > toplanan çalı/mantar/yemiş **yeniden çıkmaz**. Sürdürülebilir kaynaklar:
 > çiftlik ürünleri, balıkçılık ve avcılıktır.
 
-## Şu anki özellikler (v1.1)
+## Şu anki özellikler (v1.2)
+
+### v1.2: Elle toplama, yeni teknoloji ağacı, toplu iptal ve moral dökümü
+
+- **Elle dal toplama**: ağaçlar kesilmez, budanır — köylü baltasız, eğilerek
+  dal toplar (ağaç başına 1 odun, 8 sn); budanmış ağaç zamanla kendine gelir
+- **Toplama dengesi**: yemiş çalısı 4 yemiş, mantar 1 mantar verir; tüm elle
+  toplama işleri aynı yavaş tempodadır (8 sn)
+- **Teknoloji ağacı yenilendi**: bina kilitleri araştırmalara bağlandı —
+  Beşer (oduncu, çiftlik, yemekhane, bakımevi, meşale), Doğa (toplayıcı),
+  Balıkçılık (balıkçı kulübesi), Sermaye (depo), Kollektif (gıda deposu),
+  Mantaroloji (mantarcı)
+- **✕ İptal modu**: işaret filtrelerine eklendi; tek tıkla veya alan
+  seçimiyle iş ve av işaretleri topluca kaldırılır (canlı "İptal N" sayacı)
+- **Moral sistemi**: evde uyumak morali yükseltir, yerde yatmak ve uykusuz
+  kalmak düşürür; düşük moral iş hızını yarıya kadar yavaşlatır; köylü
+  profilinde neden bazında birikimli **moral dökümü** listelenir
+- **Konaklama**: kampta uyuma kaldırıldı, konut yalnızca evlerdir; evi
+  olanlar evin içinde uyur
+- **Ormancılık/ekim**: oduncu fidan diker, fidanlar zamanla ağaca dönüşür
+- **Denge**: meyve ağaçları kaldırıldı; doğal kaynaklar kalıcıdır
+  (yeniden büyüme yok), yabani hayvanlar açlıktan telef olmaz
 
 ### v1.1: Hayvancılık, yeni yiyecekler ve UI iyileştirmeleri
 
@@ -187,10 +212,11 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 - [x] Bina inşaatı (depo, ev, oduncu kulübesi) — odun harcayarak
 - [x] Yemek ve açlık: toplayıcı kulübesi, köylü ihtiyaçları ve ölüm
-- [ ] Mevsimler ve gün/gece döngüsü
-- [ ] Köylülerin eve/depoya taşıma yapması (kaynaklar yerde birikir)
+- [x] Mevsimler ve gün/gece döngüsü
+- [x] Köylülerin eve/depoya taşıma yapması
+- [x] Taş madenciliği
 - [ ] Tarlalar ve ekin yetiştirme
-- [ ] Taş/demir madenciliği
+- [ ] Demir madenciliği
 - [ ] Kaydet/yükle
 
 ## Mimari
