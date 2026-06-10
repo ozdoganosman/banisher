@@ -55,12 +55,19 @@ export class Renderer {
   // Harita dışını kaplayan açık deniz dokusu (desen ana context'ten üretilir)
   private seaTile = document.createElement("canvas");
   private sea: CanvasPattern | null = null;
+  // Mini harita: blok başına 1 piksel, blok değişince güncellenir
+  private minimap = document.createElement("canvas");
+  private mctx: CanvasRenderingContext2D;
+  private minimapRect = { x: 0, y: 0, w: 0, h: 0 };
 
   constructor(private world: World) {
     this.terrain = document.createElement("canvas");
     this.terrain.width = world.width * TILE_SIZE;
     this.terrain.height = world.height * TILE_SIZE;
     this.tctx = this.terrain.getContext("2d")!;
+    this.minimap.width = world.width;
+    this.minimap.height = world.height;
+    this.mctx = this.minimap.getContext("2d")!;
     for (let y = 0; y < world.height; y++) {
       for (let x = 0; x < world.width; x++) {
         this.paintTile(x, y);
@@ -86,6 +93,7 @@ export class Renderer {
     const t = this.world.get(x, y) as Tile;
     const px = x * TILE_SIZE;
     const py = y * TILE_SIZE;
+    this.paintMinimapPixel(x, y, t);
 
     if (t === Tile.Water) {
       this.paintWater(px, py, x, y);
@@ -119,6 +127,83 @@ export class Renderer {
     if (t === Tile.Tree) this.paintTree(px, py, x, y);
     else if (t === Tile.Bush) this.paintBush(px, py, x, y);
     else if (t === Tile.Mushroom) this.paintMushroom(px, py, x, y);
+  }
+
+  private paintMinimapPixel(x: number, y: number, t: Tile): void {
+    let color: string;
+    switch (t) {
+      case Tile.Water:
+        color = this.world.heightAt(x, y) < 0.2 ? "#1c4170" : "#2a5d9c";
+        break;
+      case Tile.Sand: color = "#d8c27a"; break;
+      case Tile.Dirt: color = "#8a6a43"; break;
+      case Tile.Stone: color = "#85888f"; break;
+      case Tile.Tree: color = "#2e6b22"; break;
+      case Tile.Bush: color = "#4a9438"; break;
+      default: color = "#5a8f3c"; break;
+    }
+    this.mctx.fillStyle = color;
+    this.mctx.fillRect(x, y, 1, 1);
+  }
+
+  // Mini haritayı sağ alta çiz; tıklama dönüşümü için konumu saklar
+  drawMinimap(
+    ctx: CanvasRenderingContext2D,
+    camera: Camera,
+    villagers: Villager[],
+    buildings: Building[],
+    toolbarHeight: number
+  ): void {
+    const size = 128;
+    const vw = ctx.canvas.width;
+    const vh = ctx.canvas.height;
+    const x = vw - size - 12;
+    const y = vh - toolbarHeight - size - 12;
+    this.minimapRect = { x, y, w: size, h: size };
+
+    ctx.fillStyle = "rgba(10, 12, 16, 0.75)";
+    ctx.fillRect(x - 3, y - 3, size + 6, size + 6);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.minimap, x, y, size, size);
+    ctx.strokeStyle = "#5a5f68";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - 2.5, y - 2.5, size + 5, size + 5);
+
+    const sx = size / this.world.width;
+    const sy = size / this.world.height;
+
+    // binalar (turuncu) ve köylüler (beyaz, bebekler pembe)
+    for (const b of buildings) {
+      ctx.fillStyle = b.done ? "#ffb84d" : "#c9a35a";
+      ctx.fillRect(x + b.x * sx, y + b.y * sy, Math.max(2, b.size * sx), Math.max(2, b.size * sy));
+    }
+    for (const v of villagers) {
+      ctx.fillStyle = v.baby ? "#ffb0d0" : "#ffffff";
+      ctx.fillRect(x + (v.x / TILE_SIZE) * sx - 0.5, y + (v.y / TILE_SIZE) * sy - 0.5, 1.5, 1.5);
+    }
+
+    // görüş alanı çerçevesi
+    const viewW = (ctx.canvas.width / camera.zoom / TILE_SIZE) * sx;
+    const viewH = (ctx.canvas.height / camera.zoom / TILE_SIZE) * sy;
+    const viewX = x + (camera.x / TILE_SIZE) * sx - viewW / 2;
+    const viewY = y + (camera.y / TILE_SIZE) * sy - viewH / 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.75)";
+    ctx.strokeRect(
+      Math.max(x, viewX) + 0.5,
+      Math.max(y, viewY) + 0.5,
+      Math.min(viewW, size) - 1,
+      Math.min(viewH, size) - 1
+    );
+  }
+
+  // Mini haritaya tıklandıysa hedef dünya koordinatını döndür
+  minimapHit(sx: number, sy: number): { x: number; y: number } | null {
+    const r = this.minimapRect;
+    if (sx < r.x || sx > r.x + r.w || sy < r.y || sy > r.y + r.h) return null;
+    return {
+      x: ((sx - r.x) / r.w) * this.world.width * TILE_SIZE,
+      y: ((sy - r.y) / r.h) * this.world.height * TILE_SIZE,
+    };
   }
 
   private paintMushroom(px: number, py: number, x: number, y: number): void {

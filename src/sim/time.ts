@@ -32,6 +32,14 @@ export function dayFrac(): number {
   return (gameTime.total % DAY_LENGTH) / DAY_LENGTH;
 }
 
+// Saat: gün 06:00'da başlar (frac 0), gece ~22:45-04:00 arasıdır
+export function timeString(): string {
+  const h24 = (6 + dayFrac() * 24) % 24;
+  const hh = Math.floor(h24);
+  const mm = Math.floor((h24 - hh) * 60);
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
 // 0 = gündüz, 1 = zifiri gece (alacakaranlıkta yumuşak geçiş)
 export function darkness(): number {
   const f = dayFrac();

@@ -3,6 +3,7 @@ import { Tile, isWalkable, TILE_SIZE } from "./tiles";
 
 const BUSH_REGROW_TIME = 75; // saniye
 const MUSHROOM_REGROW_TIME = 95;
+const TREE_REGROW_TIME = 210; // kesilen ağaçlar uzun sürede geri gelir
 
 export class World {
   readonly width: number;
@@ -153,11 +154,17 @@ export class World {
     if (t === Tile.Bush || t === Tile.Mushroom) this.markedBushes.add(this.index(x, y));
   }
 
+  markStone(x: number, y: number): void {
+    if (this.get(x, y) === Tile.Stone) this.markedStones.add(this.index(x, y));
+  }
+
   chopTree(x: number, y: number): void {
     const i = this.index(x, y);
     this.markedTrees.delete(i);
     this.claimedTrees.delete(i);
     this.set(x, y, Tile.Grass);
+    // orman tükenmesin: ağaç uzun vadede yeniden büyür
+    this.regrow.push({ x, y, t: TREE_REGROW_TIME, tile: Tile.Tree });
   }
 
   harvestFood(x: number, y: number): void {

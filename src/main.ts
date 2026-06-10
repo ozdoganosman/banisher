@@ -14,6 +14,7 @@ import {
   popPanelHitTest,
   popScrollBy,
   profileHitTest,
+  TOOLBAR_HEIGHT,
   TOOLBAR_TYPES,
   toolbarHitTest,
   updateMessages,
@@ -201,6 +202,14 @@ input.onClick = (wx, wy, sx, sy) => {
     return;
   }
 
+  // mini harita: tıklanan noktaya kamerayı götür
+  const mm = renderer.minimapHit(sx, sy);
+  if (mm) {
+    camera.x = mm.x;
+    camera.y = mm.y;
+    return;
+  }
+
   // üst bardaki nüfus düğmesi
   if (popButtonHitTest(sx, sy)) {
     showPopulation = !showPopulation;
@@ -308,6 +317,20 @@ input.onCancel = () => {
   showPopulation = false;
 };
 
+// Sol tuş basılı sürükleme: üzerinden geçilen kaynakları topluca işaretle
+input.onPaint = (wx, wy) => {
+  if (selected !== null || showPopulation || selectedVillager || selectedBuilding) return;
+  if (isOverToolbar(input.mouseY, canvas.height)) return;
+  if (renderer.minimapHit(input.mouseX, input.mouseY)) return;
+  const tx = Math.floor(wx / TILE_SIZE);
+  const ty = Math.floor(wy / TILE_SIZE);
+  if (!world.inBounds(tx, ty)) return;
+  // boya gibi: yalnızca işaret ekle (kaldırmak için tek tıkla)
+  world.markTree(tx, ty);
+  world.markFood(tx, ty);
+  world.markStone(tx, ty);
+};
+
 // Nüfus menüsü açıkken üzerindeyken tekerlek menüyü kaydırır
 input.wheelInterceptor = (sx, sy, deltaY) => {
   if (showPopulation && isOverPopPanel(sx, sy)) {
@@ -399,6 +422,8 @@ const wasFull: Record<ItemType, boolean> = {
   wood: false, stone: false, berry: false, mushroom: false,
 };
 
+let wasFamine = false;
+
 function checkStorageFull() {
   for (const item of ITEM_TYPES) {
     const full = isFull(item);
@@ -408,6 +433,12 @@ function checkStorageFull() {
     }
     wasFull[item] = full;
   }
+  // kıtlık uyarısı: yemek tamamen bitti
+  const famine = resources.berry + resources.mushroom <= 0;
+  if (famine && !wasFamine) {
+    addMessage("⚠ Yemek stoğu tükendi! Köylüler açlıktan ölebilir.");
+  }
+  wasFamine = famine;
 }
 
 function step(dt: number) {
@@ -492,7 +523,8 @@ function frame(now: number) {
   input.update(elapsed);
   updateMessages(elapsed);
 
-  accumulator += elapsed * (paused ? 0 : gameSpeed);
+  // koloni yok olduysa simülasyon durur (oyun sonu perdesi gösterilir)
+  accumulator += elapsed * (paused || villagers.length === 0 ? 0 : gameSpeed);
   // yüksek hızda kare başına daha fazla adım gerekir
   let steps = 0;
   while (accumulator >= FIXED_DT && steps < 16) {
@@ -525,10 +557,13 @@ function frame(now: number) {
     selectedBuilding,
     now / 1000
   );
+  renderer.drawMinimap(ctx, camera, villagers, buildings, TOOLBAR_HEIGHT);
   drawHud(ctx, villagers.length, selected, paused, gameSpeed);
-  if (selectedVillager) drawProfile(ctx, selectedVillager);
-  if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers);
-  if (showPopulation) drawPopulationPanel(ctx, villagers, buildings);
+  if (villagers.length > 0) {
+    if (selectedVillager) drawProfile(ctx, selectedVillager);
+    if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers);
+    if (showPopulation) drawPopulationPanel(ctx, villagers, buildings);
+  }
 
   requestAnimationFrame(frame);
 }

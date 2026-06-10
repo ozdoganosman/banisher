@@ -8,7 +8,7 @@ import {
 } from "../sim/buildings";
 import { ROLE_NAMES } from "../sim/buildings";
 import { isFull, ITEM_INFO, ITEM_TYPES, resources } from "../sim/resources";
-import { darkness, dateString } from "../sim/time";
+import { darkness, dateString, timeString } from "../sim/time";
 import { assignmentLabel, type Villager } from "../sim/villager";
 import type { World } from "../world/world";
 
@@ -769,7 +769,7 @@ export function drawHud(
     }
     ctx.fillStyle = "#e8e2d0";
     ctx.font = "15px monospace";
-    ctx.fillText(`Tarih: ${dateString()}`, cx + 22, 18);
+    ctx.fillText(`${dateString()} • ${timeString()}`, cx + 22, 18);
   }
 
   // sağda hız ve kısa yardım
@@ -781,6 +781,24 @@ export function drawHud(
   ctx.fillStyle = "#9a9488";
   ctx.fillText(help, w - 12, 25);
   ctx.textAlign = "left";
+
+  // oyun sonu perdesi
+  if (population === 0) {
+    ctx.fillStyle = "rgba(5, 6, 10, 0.75)";
+    ctx.fillRect(0, 0, w, h);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#d4453f";
+    ctx.font = "bold 36px monospace";
+    ctx.fillText("KOLONİ YOK OLDU", w / 2, h / 2 - 30);
+    ctx.fillStyle = "#e8e2d0";
+    ctx.font = "16px monospace";
+    ctx.fillText(`Son tarih: ${dateString()}`, w / 2, h / 2 + 8);
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "13px monospace";
+    ctx.fillText("Yeniden başlamak için sayfayı yenile (F5)", w / 2, h / 2 + 36);
+    ctx.textAlign = "left";
+    return;
+  }
 
   // duraklatma göstergesi
   if (paused) {

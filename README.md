@@ -17,6 +17,8 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | Girdi | İşlev |
 |---|---|
 | Sol tık | Ağaç/çalı/mantar/taş işaretle veya seçili binayı yerleştir |
+| Sol tık sürükle | Üzerinden geçilen kaynakları topluca işaretle |
+| Mini haritaya tık | Kamerayı o noktaya götür |
 | Köylüye sol tık | Profilini aç (kimlik, durum, çanta, meslek atama) |
 | Binaya sol tık | Detay paneli (depo içeriği, inşaat ilerlemesi vb.) |
 | N / "Nüfus" düğmesi | Nüfus yönetim menüsü: tüm köylüler tek listede |
@@ -30,7 +32,20 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
-## Şu anki özellikler (v0.7)
+## Şu anki özellikler (v0.8)
+
+### v0.8: Saat, mini harita ve yaşam kalitesi
+
+- **Saat**: tarih yanında 24 saatlik saat (gün 06:00'da başlar, gece ~22:45)
+- **Mini harita**: sağ altta ada görünümü — binalar turuncu, köylüler beyaz
+  (bebekler pembe), görüş alanı çerçevesi; tıklayınca kamera oraya gider
+- **Sürükleyerek işaretleme**: sol tuş basılı gezdir, yol üstündeki tüm
+  ağaç/çalı/mantar/taşlar işaretlenir
+- **Ağaçlar yeniden büyür** (~3.5 dk): orman kalıcı tükenmez
+- **Kıtlık uyarısı**: yemek stoğu sıfırlanınca bildirim
+- **Oyun sonu**: tüm köylüler ölürse "KOLONİ YOK OLDU" perdesi, simülasyon durur
+
+### v0.7: Banished tarzı iş sistemi ve ada haritası
 
 ### v0.7: Banished tarzı iş sistemi ve ada haritası
 

@@ -19,6 +19,8 @@ export class Input {
     | null = null;
   // sağ tık (sürüklemeden bırakılırsa): seçim iptali
   onCancel: (() => void) | null = null;
+  // sol tuş basılı sürüklerken çağrılır (toplu kaynak işaretleme)
+  onPaint: ((worldX: number, worldY: number) => void) | null = null;
   // tekerleği yakala (örn. menü kaydırma); true dönerse zoom yapılmaz
   wheelInterceptor: ((sx: number, sy: number, deltaY: number) => boolean) | null = null;
 
@@ -63,6 +65,13 @@ export class Input {
       if (this.dragging) {
         this.camera.pan(-e.movementX / this.camera.zoom, -e.movementY / this.camera.zoom);
         this.dragMoved += Math.abs(e.movementX) + Math.abs(e.movementY);
+      } else if (e.buttons & 1) {
+        // sol tuş basılı sürükleme: boya gibi işaretleme
+        this.dragMoved += Math.abs(e.movementX) + Math.abs(e.movementY);
+        if (this.dragMoved >= 4) {
+          const w = this.camera.screenToWorld(e.offsetX, e.offsetY, canvas.width, canvas.height);
+          this.onPaint?.(w.x, w.y);
+        }
       }
     });
 
