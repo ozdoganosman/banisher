@@ -3,10 +3,12 @@ import { Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
 import type { Building } from "./buildings";
 import {
+  AUTO_MARK_RADIUS,
   BuildingType,
   isDepositPoint,
   isLit,
   KNOWLEDGE_PER_WORSHIP,
+  ROLE_NAMES,
   WORSHIP_INTERVAL,
   WORSHIP_TIME,
 } from "./buildings";
@@ -54,19 +56,22 @@ const GROW_DAYS_NURSERY = 2;
 const SHIRT_COLORS = ["#c0392b", "#2980b9", "#8e44ad", "#d35400", "#16a085"];
 let shirtIndex = 0;
 
-export type Profession = "worker" | "woodcutter" | "gatherer" | "miner" | "builder";
+// Banished tarzı iş bazlı görevler: herkes varsayılan ortalık işçisidir,
+// inşaatçılık sayıyla, üretim işleri bina bazlı istihdamla yönetilir
+export type Assignment =
+  | { kind: "laborer" } // ortalık işleri: elle işaretlenen her şey + taşıma
+  | { kind: "builder" } // şantiyelerde çalışır
+  | { kind: "building"; building: Building }; // belirli bir binada istihdam
 
-export const PROFESSIONS: Profession[] = [
-  "worker", "woodcutter", "gatherer", "miner", "builder",
-];
+export function assignmentLabel(a: Assignment): string {
+  switch (a.kind) {
+    case "laborer": return "Ortalık işleri";
+    case "builder": return "İnşaatçı";
+    case "building":
+      return `${ROLE_NAMES[a.building.type] ?? "Çalışan"} • ${a.building.def.name}`;
+  }
+}
 
-export const PROFESSION_NAMES: Record<Profession, string> = {
-  worker: "İşçi",
-  woodcutter: "Oduncu",
-  gatherer: "Toplayıcı",
-  miner: "Madenci",
-  builder: "İnşaatçı",
-};
 
 type VillagerState =
   | "idle"
@@ -96,7 +101,7 @@ export class Villager {
   walkPhase = 0; // bacak/kol salınımı için
   hunger: number;
   dead = false;
-  profession: Profession = "worker";
+  assignment: Assignment = { kind: "laborer" };
   baby: boolean;
   birthDay: number; // doğduğu gün (toplam gün sayısı)
   grewUp = false; // main bunu görünce "büyüdü" bildirimi gösterir
@@ -151,7 +156,7 @@ export class Villager {
     if (this.baby) return `Bebek (${this.ageDays} günlük)`;
     switch (this.state) {
       case "idle":
-        return this.starving ? "Açlıktan bitkin" : "Boşta";
+        return this.starving ? "Açlıktan bitkin" : "Dinleniyor";
       case "walking":
         if (!this.job) return "Geziniyor";
         switch (this.job.kind) {
@@ -192,7 +197,7 @@ export class Villager {
       this.baby = false;
       this.grewUp = true;
       this.identity.age = 16;
-      this.profession = "worker";
+      this.assignment = { kind: "laborer" };
     }
 
     // açlık her durumda işler (bakımevi varsa bebekler acıkmaz)
@@ -278,15 +283,6 @@ export class Villager {
     this.job = null;
   }
 
-  private canDo(kind: "chop" | "gather" | "mine" | "build"): boolean {
-    if (this.profession === "worker") return true;
-    return (
-      (kind === "chop" && this.profession === "woodcutter") ||
-      (kind === "gather" && this.profession === "gatherer") ||
-      (kind === "mine" && this.profession === "miner") ||
-      (kind === "build" && this.profession === "builder")
-    );
-  }
 
   private decide(world: World, buildings: Building[]): void {
     // 1) Acıkmışsa ve yemek varsa: ye (varsa yemekhanede — tokluk tam dolar)
@@ -346,11 +342,13 @@ export class Villager {
     const litTile = (x: number, y: number) =>
       lit((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE);
 
-    // 3) Mesleğine uygun en yakın işi seç
+    // 3) Görevine uygun en yakın işi seç
     type Candidate = { dist: number; start: () => boolean };
     const candidates: Candidate[] = [];
+    const a = this.assignment;
 
-    if (this.canDo("build")) {
+    if (a.kind === "builder") {
+      // inşaatçılar şantiyelerde çalışır
       for (const b of buildings) {
         if (b.done || b.claimed || !lit(b.centerX, b.centerY)) continue;
         const d = Math.abs(b.x + 1 - this.tileX) + Math.abs(b.y + 1 - this.tileY);
@@ -368,44 +366,79 @@ export class Villager {
           },
         });
       }
-    }
+    } else if (a.kind === "building") {
+      // bina çalışanı: yalnızca kendi binasının işini, çalışma alanı içinde yapar
+      const hut = a.building;
+      const hx = hut.x + 1;
+      const hy = hut.y + 1;
+      const inArea = (x: number, y: number) =>
+        Math.abs(x - hx) <= AUTO_MARK_RADIUS && Math.abs(y - hy) <= AUTO_MARK_RADIUS;
 
-    // tapınak ayini (her meslek yapabilir; bilgi üretir)
-    for (const b of buildings) {
-      if (!b.worshipReady || !lit(b.centerX, b.centerY)) continue;
-      const d = Math.abs(b.x + 1 - this.tileX) + Math.abs(b.y + 1 - this.tileY);
-      candidates.push({
-        dist: d,
-        start: () => {
-          const path = findPathAdjacentRect(
-            world, this.tileX, this.tileY, b.x, b.y, b.size
-          );
-          if (!path) return false;
-          b.worshipClaimed = true;
-          this.job = { kind: "worship", building: b };
-          this.startPath(path);
-          return true;
-        },
-      });
-    }
-
-    if (this.canDo("chop") && !isFull("wood")) {
-      const tree = world.findNearestMarked(
-        world.markedTrees, world.claimedTrees, this.x, this.y, litTile
-      );
-      if (tree) {
-        candidates.push({
-          dist: tree.dist,
-          start: () => this.startTileJob(world, tree.x, tree.y, (i) => {
-            world.claimedTrees.add(i);
-            this.job = { kind: "chop", tile: i };
-          }),
-        });
+      if (hut.type === BuildingType.Woodcutter && !isFull("wood")) {
+        const tree = world.findNearestMarked(
+          world.markedTrees, world.claimedTrees, this.x, this.y,
+          (x, y) => inArea(x, y) && litTile(x, y)
+        );
+        if (tree) {
+          candidates.push({
+            dist: tree.dist,
+            start: () => this.startTileJob(world, tree.x, tree.y, (i) => {
+              world.claimedTrees.add(i);
+              this.job = { kind: "chop", tile: i };
+            }),
+          });
+        }
+      } else if (hut.type === BuildingType.Gatherer) {
+        const food = world.findNearestMarked(
+          world.markedBushes, world.claimedBushes, this.x, this.y,
+          (x, y) =>
+            inArea(x, y) && litTile(x, y) &&
+            (world.get(x, y) === Tile.Mushroom ? !isFull("mushroom") : !isFull("berry"))
+        );
+        if (food) {
+          candidates.push({
+            dist: food.dist,
+            start: () => this.startTileJob(world, food.x, food.y, (i) => {
+              world.claimedBushes.add(i);
+              const item = world.get(food.x, food.y) === Tile.Mushroom ? "mushroom" : "berry";
+              this.job = { kind: "gather", tile: i, item };
+            }),
+          });
+        }
+      } else if (hut.type === BuildingType.Temple) {
+        if (hut.worshipReady && lit(hut.centerX, hut.centerY)) {
+          candidates.push({
+            dist: 0,
+            start: () => {
+              const path = findPathAdjacentRect(
+                world, this.tileX, this.tileY, hut.x, hut.y, hut.size
+              );
+              if (!path) return false;
+              hut.worshipClaimed = true;
+              this.job = { kind: "worship", building: hut };
+              this.startPath(path);
+              return true;
+            },
+          });
+        }
       }
-    }
+    } else {
+      // ortalık işçisi: elle/kulübece işaretlenmiş her kaynağa gider
+      if (!isFull("wood")) {
+        const tree = world.findNearestMarked(
+          world.markedTrees, world.claimedTrees, this.x, this.y, litTile
+        );
+        if (tree) {
+          candidates.push({
+            dist: tree.dist,
+            start: () => this.startTileJob(world, tree.x, tree.y, (i) => {
+              world.claimedTrees.add(i);
+              this.job = { kind: "chop", tile: i };
+            }),
+          });
+        }
+      }
 
-    if (this.canDo("gather")) {
-      // deposu dolu olan yemek türünü toplamaya gitme; gece ışık şart
       const food = world.findNearestMarked(
         world.markedBushes, world.claimedBushes, this.x, this.y,
         (x, y) =>
@@ -422,35 +455,39 @@ export class Villager {
           }),
         });
       }
-    }
 
-    if (this.canDo("mine") && !isFull("stone")) {
-      const stone = world.findNearestMarked(
-        world.markedStones, world.claimedStones, this.x, this.y, litTile
-      );
-      if (stone) {
-        candidates.push({
-          dist: stone.dist,
-          start: () => this.startTileJob(world, stone.x, stone.y, (i) => {
-            world.claimedStones.add(i);
-            this.job = { kind: "mine", tile: i };
-          }),
-        });
+      if (!isFull("stone")) {
+        const stone = world.findNearestMarked(
+          world.markedStones, world.claimedStones, this.x, this.y, litTile
+        );
+        if (stone) {
+          candidates.push({
+            dist: stone.dist,
+            start: () => this.startTileJob(world, stone.x, stone.y, (i) => {
+              world.claimedStones.add(i);
+              this.job = { kind: "mine", tile: i };
+            }),
+          });
+        }
       }
     }
 
-    candidates.sort((a, b) => a.dist - b.dist);
+    candidates.sort((c1, c2) => c1.dist - c2.dist);
     for (const c of candidates) {
       if (c.start()) return;
     }
 
     // 4) İş yoksa: çantada bir şey varsa teslim et, yoksa dolan
+    // (bina çalışanları iş yerlerinin çevresinde bekler)
     if (this.inventoryTotal > 0 && this.tryDeposit(world, buildings)) return;
 
-    const r = 6;
+    const anchor = a.kind === "building" ? a.building : null;
+    const ax = anchor ? Math.floor(anchor.centerX / TILE_SIZE) : this.tileX;
+    const ay = anchor ? Math.floor(anchor.centerY / TILE_SIZE) : this.tileY;
+    const r = anchor ? 4 : 6;
     for (let attempt = 0; attempt < 8; attempt++) {
-      const tx = this.tileX + Math.floor((Math.random() * 2 - 1) * r);
-      const ty = this.tileY + Math.floor((Math.random() * 2 - 1) * r);
+      const tx = ax + Math.floor((Math.random() * 2 - 1) * r);
+      const ty = ay + Math.floor((Math.random() * 2 - 1) * r);
       if (!world.walkableAt(tx, ty)) continue;
       const path = findPath(world, this.tileX, this.tileY, tx, ty);
       if (path) {

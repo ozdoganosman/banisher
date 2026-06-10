@@ -19,7 +19,6 @@ import {
   updateMessages,
 } from "./render/hud";
 import {
-  AUTO_PROFESSION,
   Building,
   BUILDING_DEFS,
   BuildingType,
@@ -27,9 +26,9 @@ import {
   HOUSE_CAPACITY,
   isHousing,
   placeBuilding,
+  ROLE_NAMES,
 } from "./sim/buildings";
 import { gameTime, totalDays, updateTime } from "./sim/time";
-import { PROFESSION_NAMES } from "./sim/villager";
 import { addFloater } from "./render/effects";
 import { isFull, ITEM_INFO, ITEM_TYPES, resources, type ItemType } from "./sim/resources";
 import { Villager } from "./sim/villager";
@@ -92,6 +91,53 @@ function villagerAt(wx: number, wy: number): Villager | null {
     }
   }
   return best;
+}
+
+// ---- İş bazlı görev yönetimi (Banished tarzı) ----
+
+function workersOf(b: Building): number {
+  let n = 0;
+  for (const v of villagers) {
+    if (v.assignment.kind === "building" && v.assignment.building === b) n++;
+  }
+  return n;
+}
+
+// Havuzdan (ortalık işçileri) en yakın yetişkini al ve göreve ata
+function hire(target: Building | null, near?: { x: number; y: number }): boolean {
+  if (target && workersOf(target) >= target.def.maxWorkers) return false;
+  let best: Villager | null = null;
+  let bestDist = Infinity;
+  const px = near?.x ?? (target ? target.centerX : camera.x);
+  const py = near?.y ?? (target ? target.centerY : camera.y);
+  for (const v of villagers) {
+    if (v.baby || v.assignment.kind !== "laborer") continue;
+    const d = Math.hypot(v.x - px, v.y - py);
+    if (d < bestDist) {
+      bestDist = d;
+      best = v;
+    }
+  }
+  if (!best) {
+    addMessage("Ortalık işçisi kalmadı!");
+    return false;
+  }
+  best.assignment = target ? { kind: "building", building: target } : { kind: "builder" };
+  return true;
+}
+
+// Görevden çıkar: ortalık işleri havuzuna döner
+function fire(target: Building | null): void {
+  for (const v of villagers) {
+    const a = v.assignment;
+    const match = target
+      ? a.kind === "building" && a.building === target
+      : a.kind === "builder";
+    if (match) {
+      v.assignment = { kind: "laborer" };
+      return;
+    }
+  }
 }
 
 // Tıklanan blok bir binanın ayak izindeyse o binayı döndür
@@ -163,12 +209,14 @@ input.onClick = (wx, wy, sx, sy) => {
 
   // nüfus yönetim menüsü açıkken tıklamalar önce ona gider
   if (showPopulation) {
-    const hit = popPanelHitTest(sx, sy, villagers.length);
+    const hit = popPanelHitTest(sx, sy, villagers, buildings);
     if (hit) {
       if (hit.kind === "close") {
         showPopulation = false;
-      } else if (hit.kind === "profession") {
-        if (!villagers[hit.index].baby) villagers[hit.index].profession = hit.profession;
+      } else if (hit.kind === "hire") {
+        hire(hit.building);
+      } else if (hit.kind === "fire") {
+        fire(hit.building);
       } else if (hit.kind === "select") {
         // isme tıkla: menüyü kapat, köylünün profilini aç ve kameraya al
         const v = villagers[hit.index];
@@ -189,11 +237,7 @@ input.onClick = (wx, wy, sx, sy) => {
   if (selectedVillager) {
     const hit = profileHitTest(sx, sy);
     if (hit) {
-      if (hit.kind === "close") {
-        selectedVillager = null;
-      } else if (hit.kind === "profession") {
-        if (!selectedVillager.baby) selectedVillager.profession = hit.profession;
-      }
+      if (hit.kind === "close") selectedVillager = null;
       return;
     }
   }
@@ -203,6 +247,8 @@ input.onClick = (wx, wy, sx, sy) => {
     const hit = buildingPanelHitTest(sx, sy);
     if (hit) {
       if (hit === "close") selectedBuilding = null;
+      else if (hit === "hire") hire(selectedBuilding);
+      else if (hit === "fire") fire(selectedBuilding);
       return;
     }
   }
@@ -232,6 +278,11 @@ input.onClick = (wx, wy, sx, sy) => {
     placeBuilding(world, b);
     buildings.push(b);
     addMessage(`${def.name} şantiyesi kuruldu`);
+    // hiç inşaatçı yoksa havuzdan bir kişiyi otomatik ata
+    const hasBuilder = villagers.some((v) => !v.baby && v.assignment.kind === "builder");
+    if (!hasBuilder && hire(null, { x: b.centerX, y: b.centerY })) {
+      addMessage("Bir ortalık işçisi inşaatçı oldu");
+    }
   } else {
     // köylü > bina > blok işaretleme önceliğiyle tıklamayı yönlendir
     const v = villagerAt(wx, wy);
@@ -399,7 +450,7 @@ function step(dt: number) {
   }
 
   for (const b of buildings) {
-    b.update(dt, world);
+    b.update(dt, world, workersOf(b));
     // tamamlanma etkileri bir kez uygulanır
     if (b.done && !b.effectApplied) {
       b.effectApplied = true;
@@ -412,23 +463,9 @@ function step(dt: number) {
       } else {
         addMessage(`${def.name} tamamlandı`);
       }
-      // üretim binası tamamlanınca en yakın boştaki işçiyi mesleğe ata
-      const autoProf = AUTO_PROFESSION[b.type];
-      if (autoProf) {
-        let best: Villager | null = null;
-        let bestDist = Infinity;
-        for (const v of villagers) {
-          if (v.baby || v.profession !== "worker") continue;
-          const d = Math.hypot(v.x - b.centerX, v.y - b.centerY);
-          if (d < bestDist) {
-            bestDist = d;
-            best = v;
-          }
-        }
-        if (best) {
-          best.profession = autoProf;
-          addMessage(`${best.fullName} ${PROFESSION_NAMES[autoProf].toLowerCase()} oldu`);
-        }
+      // üretim binası tamamlanınca havuzdan 1 işçi otomatik istihdam edilir
+      if (b.def.maxWorkers > 0 && hire(b)) {
+        addMessage(`${b.def.name} 1 ${(ROLE_NAMES[b.type] ?? "çalışan").toLowerCase()} istihdam etti`);
       }
     }
   }
@@ -491,7 +528,7 @@ function frame(now: number) {
   drawHud(ctx, villagers.length, selected, paused, gameSpeed);
   if (selectedVillager) drawProfile(ctx, selectedVillager);
   if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers);
-  if (showPopulation) drawPopulationPanel(ctx, villagers);
+  if (showPopulation) drawPopulationPanel(ctx, villagers, buildings);
 
   requestAnimationFrame(frame);
 }

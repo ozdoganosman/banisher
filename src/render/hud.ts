@@ -6,14 +6,10 @@ import {
   isHousing,
   type Building,
 } from "../sim/buildings";
+import { ROLE_NAMES } from "../sim/buildings";
 import { isFull, ITEM_INFO, ITEM_TYPES, resources } from "../sim/resources";
 import { darkness, dateString } from "../sim/time";
-import {
-  PROFESSION_NAMES,
-  PROFESSIONS,
-  type Profession,
-  type Villager,
-} from "../sim/villager";
+import { assignmentLabel, type Villager } from "../sim/villager";
 import type { World } from "../world/world";
 
 export const TOOLBAR_HEIGHT = 64;
@@ -82,37 +78,15 @@ export function isOverToolbar(sy: number, canvasH: number): boolean {
 
 // ---- Köylü profil paneli ----
 
-const PROFILE = { x: 12, y: 44, w: 252, h: 232 };
+const PROFILE = { x: 12, y: 44, w: 252, h: 168 };
 const CLOSE = { x: PROFILE.x + PROFILE.w - 24, y: PROFILE.y + 6, w: 18, h: 18 };
 
-// Meslek düğmeleri: 2 satır x 3 sütun ızgara (5 meslek)
-function professionButtons() {
-  const bw = (PROFILE.w - 20 - 8) / 3;
-  const bh = 20;
-  return PROFESSIONS.map((p, i) => ({
-    profession: p,
-    x: PROFILE.x + 10 + (i % 3) * (bw + 4),
-    y: PROFILE.y + 178 + Math.floor(i / 3) * (bh + 4),
-    w: bw,
-    h: bh,
-  }));
-}
-
-export type ProfileHit =
-  | { kind: "close" }
-  | { kind: "profession"; profession: Profession }
-  | { kind: "panel" }
-  | null;
+export type ProfileHit = { kind: "close" } | { kind: "panel" } | null;
 
 // Panel açıkken tıklama paneli mi hedefliyor?
 export function profileHitTest(sx: number, sy: number): ProfileHit {
   if (sx >= CLOSE.x && sx <= CLOSE.x + CLOSE.w && sy >= CLOSE.y && sy <= CLOSE.y + CLOSE.h) {
     return { kind: "close" };
-  }
-  for (const b of professionButtons()) {
-    if (sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) {
-      return { kind: "profession", profession: b.profession };
-    }
   }
   if (sx >= PROFILE.x && sx <= PROFILE.x + PROFILE.w && sy >= PROFILE.y && sy <= PROFILE.y + PROFILE.h) {
     return { kind: "panel" };
@@ -205,7 +179,7 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   const ageText = v.baby ? `${v.ageDays} günlük` : `Yaş: ${v.identity.age}`;
   ctx.fillText(`${ageText} • ${v.identity.female ? "Kadın" : "Erkek"}`, tx, y + 46);
   ctx.fillStyle = "#c9a35a";
-  ctx.fillText(`Meslek: ${v.baby ? "Bebek" : PROFESSION_NAMES[v.profession]}`, tx, y + 64);
+  ctx.fillText(`Görev: ${v.baby ? "Bebek" : assignmentLabel(v.assignment)}`, tx, y + 64, w - 82 - 12);
   ctx.fillStyle = "#9ad0ff";
   ctx.fillText(v.statusText, tx, y + 82, w - 82 - 12);
 
@@ -244,39 +218,34 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
     }
   }
 
-  // meslek seçimi (bebeklere meslek atanamaz)
-  if (v.baby) {
-    ctx.fillStyle = "#9a9488";
-    ctx.font = "11px monospace";
-    ctx.fillText("Bebekler büyüyünce işçi olur.", x + 10, y + 178);
-    return;
-  }
+  // görev ataması iş panelinden (N) ve bina panellerinden yapılır
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
-  ctx.fillText("Meslek ata:", x + 10, y + 168);
-  ctx.font = "11px monospace";
-  for (const b of professionButtons()) {
-    const active = v.profession === b.profession;
-    ctx.fillStyle = active ? "rgba(90, 143, 60, 0.5)" : "rgba(255,255,255,0.07)";
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = active ? "#8fd05e" : "#4a4f58";
-    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
-    ctx.fillStyle = active ? "#d8f0c0" : "#c8c2b0";
-    ctx.textAlign = "center";
-    ctx.fillText(PROFESSION_NAMES[b.profession], b.x + b.w / 2, b.y + b.h / 2 + 1);
-    ctx.textAlign = "left";
-  }
+  ctx.fillText(
+    v.baby ? "Bebekler büyüyünce çalışmaya başlar." : "Görevler binalardan ve N menüsünden atanır.",
+    x + 10, y + 158, w - 20
+  );
 }
 
 // ---- Bina detay paneli ----
 
 // Son çizilen panelin konumu (hit-test ile aynı kalması için)
 let bpanel = { x: 12, y: 44, w: 252, h: 120 };
+// İşçi al/çıkar düğmeleri (istihdam eden binalarda çizilir)
+let bpanelHire: { x: number; y: number; w: number; h: number } | null = null;
+let bpanelFire: { x: number; y: number; w: number; h: number } | null = null;
 
-export function buildingPanelHitTest(sx: number, sy: number): "close" | "panel" | null {
+export function buildingPanelHitTest(
+  sx: number,
+  sy: number
+): "close" | "hire" | "fire" | "panel" | null {
   const cx = bpanel.x + bpanel.w - 24;
   const cy = bpanel.y + 6;
   if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return "close";
+  const inRect = (r: { x: number; y: number; w: number; h: number } | null) =>
+    r && sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h;
+  if (inRect(bpanelHire)) return "hire";
+  if (inRect(bpanelFire)) return "fire";
   if (sx >= bpanel.x && sx <= bpanel.x + bpanel.w && sy >= bpanel.y && sy <= bpanel.y + bpanel.h) {
     return "panel";
   }
@@ -332,6 +301,7 @@ export function drawBuildingPanel(
   if (!b.done) h += 34;
   else {
     if (isHousing(b)) h += 20;
+    if (b.def.maxWorkers > 0) h += 26;
     if (isDepositPoint(b)) h += 14 + ITEM_TYPES.length * 17 + 6;
     else if (
       b.type === BuildingType.Woodcutter ||
@@ -340,6 +310,8 @@ export function drawBuildingPanel(
     ) h += 22;
   }
   bpanel = { x, y, w, h };
+  bpanelHire = null;
+  bpanelFire = null;
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
   ctx.fillRect(x, y, w, h);
@@ -386,6 +358,33 @@ export function drawBuildingPanel(
     ly += 20;
   }
 
+  // istihdam: çalışan sayısı ve işçi al/çıkar düğmeleri
+  if (b.def.maxWorkers > 0) {
+    const workers = villagers.filter(
+      (v) => v.assignment.kind === "building" && v.assignment.building === b
+    ).length;
+    ctx.font = "12px monospace";
+    ctx.fillStyle = "#e8e2d0";
+    ctx.fillText(`${ROLE_NAMES[b.type] ?? "Çalışan"}: `, x + 12, ly);
+    ctx.fillStyle = workers >= b.def.maxWorkers ? "#e0a83c" : "#8fd05e";
+    ctx.fillText(`${workers}/${b.def.maxWorkers}`, x + 90, ly);
+
+    bpanelFire = { x: x + 140, y: ly - 9, w: 22, h: 18 };
+    bpanelHire = { x: x + 204, y: ly - 9, w: 22, h: 18 };
+    for (const [r, sym] of [[bpanelFire, "−"], [bpanelHire, "+"]] as const) {
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = "#5a5f68";
+      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      ctx.fillStyle = "#e8e2d0";
+      ctx.font = "bold 13px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(sym, r.x + r.w / 2, r.y + r.h / 2 + 1);
+      ctx.textAlign = "left";
+    }
+    ly += 26;
+  }
+
   if (isDepositPoint(b)) {
     // depo içeriği: her ürün ayrı satır, dolanlar kırmızı "DOLU" etiketli
     ctx.font = "12px monospace";
@@ -430,13 +429,16 @@ export function drawBuildingPanel(
   }
 }
 
-// ---- Nüfus yönetim menüsü ----
+// ---- Nüfus ve iş yönetim paneli (Banished tarzı: iş bazlı sayılar) ----
 
-const POP_ROW_H = 26;
-const POP_MAX_ROWS = 12;
-const POP_W = 620;
+const POP_JOB_ROW_H = 24;
+const POP_LIST_ROW_H = 22;
+const POP_MAX_ROWS = 10; // köylü listesinde aynı anda görünen satır
+const POP_W = 640;
 let popScroll = 0;
 let popRect = { x: 0, y: 0, w: POP_W, h: 0 };
+let popJobsY = 0;
+let popListY = 0;
 
 export function popScrollBy(n: number, count: number): void {
   popScroll = Math.max(0, Math.min(Math.max(0, count - POP_MAX_ROWS), popScroll + n));
@@ -447,66 +449,84 @@ export function isOverPopPanel(sx: number, sy: number): boolean {
     sy >= popRect.y && sy <= popRect.y + popRect.h;
 }
 
-// Satırdaki meslek mini düğmeleri
-function popProfButtons(rowY: number) {
-  return PROFESSIONS.map((p, i) => ({
-    profession: p,
-    x: popRect.x + 408 + i * 40,
-    y: rowY + 3,
-    w: 37,
-    h: POP_ROW_H - 6,
-  }));
+// İş satırları: önce İnşaatçı (null), sonra istihdam eden binalar
+export function employmentRows(buildings: Building[]): (Building | null)[] {
+  const rows: (Building | null)[] = [null];
+  for (const b of buildings) {
+    if (b.done && b.def.maxWorkers > 0) rows.push(b);
+  }
+  return rows;
+}
+
+function jobRowButtons(rowY: number) {
+  return {
+    minus: { x: popRect.x + POP_W - 116, y: rowY + 3, w: 22, h: POP_JOB_ROW_H - 6 },
+    plus: { x: popRect.x + POP_W - 42, y: rowY + 3, w: 22, h: POP_JOB_ROW_H - 6 },
+  };
 }
 
 export type PopHit =
   | { kind: "close" }
-  | { kind: "profession"; index: number; profession: Profession }
+  | { kind: "hire"; building: Building | null } // null = inşaatçı
+  | { kind: "fire"; building: Building | null }
   | { kind: "select"; index: number }
   | { kind: "panel" }
   | null;
 
-export function popPanelHitTest(sx: number, sy: number, count: number): PopHit {
+export function popPanelHitTest(
+  sx: number,
+  sy: number,
+  villagers: Villager[],
+  buildings: Building[]
+): PopHit {
   const cx = popRect.x + popRect.w - 26;
   const cy = popRect.y + 8;
   if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
 
-  const rowsY = popRect.y + 58;
+  // iş satırları (+/-)
+  const rows = employmentRows(buildings);
+  for (let i = 0; i < rows.length; i++) {
+    const ry = popJobsY + i * POP_JOB_ROW_H;
+    if (sy < ry || sy >= ry + POP_JOB_ROW_H) continue;
+    const btn = jobRowButtons(ry);
+    if (sx >= btn.minus.x && sx <= btn.minus.x + btn.minus.w) {
+      return { kind: "fire", building: rows[i] };
+    }
+    if (sx >= btn.plus.x && sx <= btn.plus.x + btn.plus.w) {
+      return { kind: "hire", building: rows[i] };
+    }
+  }
+
+  // köylü listesi: isme tıkla -> seç
+  const count = villagers.length;
   const visible = Math.min(count, POP_MAX_ROWS);
-  if (sy >= rowsY && sy < rowsY + visible * POP_ROW_H) {
-    const row = Math.floor((sy - rowsY) / POP_ROW_H);
+  if (sy >= popListY && sy < popListY + visible * POP_LIST_ROW_H) {
+    const row = Math.floor((sy - popListY) / POP_LIST_ROW_H);
     const index = popScroll + row;
-    if (index < count) {
-      for (const b of popProfButtons(rowsY + row * POP_ROW_H)) {
-        if (sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) {
-          return { kind: "profession", index, profession: b.profession };
-        }
-      }
-      if (sx >= popRect.x + 10 && sx <= popRect.x + 180) return { kind: "select", index };
+    if (index < count && sx >= popRect.x + 10 && sx <= popRect.x + 190) {
+      return { kind: "select", index };
     }
   }
   if (isOverPopPanel(sx, sy)) return { kind: "panel" };
   return null;
 }
 
-const PROF_SHORT: Record<Profession, string> = {
-  worker: "İşçi",
-  woodcutter: "Odun",
-  gatherer: "Topl",
-  miner: "Madn",
-  builder: "İnşa",
-};
-
 export function drawPopulationPanel(
   ctx: CanvasRenderingContext2D,
-  villagers: Villager[]
+  villagers: Villager[],
+  buildings: Building[]
 ): void {
   const count = villagers.length;
   popScroll = Math.max(0, Math.min(Math.max(0, count - POP_MAX_ROWS), popScroll));
   const visible = Math.min(count, POP_MAX_ROWS);
+  const rows = employmentRows(buildings);
+
   const w = POP_W;
-  const h = 58 + visible * POP_ROW_H + 12;
   const x = (ctx.canvas.width - w) / 2;
-  const y = 60;
+  const y = 54;
+  popJobsY = y + 64;
+  popListY = popJobsY + rows.length * POP_JOB_ROW_H + 26;
+  const h = popListY - y + visible * POP_LIST_ROW_H + 12;
   popRect = { x, y, w, h };
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.92)";
@@ -520,66 +540,92 @@ export function drawPopulationPanel(
   ctx.textAlign = "left";
   ctx.fillStyle = "#ffe296";
   ctx.font = "bold 15px monospace";
-  ctx.fillText(`Nüfus Yönetimi (${count})`, x + 12, y + 18);
+  ctx.fillText("İş ve Nüfus Yönetimi", x + 12, y + 18);
 
-  // meslek özeti
-  const counts = new Map<Profession, number>();
-  for (const v of villagers) counts.set(v.profession, (counts.get(v.profession) ?? 0) + 1);
-  ctx.font = "11px monospace";
+  // özet: ortalık işçisi havuzu kalan herkes
+  const babies = villagers.filter((v) => v.baby).length;
+  const laborers = villagers.filter((v) => !v.baby && v.assignment.kind === "laborer").length;
+  ctx.font = "12px monospace";
+  ctx.fillStyle = "#8fd05e";
+  ctx.fillText(`Ortalık işleri: ${laborers}`, x + 12, y + 44);
   ctx.fillStyle = "#9a9488";
-  ctx.fillText(
-    PROFESSIONS.map((p) => `${PROFESSION_NAMES[p]}: ${counts.get(p) ?? 0}`).join("  •  "),
-    x + 12, y + 40
-  );
-  if (count > POP_MAX_ROWS) {
-    ctx.textAlign = "right";
-    ctx.fillText(`▲▼ kaydır (${popScroll + 1}-${popScroll + visible})`, x + w - 36, y + 40);
+  ctx.font = "11px monospace";
+  ctx.fillText(`•  Nüfus: ${count}  •  Bebek: ${babies}`, x + 160, y + 44);
+
+  // iş satırları
+  for (let i = 0; i < rows.length; i++) {
+    const b = rows[i];
+    const ry = popJobsY + i * POP_JOB_ROW_H;
+    if (i % 2 === 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      ctx.fillRect(x + 4, ry, w - 8, POP_JOB_ROW_H);
+    }
+    const assigned = b === null
+      ? villagers.filter((v) => !v.baby && v.assignment.kind === "builder").length
+      : villagers.filter(
+          (v) => v.assignment.kind === "building" && v.assignment.building === b
+        ).length;
+    const label = b === null
+      ? "İnşaatçı"
+      : `${ROLE_NAMES[b.type] ?? "Çalışan"} • ${b.def.name} (${b.x},${b.y})`;
+    const countText = b === null ? `${assigned}` : `${assigned}/${b.def.maxWorkers}`;
+
+    ctx.fillStyle = "#e8e2d0";
+    ctx.font = "12px monospace";
+    ctx.fillText(label, x + 12, ry + POP_JOB_ROW_H / 2, w - 200);
+
+    const btn = jobRowButtons(ry);
+    for (const [r, sym] of [[btn.minus, "−"], [btn.plus, "+"]] as const) {
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = "#5a5f68";
+      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      ctx.fillStyle = "#e8e2d0";
+      ctx.font = "bold 13px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(sym, r.x + r.w / 2, r.y + r.h / 2 + 1);
+      ctx.textAlign = "left";
+    }
+    ctx.fillStyle = b !== null && assigned >= b.def.maxWorkers ? "#e0a83c" : "#8fd05e";
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(countText, x + POP_W - 68, ry + POP_JOB_ROW_H / 2);
     ctx.textAlign = "left";
   }
 
-  const rowsY = y + 58;
+  // köylü listesi başlığı
+  ctx.fillStyle = "#9a9488";
+  ctx.font = "11px monospace";
+  ctx.fillText("Köylüler (isme tıkla: profil)", x + 12, popListY - 12);
+  if (count > POP_MAX_ROWS) {
+    ctx.textAlign = "right";
+    ctx.fillText(`▲▼ kaydır (${popScroll + 1}-${popScroll + visible}/${count})`, x + w - 36, popListY - 12);
+    ctx.textAlign = "left";
+  }
+
   for (let row = 0; row < visible; row++) {
     const v = villagers[popScroll + row];
-    const ry = rowsY + row * POP_ROW_H;
+    const ry = popListY + row * POP_LIST_ROW_H;
     if (row % 2 === 0) {
       ctx.fillStyle = "rgba(255,255,255,0.04)";
-      ctx.fillRect(x + 4, ry, w - 8, POP_ROW_H);
+      ctx.fillRect(x + 4, ry, w - 8, POP_LIST_ROW_H);
     }
-    // isim (tıklanınca köylüyü seçer) ve yaş
     ctx.fillStyle = "#9ad0ff";
     ctx.font = "bold 12px monospace";
-    ctx.fillText(v.fullName, x + 12, ry + POP_ROW_H / 2, 160);
+    ctx.fillText(v.fullName, x + 12, ry + POP_LIST_ROW_H / 2, 170);
     ctx.fillStyle = "#8a8478";
     ctx.font = "11px monospace";
-    ctx.fillText(`${v.identity.age}`, x + 184, ry + POP_ROW_H / 2);
-    // durum
+    ctx.fillText(v.baby ? "👶" : `${v.identity.age}`, x + 192, ry + POP_LIST_ROW_H / 2);
+    ctx.fillStyle = "#c9a35a";
+    ctx.fillText(v.baby ? "Bebek" : assignmentLabel(v.assignment), x + 222, ry + POP_LIST_ROW_H / 2, 180);
     ctx.fillStyle = "#c8c2b0";
-    ctx.fillText(v.statusText, x + 210, ry + POP_ROW_H / 2, 130);
+    ctx.fillText(v.statusText, x + 410, ry + POP_LIST_ROW_H / 2, 150);
     // tokluk mini bar
     const fullness = 1 - v.hunger / 100;
     ctx.fillStyle = "rgba(255,255,255,0.12)";
-    ctx.fillRect(x + 348, ry + 9, 50, 8);
+    ctx.fillRect(x + w - 66, ry + 7, 50, 8);
     ctx.fillStyle = fullness > 0.5 ? "#6fbf4a" : fullness > 0.2 ? "#e0a83c" : "#d4453f";
-    ctx.fillRect(x + 349, ry + 10, 48 * fullness, 6);
-    // meslek düğmeleri (bebeklerde gösterilmez)
-    if (v.baby) {
-      ctx.fillStyle = "#ffb0d0";
-      ctx.font = "11px monospace";
-      ctx.fillText("👶 Bebek", x + 412, ry + POP_ROW_H / 2);
-      continue;
-    }
-    for (const b of popProfButtons(ry)) {
-      const active = v.profession === b.profession;
-      ctx.fillStyle = active ? "rgba(90, 143, 60, 0.5)" : "rgba(255,255,255,0.07)";
-      ctx.fillRect(b.x, b.y, b.w, b.h);
-      ctx.strokeStyle = active ? "#8fd05e" : "#4a4f58";
-      ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
-      ctx.fillStyle = active ? "#d8f0c0" : "#b8b2a0";
-      ctx.font = "10px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(PROF_SHORT[b.profession], b.x + b.w / 2, b.y + b.h / 2 + 1);
-      ctx.textAlign = "left";
-    }
+    ctx.fillRect(x + w - 65, ry + 8, 48 * fullness, 6);
   }
 }
 

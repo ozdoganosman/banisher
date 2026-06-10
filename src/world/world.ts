@@ -84,9 +84,18 @@ export class World {
   }
 
   private generate(seed: number): void {
+    // kenar sönümü: yükseklikten kademeli pay düşülür; noise sayesinde kıyı
+    // çizgisi düzensiz olur ve sular derinleşerek açık denize doğal karışır
+    const FALLOFF = 18; // blok
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        const e = fractalNoise(x * 0.045, y * 0.045, seed, 4);
+        const edge = Math.min(x, y, this.width - 1 - x, this.height - 1 - y);
+        const ft = Math.min(1, edge / FALLOFF);
+        const fade = ft * ft * (3 - 2 * ft); // smoothstep
+        const e = Math.max(
+          0,
+          fractalNoise(x * 0.045, y * 0.045, seed, 4) - (1 - fade) * 0.6
+        );
         this.heights[this.index(x, y)] = e;
         let t: Tile;
         if (e < 0.36) t = Tile.Water;

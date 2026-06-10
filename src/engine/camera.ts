@@ -2,7 +2,7 @@ export class Camera {
   x: number; // bakılan dünya noktası (merkez)
   y: number;
   zoom = 3;
-  minZoom = 1;
+  minZoom = 0.5; // iyice uzaklaşınca harita denizin ortasında bir ada gibi görünür
   maxZoom = 8;
 
   constructor(

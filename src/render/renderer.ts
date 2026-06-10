@@ -52,6 +52,9 @@ export class Renderer {
   private tctx: CanvasRenderingContext2D;
   // Gece karanlığı katmanı (ışık delikleri açılır)
   private night = document.createElement("canvas");
+  // Harita dışını kaplayan açık deniz dokusu (desen ana context'ten üretilir)
+  private seaTile = document.createElement("canvas");
+  private sea: CanvasPattern | null = null;
 
   constructor(private world: World) {
     this.terrain = document.createElement("canvas");
@@ -64,6 +67,18 @@ export class Renderer {
       }
     }
     world.onTileChange = (x, y) => this.paintTile(x, y);
+
+    // açık deniz deseni: derin su renkleriyle 4 bloğluk karo
+    this.seaTile.width = 64;
+    this.seaTile.height = 64;
+    const sctx = this.seaTile.getContext("2d")!;
+    for (let sy = 0; sy < 16; sy++) {
+      for (let sx = 0; sx < 16; sx++) {
+        const i = Math.floor(hash2(sx, sy, 4242) * WATER_DEEP.length);
+        sctx.fillStyle = WATER_DEEP[i];
+        sctx.fillRect(sx * 4, sy * 4, 4, 4);
+      }
+    }
   }
 
   // Tek bir bloğu offscreen zemine boya (4x4'lük alt karelerle pixel dokusu)
@@ -245,20 +260,31 @@ export class Renderer {
       vh / 2 - camera.y * camera.zoom
     );
 
+    // harita dışı: uçsuz bucaksız deniz (kenar suları derinleşerek buna karışır)
+    if (!this.sea) this.sea = ctx.createPattern(this.seaTile, "repeat");
+    if (this.sea) {
+      const viewL = camera.x - vw / 2 / camera.zoom;
+      const viewT = camera.y - vh / 2 / camera.zoom;
+      ctx.fillStyle = this.sea;
+      ctx.fillRect(viewL - 64, viewT - 64, vw / camera.zoom + 128, vh / camera.zoom + 128);
+    }
+
     ctx.drawImage(this.terrain, 0, 0);
 
-    // Su parıltısı: görünür su bloklarında zamana bağlı küçük ışıltılar
+    // Su parıltısı: görünür su bloklarında (açık deniz dahil) küçük ışıltılar
     const halfW = vw / 2 / camera.zoom;
     const halfH = vh / 2 / camera.zoom;
-    const x0 = Math.max(0, Math.floor((camera.x - halfW) / TILE_SIZE));
-    const x1 = Math.min(this.world.width - 1, Math.ceil((camera.x + halfW) / TILE_SIZE));
-    const y0 = Math.max(0, Math.floor((camera.y - halfH) / TILE_SIZE));
-    const y1 = Math.min(this.world.height - 1, Math.ceil((camera.y + halfH) / TILE_SIZE));
+    const x0 = Math.floor((camera.x - halfW) / TILE_SIZE);
+    const x1 = Math.ceil((camera.x + halfW) / TILE_SIZE);
+    const y0 = Math.floor((camera.y - halfH) / TILE_SIZE);
+    const y1 = Math.ceil((camera.y + halfH) / TILE_SIZE);
     const phase = Math.floor(time * 1.6);
     ctx.fillStyle = "rgba(235, 248, 255, 0.25)";
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
-        if (this.world.get(tx, ty) !== Tile.Water) continue;
+        const isWater =
+          !this.world.inBounds(tx, ty) || this.world.get(tx, ty) === Tile.Water;
+        if (!isWater) continue;
         const v = hash2(tx * 7 + ty * 13, phase, 5);
         if (v < 0.88) continue;
         const ox = Math.floor(hash2(tx, ty + phase, 6) * 13);

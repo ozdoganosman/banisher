@@ -30,7 +30,27 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
-## Şu anki özellikler (v0.6)
+## Şu anki özellikler (v0.7)
+
+### v0.7: Banished tarzı iş sistemi ve ada haritası
+
+- **İş bazlı yönetim**: kişi bazlı meslek yerine Banished tarzı sayılar —
+  herkes varsayılan **ortalık işçisidir** (elle işaretlenen ağaç/çalı/taş +
+  depoya taşıma), **İnşaatçı** sayısı panelden ayarlanır, üretim işleri
+  **bina bazlı istihdamdır**: oduncu kulübesi 3 oduncu, toplayıcı kulübesi
+  3 toplayıcı, tapınak 2 rahip çalıştırır
+- **İş paneli (N)**: iş satırlarında [−]/[+] ile topluca işçi al/çıkar;
+  çıkarılanlar ortalık işleri havuzuna döner; bina paneline de aynı
+  düğmeler eklendi
+- Kulübeler çalışanı kadar işaretler (çalışan başına 2), çalışanı yoksa
+  durur; bina çalışanları yalnızca kendi çalışma alanında iş yapar
+- Şantiye kurulunca inşaatçı yoksa havuzdan biri otomatik atanır;
+  üretim binası tamamlanınca 1 işçi otomatik istihdam edilir
+- **Ada haritası**: kenarlar düzensiz bir kıyı şeridiyle denize gömülür,
+  harita dışı uçsuz bucaksız açık denizle kaplıdır (keskin sınır yok);
+  zoom-out sınırı 0.5x'e indirildi
+
+### v0.6: Konutlar, doğumlar, bebekler ve yeni binalar
 
 ### v0.6: Konutlar, doğumlar, bebekler ve yeni binalar
 

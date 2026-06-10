@@ -20,6 +20,7 @@ export interface BuildingDef {
   cost: number; // odun
   buildTime: number; // saniye (tek inşaatçı ile)
   size: number; // kapladığı kare kenarı (blok)
+  maxWorkers: number; // bu binada istihdam edilebilecek işçi sayısı
   desc: string;
 }
 
@@ -31,13 +32,15 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     cost: 8,
     buildTime: 8,
     size: 2,
-    desc: "Tamamlanınca 2 yeni köylü gelir",
+    maxWorkers: 0,
+    desc: "4 kişilik konut; boş yer varsa bebek doğabilir",
   },
   [BuildingType.Depot]: {
     name: "Depo",
     cost: 12,
     buildTime: 10,
     size: 2,
+    maxWorkers: 0,
     desc: "Odun ve yemek kapasitesi +80",
   },
   [BuildingType.Woodcutter]: {
@@ -45,20 +48,23 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     cost: 10,
     buildTime: 8,
     size: 2,
-    desc: "Çevredeki ağaçları otomatik işaretler",
+    maxWorkers: 3,
+    desc: "3 oduncu istihdam eder; çevresindeki ağaçları keserler",
   },
   [BuildingType.Gatherer]: {
     name: "Toplayıcı",
     cost: 10,
     buildTime: 8,
     size: 2,
-    desc: "Çevredeki çalı ve mantarları otomatik işaretler",
+    maxWorkers: 3,
+    desc: "3 toplayıcı istihdam eder; çevredeki çalı ve mantarları toplarlar",
   },
   [BuildingType.Camp]: {
     name: "Kamp",
     cost: 0,
     buildTime: 0,
     size: 2,
+    maxWorkers: 0,
     desc: "Koloninin başlangıç noktası; eşyalar buraya teslim edilir",
   },
   [BuildingType.Torch]: {
@@ -66,6 +72,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     cost: 2,
     buildTime: 2,
     size: 1,
+    maxWorkers: 0,
     desc: "Geceyi aydınlatır; köylüler ışıksız çalışamaz",
   },
   [BuildingType.Temple]: {
@@ -73,13 +80,15 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     cost: 20,
     buildTime: 12,
     size: 2,
-    desc: "Köylüler tapınarak bilgi üretir",
+    maxWorkers: 2,
+    desc: "2 rahip istihdam eder; tapınarak bilgi üretirler",
   },
   [BuildingType.Cafeteria]: {
     name: "Yemekhane",
     cost: 14,
     buildTime: 9,
     size: 2,
+    maxWorkers: 0,
     desc: "Burada yenen yemek tokluğu tamamen doldurur",
   },
   [BuildingType.Nursery]: {
@@ -87,6 +96,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     cost: 12,
     buildTime: 8,
     size: 2,
+    maxWorkers: 0,
     desc: "Bebekler acıkmaz ve iki kat hızlı büyür",
   },
 };
@@ -99,10 +109,11 @@ export function isHousing(b: Building): boolean {
   return b.done && (b.type === BuildingType.House || b.type === BuildingType.Camp);
 }
 
-// Tamamlanınca en yakın boştaki işçinin otomatik atanacağı meslek
-export const AUTO_PROFESSION: Partial<Record<BuildingType, "woodcutter" | "gatherer">> = {
-  [BuildingType.Woodcutter]: "woodcutter",
-  [BuildingType.Gatherer]: "gatherer",
+// Bina bazlı istihdamda çalışanların unvanı
+export const ROLE_NAMES: Partial<Record<BuildingType, string>> = {
+  [BuildingType.Woodcutter]: "Oduncu",
+  [BuildingType.Gatherer]: "Toplayıcı",
+  [BuildingType.Temple]: "Rahip",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları
@@ -133,8 +144,7 @@ export function isDepositPoint(b: Building): boolean {
   return b.done && (b.type === BuildingType.Depot || b.type === BuildingType.Camp);
 }
 
-const AUTO_MARK_RADIUS = 9; // blok
-const AUTO_MARK_MAX = 4; // aynı anda en fazla bu kadar işaret tut
+export const AUTO_MARK_RADIUS = 9; // blok: kulübenin çalışma alanı
 const SCAN_INTERVAL = 2.5; // saniye
 
 export class Building {
@@ -176,8 +186,9 @@ export class Building {
       this.worshipTimer <= 0 && !this.worshipClaimed;
   }
 
-  // Tamamlanmış üretim binaları çevrelerindeki kaynakları işaretler
-  update(dt: number, world: World): void {
+  // Üretim binaları çalışan sayısına göre çevrelerindeki kaynakları işaretler
+  // (çalışanı yoksa işaretlemez; her çalışan 2 işaretlik kapasite ekler)
+  update(dt: number, world: World, workers: number): void {
     if (!this.done) return;
     if (this.type === BuildingType.Temple && this.worshipTimer > 0) {
       this.worshipTimer -= dt;
@@ -186,16 +197,18 @@ export class Building {
     this.scanTimer -= dt;
     if (this.scanTimer > 0) return;
     this.scanTimer = SCAN_INTERVAL;
+    if (workers <= 0) return;
+    const maxMarks = workers * 2;
 
     const cx = this.x + 1;
     const cy = this.y + 1;
     if (this.type === BuildingType.Woodcutter) {
       if (isFull("wood")) return; // depo dolu: işaretlemeyi durdur
-      if (world.countMarkedNear(world.markedTrees, cx, cy, AUTO_MARK_RADIUS) >= AUTO_MARK_MAX) return;
+      if (world.countMarkedNear(world.markedTrees, cx, cy, AUTO_MARK_RADIUS) >= maxMarks) return;
       const t = world.findNearestTileOfType(Tile.Tree, cx, cy, AUTO_MARK_RADIUS, world.markedTrees);
       if (t) world.markTree(t.x, t.y);
     } else {
-      if (world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS) >= AUTO_MARK_MAX) return;
+      if (world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS) >= maxMarks) return;
       const b =
         (isFull("berry") ? null
           : world.findNearestTileOfType(Tile.Bush, cx, cy, AUTO_MARK_RADIUS, world.markedBushes)) ??
