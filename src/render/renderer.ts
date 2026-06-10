@@ -12,6 +12,23 @@ const WOOD_MID = "#8a6a43";
 const WALL = "#b08d5a"; // bina duvarı: zemindeki toprak tonundan ayrışsın
 const OUTLINE = "#3a2c1a";
 
+// Su: sığdan derine doğru koyulaşan iki palet (alt kare başına karıştırılır)
+const WATER_SHALLOW = ["#4383cc", "#477fc4", "#3f7abd"];
+const WATER_DEEP = ["#1c4170", "#1e466f", "#193d66"];
+
+// Ağaç tacı: koyudan açığa, ışık sol üstten gelir
+const CANOPY = ["#27581d", "#2e6b22", "#3d8a2e", "#54a83d", "#6cbf4e"];
+
+// İki hex rengi karıştır (t: 0 -> a, 1 -> b)
+function mix(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const r = Math.round(((pa >> 16) & 255) * (1 - t) + ((pb >> 16) & 255) * t);
+  const g = Math.round(((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t);
+  const bl = Math.round((pa & 255) * (1 - t) + (pb & 255) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+
 // Yerleştirme önizlemesi (hayalet bina)
 export interface Ghost {
   type: BuildingType;
@@ -41,9 +58,15 @@ export class Renderer {
   // Tek bir bloğu offscreen zemine boya (4x4'lük alt karelerle pixel dokusu)
   private paintTile(x: number, y: number): void {
     const t = this.world.get(x, y) as Tile;
-    const colors = TILE_COLORS[t];
     const px = x * TILE_SIZE;
     const py = y * TILE_SIZE;
+
+    if (t === Tile.Water) {
+      this.paintWater(px, py, x, y);
+      return;
+    }
+
+    const colors = TILE_COLORS[t];
     const sub = 4;
     for (let sy = 0; sy < sub; sy++) {
       for (let sx = 0; sx < sub; sx++) {
@@ -52,23 +75,83 @@ export class Renderer {
         this.tctx.fillRect(px + sx * 4, py + sy * 4, 4, 4);
       }
     }
+
+    // çimen zeminlerde tek tük ot pikselleri
+    if (t === Tile.Grass || t === Tile.Tree || t === Tile.Bush) {
+      this.tctx.fillStyle = "#3f6e2b";
+      for (let k = 0; k < 3; k++) {
+        const v = hash2(x * 3 + k, y * 7 + k, 21);
+        if (v > 0.55) continue;
+        const gx = px + 1 + Math.floor(hash2(x + k, y, 22) * 14);
+        const gy = py + 2 + Math.floor(hash2(x, y + k, 23) * 12);
+        this.tctx.fillRect(gx, gy, 1, 2);
+      }
+    }
+
+    this.paintRelief(px, py, x, y);
+
     if (t === Tile.Tree) this.paintTree(px, py, x, y);
     else if (t === Tile.Bush) this.paintBush(px, py, x, y);
   }
 
+  // Kabartma gölgelendirme: ışık kuzeybatıdan gelir; yokuş yukarı bakan
+  // yüzeyler aydınlanır, aşağı bakanlar kararır (Minecraft haritası stili)
+  private paintRelief(px: number, py: number, x: number, y: number): void {
+    const w = this.world;
+    const h = w.heightAt(x, y);
+    const d = (h - w.heightAt(x, y - 1) + (h - w.heightAt(x - 1, y))) * 4;
+    if (Math.abs(d) < 0.03) return;
+    this.tctx.fillStyle =
+      d > 0
+        ? `rgba(255, 240, 200, ${Math.min(0.14, d)})`
+        : `rgba(15, 25, 55, ${Math.min(0.16, -d)})`;
+    this.tctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+  }
+
+  // Su: derinleştikçe koyulaşır, kıyılarda köpük çizgisi
+  private paintWater(px: number, py: number, x: number, y: number): void {
+    const w = this.world;
+    const depth = Math.min(1, Math.max(0, (0.36 - w.heightAt(x, y)) / 0.13));
+    const sub = 4;
+    for (let sy = 0; sy < sub; sy++) {
+      for (let sx = 0; sx < sub; sx++) {
+        const i = Math.floor(hash2(x * sub + sx, y * sub + sy, 42) * WATER_SHALLOW.length);
+        this.tctx.fillStyle = mix(WATER_SHALLOW[i], WATER_DEEP[i], depth);
+        this.tctx.fillRect(px + sx * 4, py + sy * 4, 4, 4);
+      }
+    }
+    // kıyı köpüğü: kara komşusu olan kenarlara açık çizgi
+    this.tctx.fillStyle = "rgba(225, 240, 255, 0.4)";
+    const land = (nx: number, ny: number) =>
+      w.inBounds(nx, ny) && w.get(nx, ny) !== Tile.Water;
+    if (land(x, y - 1)) this.tctx.fillRect(px, py, TILE_SIZE, 2);
+    if (land(x, y + 1)) this.tctx.fillRect(px, py + TILE_SIZE - 2, TILE_SIZE, 2);
+    if (land(x - 1, y)) this.tctx.fillRect(px, py, 2, TILE_SIZE);
+    if (land(x + 1, y)) this.tctx.fillRect(px + TILE_SIZE - 2, py, 2, TILE_SIZE);
+  }
+
   private paintTree(px: number, py: number, x: number, y: number): void {
     const c = this.tctx;
+    const cx = px + 8;
+    const cy = py + 6;
+    // yere düşen gölge (ışık kuzeybatıdan: gölge güneydoğuya)
+    c.fillStyle = "rgba(10, 20, 10, 0.22)";
+    c.beginPath();
+    c.ellipse(cx + 1.5, py + 13, 5.5, 2.2, 0, 0, Math.PI * 2);
+    c.fill();
     // gövde
     c.fillStyle = WOOD_DARK;
     c.fillRect(px + 7, py + 9, 2, 6);
-    // yapraklar: piksel piksel kabaca yuvarlak bir taç
-    const cx = px + 8;
-    const cy = py + 6;
+    c.fillStyle = "#57391f";
+    c.fillRect(px + 8, py + 9, 1, 6); // gövdenin gölgeli yarısı
+    // yapraklar: yönlü ışıkla taç (sol üst açık, sağ alt koyu)
     for (let dy = -5; dy <= 5; dy++) {
       for (let dx = -5; dx <= 5; dx++) {
         if (dx * dx + dy * dy > 22) continue;
         const v = hash2(x * 16 + dx, y * 16 + dy, 99);
-        c.fillStyle = v < 0.25 ? "#2e6b22" : v < 0.8 ? "#3d8a2e" : "#54a83d";
+        const light = 0.55 - (dx + dy) * 0.07 + (v - 0.5) * 0.55;
+        const idx = Math.min(CANOPY.length - 1, Math.max(0, Math.floor(light * CANOPY.length)));
+        c.fillStyle = CANOPY[idx];
         c.fillRect(cx + dx, cy + dy, 1, 1);
       }
     }
@@ -76,14 +159,20 @@ export class Renderer {
 
   private paintBush(px: number, py: number, x: number, y: number): void {
     const c = this.tctx;
-    // alçak yuvarlak çalı + kırmızı meyveler
     const cx = px + 8;
     const cy = py + 10;
+    // küçük gölge
+    c.fillStyle = "rgba(10, 20, 10, 0.18)";
+    c.beginPath();
+    c.ellipse(cx + 1, cy + 3, 4.5, 1.6, 0, 0, Math.PI * 2);
+    c.fill();
+    // alçak yuvarlak çalı: üstü açık, altı koyu + kırmızı meyveler
     for (let dy = -3; dy <= 3; dy++) {
       for (let dx = -4; dx <= 4; dx++) {
         if (dx * dx + dy * dy * 2 > 16) continue;
         const v = hash2(x * 16 + dx, y * 16 + dy, 77);
-        c.fillStyle = v < 0.5 ? "#3a7a2c" : "#4a9438";
+        const light = 0.5 - (dx + dy) * 0.09 + (v - 0.5) * 0.5;
+        c.fillStyle = light > 0.6 ? "#56a843" : light > 0.3 ? "#4a9438" : "#34701f";
         c.fillRect(cx + dx, cy + dy, 1, 1);
       }
     }
@@ -93,6 +182,10 @@ export class Renderer {
       const by = cy - 2 + Math.floor(hash2(x * 4 + k, y, 66) * 4);
       c.fillRect(bx, by, 1, 1);
     }
+    // meyvelerde parlama
+    c.fillStyle = "rgba(255,255,255,0.5)";
+    const hx = cx - 3 + Math.floor(hash2(x, y, 58) * 6);
+    c.fillRect(hx, cy - 2, 1, 1);
   }
 
   render(
@@ -118,6 +211,26 @@ export class Renderer {
     );
 
     ctx.drawImage(this.terrain, 0, 0);
+
+    // Su parıltısı: görünür su bloklarında zamana bağlı küçük ışıltılar
+    const halfW = vw / 2 / camera.zoom;
+    const halfH = vh / 2 / camera.zoom;
+    const x0 = Math.max(0, Math.floor((camera.x - halfW) / TILE_SIZE));
+    const x1 = Math.min(this.world.width - 1, Math.ceil((camera.x + halfW) / TILE_SIZE));
+    const y0 = Math.max(0, Math.floor((camera.y - halfH) / TILE_SIZE));
+    const y1 = Math.min(this.world.height - 1, Math.ceil((camera.y + halfH) / TILE_SIZE));
+    const phase = Math.floor(time * 1.6);
+    ctx.fillStyle = "rgba(235, 248, 255, 0.25)";
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (this.world.get(tx, ty) !== Tile.Water) continue;
+        const v = hash2(tx * 7 + ty * 13, phase, 5);
+        if (v < 0.88) continue;
+        const ox = Math.floor(hash2(tx, ty + phase, 6) * 13);
+        const oy = Math.floor(hash2(tx + phase, ty, 7) * 14);
+        ctx.fillRect(tx * TILE_SIZE + ox, ty * TILE_SIZE + oy, 2, 1);
+      }
+    }
 
     // İşaretli bloklar: yanıp sönen çerçeveler (ağaç sarı, çalı turuncu)
     const pulse = 0.45 + 0.3 * Math.sin(time * 5);
@@ -200,6 +313,10 @@ export class Renderer {
       this.drawSite(ctx, px, py, b.progress / b.def.buildTime);
       return;
     }
+    // binanın güneydoğuya düşen gölgesi
+    ctx.fillStyle = "rgba(10, 15, 10, 0.2)";
+    ctx.fillRect(px + 4, py + 29, 28, 4);
+    ctx.fillRect(px + 29, py + 8, 4, 21);
     switch (b.type) {
       case BuildingType.House: this.drawHouse(ctx, px, py); break;
       case BuildingType.Depot: this.drawDepot(ctx, px, py); break;
@@ -247,12 +364,15 @@ export class Renderer {
     ctx.fillStyle = WOOD_MID;
     ctx.fillRect(px + 4, py + 20, 24, 1);
     this.outlineRect(ctx, px + 4, py + 13, 24, 16);
-    // çatı (üçgen, katmanlı)
-    ctx.fillStyle = "#7a3b2e";
+    // çatı (üçgen, katmanlı; üst sıralar ışık alır)
     for (let r = 0; r < 10; r++) {
       const w = 4 + r * 2.6;
+      ctx.fillStyle = r < 3 ? "#9c4f3c" : r < 7 ? "#7a3b2e" : "#5e2c22";
       ctx.fillRect(px + 16 - w / 2, py + 3 + r, w, 1.5);
     }
+    // çatı saçağının duvara düşen gölgesi
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 4, py + 13, 24, 2);
     // kapı ve pencere
     ctx.fillStyle = "#4a2e1a";
     ctx.fillRect(px + 13, py + 21, 6, 8);
@@ -268,6 +388,11 @@ export class Renderer {
     this.outlineRect(ctx, px + 2, py + 11, 28, 18);
     ctx.fillStyle = WOOD_DARK;
     ctx.fillRect(px + 1, py + 6, 30, 6); // düz çatı bandı
+    ctx.fillStyle = "#7d5835";
+    ctx.fillRect(px + 1, py + 6, 30, 2); // çatı ışığı
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 2, py + 12, 28, 2); // saçak gölgesi
+    ctx.fillStyle = WOOD_DARK;
     ctx.fillRect(px + 12, py + 18, 8, 11); // büyük kapı
     // yandaki sandıklar
     ctx.fillStyle = "#c9a35a";
@@ -286,6 +411,10 @@ export class Renderer {
     this.outlineRect(ctx, px + 3, py + 12, 17, 17);
     ctx.fillStyle = WOOD_DARK;
     ctx.fillRect(px + 2, py + 8, 19, 5);
+    ctx.fillStyle = "#7d5835";
+    ctx.fillRect(px + 2, py + 8, 19, 2);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 3, py + 13, 17, 2);
     ctx.fillStyle = "#4a2e1a";
     ctx.fillRect(px + 9, py + 21, 5, 8);
     // kütük yığını
@@ -303,6 +432,10 @@ export class Renderer {
     this.outlineRect(ctx, px + 3, py + 12, 17, 17);
     ctx.fillStyle = "#4a7a3a";
     ctx.fillRect(px + 2, py + 8, 19, 5);
+    ctx.fillStyle = "#62975a";
+    ctx.fillRect(px + 2, py + 8, 19, 2);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 3, py + 13, 17, 2);
     ctx.fillStyle = "#4a2e1a";
     ctx.fillRect(px + 9, py + 21, 5, 8);
     // meyve sepeti

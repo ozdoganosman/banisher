@@ -7,6 +7,8 @@ export class World {
   readonly width: number;
   readonly height: number;
   readonly tiles: Uint8Array;
+  // Yükseklik haritası: kabartma gölgelendirme ve su derinliği için
+  readonly heights: Float32Array;
 
   // Kesilmek/toplanmak üzere işaretlenen ve bir köylünün sahiplendiği bloklar
   readonly markedTrees = new Set<number>();
@@ -27,6 +29,7 @@ export class World {
     this.width = width;
     this.height = height;
     this.tiles = new Uint8Array(width * height);
+    this.heights = new Float32Array(width * height);
     this.generate(seed);
   }
 
@@ -45,6 +48,13 @@ export class World {
   set(x: number, y: number, t: Tile): void {
     this.tiles[this.index(x, y)] = t;
     this.onTileChange?.(x, y);
+  }
+
+  // Sınır dışında en yakın kenar değeri döner (gölgelendirme kenarlarda da çalışsın)
+  heightAt(x: number, y: number): number {
+    const cx = Math.min(this.width - 1, Math.max(0, x));
+    const cy = Math.min(this.height - 1, Math.max(0, y));
+    return this.heights[cy * this.width + cx];
   }
 
   walkableAt(x: number, y: number): boolean {
@@ -73,6 +83,7 @@ export class World {
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
         const e = fractalNoise(x * 0.045, y * 0.045, seed, 4);
+        this.heights[this.index(x, y)] = e;
         let t: Tile;
         if (e < 0.36) t = Tile.Water;
         else if (e < 0.4) t = Tile.Sand;
