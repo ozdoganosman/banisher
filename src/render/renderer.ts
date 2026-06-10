@@ -814,6 +814,59 @@ export class Renderer {
         ctx.fillRect(x + 1.5, y - 1.5, 1, 1.5);
         break;
       }
+      case "rabbit": {
+        ctx.fillStyle = "#cfc8ba";
+        ctx.fillRect(x - 2, y - 3 + bob, 4, 2.5);
+        ctx.fillRect(x + f * 1.8 - 0.5, y - 4 + bob + headDrop, 2, 2); // kafa
+        ctx.fillRect(x + f * 1.8 - 0.3, y - 5.8 + bob + headDrop, 0.8, 2); // kulaklar
+        ctx.fillRect(x + f * 1.8 + 0.8, y - 5.8 + bob + headDrop, 0.8, 2);
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(x - f * 2.2, y - 2.5 + bob, 1, 1); // pamuk kuyruk
+        break;
+      }
+      case "deer": {
+        ctx.fillStyle = "#a8713c";
+        ctx.fillRect(x - 3.5, y - 7 + bob, 7, 4);
+        ctx.fillRect(x + f * 3.5 - 1, y - 9 + bob + headDrop, 2.5, 3); // kafa (yüksek boyun)
+        ctx.fillStyle = "#7a5026";
+        // çatallı boynuz
+        ctx.fillRect(x + f * 3.2, y - 11 + bob + headDrop, 0.8, 2.2);
+        ctx.fillRect(x + f * 4.2, y - 10.6 + bob + headDrop, 0.8, 1.8);
+        ctx.fillRect(x + f * 2.6, y - 10.3 + bob + headDrop, 1.8, 0.7);
+        ctx.fillRect(x - 3, y - 3, 1, 3);
+        ctx.fillRect(x + 2, y - 3, 1, 3);
+        ctx.fillStyle = "#e8dcc8";
+        ctx.fillRect(x - f * 3.8, y - 6 + bob, 1.2, 1.5); // kuyruk
+        break;
+      }
+      case "boar": {
+        ctx.fillStyle = "#5a4a3c";
+        ctx.fillRect(x - 3.5, y - 5 + bob, 7, 4);
+        ctx.fillRect(x + f * 3.5 - 1, y - 5.5 + bob + headDrop, 2.5, 3); // kafa
+        ctx.fillStyle = "#3f342a";
+        ctx.fillRect(x - 3, y - 5.8 + bob, 6, 1); // sırt kılları
+        ctx.fillStyle = "#e8e2d0";
+        ctx.fillRect(x + f * 4.3, y - 3.4 + bob + headDrop, 1, 1); // diş
+        ctx.fillStyle = "#3f342a";
+        ctx.fillRect(x - 2.5, y - 1.5, 1, 1.5);
+        ctx.fillRect(x + 1.8, y - 1.5, 1, 1.5);
+        break;
+      }
+    }
+
+    // av işareti: kırmızı köşeli çerçeve
+    if (a.hunted) {
+      ctx.strokeStyle = "rgba(230, 60, 60, 0.9)";
+      ctx.lineWidth = 0.8;
+      const r = 6;
+      for (const [cxs, cys] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        ctx.beginPath();
+        ctx.moveTo(x + cxs * r, y - 4 + cys * r - (cys < 0 ? 1 : -1) * 0);
+        ctx.lineTo(x + cxs * r, y - 4 + cys * r * 0.45);
+        ctx.moveTo(x + cxs * r, y - 4 + cys * r);
+        ctx.lineTo(x + cxs * r * 0.45, y - 4 + cys * r);
+        ctx.stroke();
+      }
     }
 
     // açlık göstergesi: aç hayvanın tepesinde küçük bar

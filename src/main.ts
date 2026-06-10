@@ -25,7 +25,7 @@ import {
   updateMessages,
 } from "./render/hud";
 import { buyTech } from "./sim/tech";
-import { Animal, ANIMAL_DEFS, BARN_HERD, type AnimalType } from "./sim/animals";
+import { Animal, ANIMAL_DEFS, BARN_HERD, WILD_POOL, type AnimalType } from "./sim/animals";
 import {
   Building,
   BUILDING_DEFS,
@@ -160,6 +160,35 @@ function fire(target: Building | null): void {
 }
 
 // Binayı yık: blokları aç, çalışanları/sakinleri serbest bırak, yarı iade
+// Yabani hayvan: haritada rastgele çimenlik bir noktaya doğar
+const WILD_CAP = 20;
+function spawnWildAnimal(): boolean {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const x = 4 + Math.floor(Math.random() * (MAP_W - 8));
+    const y = 4 + Math.floor(Math.random() * (MAP_H - 8));
+    if (!world.walkableAt(x, y)) continue;
+    const type = WILD_POOL[Math.floor(Math.random() * WILD_POOL.length)];
+    animals.push(new Animal(type, null, x, y));
+    return true;
+  }
+  return false;
+}
+
+// Tıklanan noktadaki yabani hayvan (av işareti için)
+function wildAnimalAt(wx: number, wy: number): Animal | null {
+  let best: Animal | null = null;
+  let bestDist = 8;
+  for (const a of animals) {
+    if (!a.wild || a.dead) continue;
+    const d = Math.hypot(wx - a.x, wy - (a.y - 3));
+    if (d < bestDist) {
+      bestDist = d;
+      best = a;
+    }
+  }
+  return best;
+}
+
 // Çiftlik çevresindeki yürünebilir bloğa hayvan bırak
 function spawnAnimal(barn: Building, type: AnimalType): void {
   for (let r = 1; r <= 4; r++) {
@@ -253,6 +282,9 @@ outer: for (let r = 0; r < 20; r++) {
 spawnVillagersAround(campCenter.x, campCenter.y, VILLAGER_COUNT);
 camera.x = (campCenter.x + 0.5) * TILE_SIZE;
 camera.y = (campCenter.y + 0.5) * TILE_SIZE;
+
+// doğada başlangıç faunası
+for (let i = 0; i < 14; i++) spawnWildAnimal();
 
 // ---- Girdi ----
 
@@ -388,11 +420,17 @@ input.onClick = (wx, wy, sx, sy) => {
       addMessage("Bir ortalık işçisi inşaatçı oldu");
     }
   } else {
-    // köylü > bina > blok işaretleme önceliğiyle tıklamayı yönlendir
+    // köylü > yabani hayvan (av) > bina > blok işaretleme önceliği
     const v = villagerAt(wx, wy);
     if (v) {
       selectedVillager = v;
       selectedBuilding = null;
+      return;
+    }
+    const wa = wildAnimalAt(wx, wy);
+    if (wa) {
+      wa.hunted = !wa.hunted;
+      if (!wa.hunted) wa.claimed = false;
       return;
     }
     const b = buildingAt(tx, ty);
@@ -592,6 +630,12 @@ function step(dt: number) {
   if (days !== lastDayCount) {
     lastDayCount = days;
     nightlyBirths();
+    // doğa kendini yeniler: yabani nüfus azaldıysa yenileri türer
+    const wildCount = animals.filter((a) => a.wild).length;
+    if (wildCount < WILD_CAP) {
+      spawnWildAnimal();
+      if (wildCount < WILD_CAP / 2) spawnWildAnimal();
+    }
   }
 
   // konut atamalarını periyodik tazele
@@ -609,8 +653,8 @@ function step(dt: number) {
     const a = animals[i];
     if (!a.dead) continue;
     if (a.slaughtered) {
-      // kesilen hayvanın yerine zamanla yenisi gelir
-      animalRespawns.push({ barn: a.barn, type: a.type, t: 90 });
+      // kesilen çiftlik hayvanının yerine zamanla yenisi gelir (av hariç)
+      if (a.barn) animalRespawns.push({ barn: a.barn, type: a.type, t: 90 });
     } else {
       addMessage(`🐄 Bir ${ANIMAL_DEFS[a.type].name.toLowerCase()} açlıktan telef oldu!`);
     }

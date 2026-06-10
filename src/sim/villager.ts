@@ -111,6 +111,7 @@ type Job =
   | { kind: "mine"; tile: number }
   | { kind: "fish"; tile: number }
   | { kind: "tend"; animal: Animal }
+  | { kind: "hunt"; animal: Animal }
   | { kind: "build"; building: Building }
   | { kind: "worship"; building: Building }
   | { kind: "eat"; building: Building }
@@ -191,6 +192,7 @@ export class Villager {
           case "mine": return "Taş ocağına gidiyor";
           case "fish": return "Kıyıya gidiyor";
           case "tend": return "Hayvana gidiyor";
+          case "hunt": return "Ava gidiyor";
           case "build": return "Şantiyeye gidiyor";
           case "worship": return "Tapınağa gidiyor";
           case "eat": return "Yemekhaneye gidiyor";
@@ -205,7 +207,7 @@ export class Villager {
         return `${n[0].toUpperCase()}${n.slice(1)} topluyor`;
       }
       case "tending":
-        return "Hayvanla ilgileniyor";
+        return this.job?.kind === "hunt" ? "Avlanıyor" : "Hayvanla ilgileniyor";
       case "mining":
         return "Taş kazıyor";
       case "fishing":
@@ -320,6 +322,7 @@ export class Villager {
       case "mine": world.claimedStones.delete(this.job.tile); break;
       case "build": this.job.building.claimed = false; break;
       case "tend": this.job.animal.claimed = false; break;
+      case "hunt": this.job.animal.claimed = false; break;
       case "worship": this.job.building.worshipClaimed = false; break;
       case "deposit": break;
     }
@@ -522,6 +525,37 @@ export class Villager {
         }
       }
     } else {
+      // av: oyuncunun işaretlediği yabani hayvanlar
+      if (!bagFull && !isFull("meat")) {
+        let bestA: Animal | null = null;
+        let bestD = Infinity;
+        for (const a of animals) {
+          if (!a.hunted || a.claimed || a.dead || !lit(a.x, a.y)) continue;
+          const d = Math.abs(a.x - this.x) + Math.abs(a.y - this.y);
+          if (d < bestD) {
+            bestD = d;
+            bestA = a;
+          }
+        }
+        if (bestA) {
+          const target = bestA;
+          candidates.push({
+            dist: bestD / TILE_SIZE,
+            start: () => {
+              const path = findPath(
+                world, this.tileX, this.tileY,
+                Math.floor(target.x / TILE_SIZE), Math.floor(target.y / TILE_SIZE)
+              );
+              if (!path) return false;
+              target.claimed = true;
+              this.job = { kind: "hunt", animal: target };
+              this.startPath(path);
+              return true;
+            },
+          });
+        }
+      }
+
       // ortalık işçisi: elle/kulübece işaretlenmiş her kaynağa gider
       if (!isFull("wood") && !bagFull) {
         const tree = world.findNearestMarked(
@@ -658,6 +692,8 @@ export class Villager {
         return !isFull("fish") && tileLit(this.job.tile);
       case "tend":
         return !this.job.animal.dead;
+      case "hunt":
+        return !this.job.animal.dead && this.job.animal.hunted;
       case "build":
       case "worship":
         return !this.job.building.removed &&
@@ -737,6 +773,7 @@ export class Villager {
         break;
       }
       case "tend":
+      case "hunt":
         this.state = "tending";
         this.timer = TEND_TIME;
         this.faceTowards(this.job.animal.x);
@@ -927,8 +964,8 @@ export class Villager {
 
   private tend(dt: number): void {
     const job = this.job;
-    if (!job || job.kind !== "tend" || job.animal.dead) {
-      if (job?.kind === "tend") job.animal.claimed = false;
+    if (!job || (job.kind !== "tend" && job.kind !== "hunt") || job.animal.dead) {
+      if (job?.kind === "tend" || job?.kind === "hunt") job.animal.claimed = false;
       this.job = null;
       this.toIdle();
       return;
@@ -937,12 +974,19 @@ export class Villager {
     this.timer -= dt;
     if (this.timer <= 0) {
       const a = job.animal;
-      this.gainItem(a.def.product, a.def.yieldAmount, a.x, a.y - 10);
-      if (a.def.slaughter) {
+      if (job.kind === "hunt") {
+        // av: hayvan gider, et gelir
+        this.gainItem("meat", a.def.huntYield, a.x, a.y - 10);
         a.slaughtered = true;
         a.dead = true;
       } else {
-        a.produceTimer = a.def.interval;
+        this.gainItem(a.def.product, a.def.yieldAmount, a.x, a.y - 10);
+        if (a.def.slaughter) {
+          a.slaughtered = true;
+          a.dead = true;
+        } else {
+          a.produceTimer = a.def.interval;
+        }
       }
       a.claimed = false;
       this.job = null;
