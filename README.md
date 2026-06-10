@@ -69,8 +69,6 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 ### v0.9: Minecraft tarzı envanter ve mantık düzeltmeleri
 
-### v0.9: Minecraft tarzı envanter ve mantık düzeltmeleri
-
 - **Koloni envanteri**: üst bardaki kaynak yazıları kaldırıldı; araç
   çubuğunun üstünde Minecraft tarzı slot çubuğu (pikselli eşya ikonları,
   sağ altta adet, altta kapasite çizgisi, dolu slotta kırmızı çerçeve)
@@ -87,8 +85,6 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 ### v0.8: Saat, mini harita ve yaşam kalitesi
 
-### v0.8: Saat, mini harita ve yaşam kalitesi
-
 - **Saat**: tarih yanında 24 saatlik saat (gün 06:00'da başlar, gece ~22:45)
 - **Mini harita**: sağ altta ada görünümü — binalar turuncu, köylüler beyaz
   (bebekler pembe), görüş alanı çerçevesi; tıklayınca kamera oraya gider
@@ -96,8 +92,6 @@ Tarayıcıda `http://localhost:5173` adresini aç.
   ağaç/çalı/mantar/taşlar işaretlenir
 - **Kıtlık uyarısı**: yemek stoğu sıfırlanınca bildirim
 - **Oyun sonu**: tüm köylüler ölürse "KOLONİ YOK OLDU" perdesi, simülasyon durur
-
-### v0.7: Banished tarzı iş sistemi ve ada haritası
 
 ### v0.7: Banished tarzı iş sistemi ve ada haritası
 
@@ -116,8 +110,6 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 - **Ada haritası**: kenarlar düzensiz bir kıyı şeridiyle denize gömülür,
   harita dışı uçsuz bucaksız açık denizle kaplıdır (keskin sınır yok);
   zoom-out sınırı 0.5x'e indirildi
-
-### v0.6: Konutlar, doğumlar, bebekler ve yeni binalar
 
 ### v0.6: Konutlar, doğumlar, bebekler ve yeni binalar
 
