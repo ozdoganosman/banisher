@@ -696,7 +696,7 @@ export function drawHud(
   ctx.textAlign = "right";
   ctx.fillStyle = speed > 1 ? "#ffd23c" : "#9a9488";
   ctx.font = "12px monospace";
-  const help = "1-6: bina • N: nüfus • Esc: iptal • Space: duraklat • X: hız";
+  const help = "N: nüfus • Space: durdur • X: hız";
   ctx.fillText(`Hız: ${speed}x`, w - 12, 10);
   ctx.fillStyle = "#9a9488";
   ctx.fillText(help, w - 12, 25);
