@@ -9,6 +9,7 @@ export const enum Tile {
   Dirt = 3,
   Stone = 4,
   Tree = 5,
+  Bush = 6, // meyve çalısı: toplayıcılar yemek toplar
 }
 
 export function isWalkable(t: Tile): boolean {
@@ -23,4 +24,5 @@ export const TILE_COLORS: Record<Tile, string[]> = {
   [Tile.Dirt]: ["#8a6a43", "#84653f", "#907048"],
   [Tile.Stone]: ["#7c7f86", "#75787f", "#84878e"],
   [Tile.Tree]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, ağaç üstüne çizilir
+  [Tile.Bush]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, çalı üstüne çizilir
 };

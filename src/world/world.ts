@@ -1,14 +1,24 @@
 import { fractalNoise, hash2 } from "./noise";
 import { Tile, isWalkable, TILE_SIZE } from "./tiles";
 
+const BUSH_REGROW_TIME = 75; // saniye
+
 export class World {
   readonly width: number;
   readonly height: number;
   readonly tiles: Uint8Array;
 
-  // Kesilmek üzere işaretlenen ve bir köylü tarafından sahiplenilen ağaçlar
-  readonly marked = new Set<number>();
-  readonly claimed = new Set<number>();
+  // Kesilmek/toplanmak üzere işaretlenen ve bir köylünün sahiplendiği bloklar
+  readonly markedTrees = new Set<number>();
+  readonly claimedTrees = new Set<number>();
+  readonly markedBushes = new Set<number>();
+  readonly claimedBushes = new Set<number>();
+
+  // Bina kaplayan bloklar: yürünemez
+  readonly blocked = new Set<number>();
+
+  // Toplanan çalılar bir süre sonra yeniden büyür
+  private regrow: { x: number; y: number; t: number }[] = [];
 
   // Bir blok değiştiğinde (örn. ağaç kesildi) renderer'ın haberi olsun
   onTileChange: ((x: number, y: number) => void) | null = null;
@@ -38,7 +48,25 @@ export class World {
   }
 
   walkableAt(x: number, y: number): boolean {
-    return this.inBounds(x, y) && isWalkable(this.get(x, y));
+    return (
+      this.inBounds(x, y) &&
+      isWalkable(this.get(x, y)) &&
+      !this.blocked.has(this.index(x, y))
+    );
+  }
+
+  update(dt: number): void {
+    for (let i = this.regrow.length - 1; i >= 0; i--) {
+      const r = this.regrow[i];
+      r.t -= dt;
+      if (r.t <= 0) {
+        this.regrow.splice(i, 1);
+        // arada bina yapılmadıysa çalı geri gelsin
+        if (this.get(r.x, r.y) === Tile.Grass && !this.blocked.has(this.index(r.x, r.y))) {
+          this.set(r.x, r.y, Tile.Bush);
+        }
+      }
+    }
   }
 
   private generate(seed: number): void {
@@ -52,49 +80,117 @@ export class World {
         else if (e < 0.68) t = Tile.Dirt;
         else t = Tile.Stone;
 
-        // Orman kuşakları: çimen üzerinde ayrı bir noise ile ağaç yerleştir
         if (t === Tile.Grass) {
           const f = fractalNoise(x * 0.09, y * 0.09, seed + 7777, 3);
-          if (f > 0.55 && hash2(x, y, seed + 13) > 0.35) t = Tile.Tree;
+          if (f > 0.55 && hash2(x, y, seed + 13) > 0.35) {
+            // orman kuşakları
+            t = Tile.Tree;
+          } else if (f > 0.46 && hash2(x, y, seed + 31) > 0.82) {
+            // orman kenarlarında meyve çalıları
+            t = Tile.Bush;
+          } else if (hash2(x, y, seed + 47) > 0.985) {
+            // açık alanda seyrek çalılar
+            t = Tile.Bush;
+          }
         }
         this.tiles[this.index(x, y)] = t;
       }
     }
   }
 
-  // Ağacı işaretle / işareti kaldır (oyuncu tıklaması)
+  // Ağacı/çalıyı işaretle veya işareti kaldır (oyuncu tıklaması)
   toggleMark(x: number, y: number): void {
-    if (!this.inBounds(x, y) || this.get(x, y) !== Tile.Tree) return;
+    if (!this.inBounds(x, y)) return;
+    const t = this.get(x, y);
     const i = this.index(x, y);
-    if (this.marked.has(i)) {
-      this.marked.delete(i);
-      this.claimed.delete(i);
-    } else {
-      this.marked.add(i);
+    if (t === Tile.Tree) {
+      if (this.markedTrees.has(i)) {
+        this.markedTrees.delete(i);
+        this.claimedTrees.delete(i);
+      } else {
+        this.markedTrees.add(i);
+      }
+    } else if (t === Tile.Bush) {
+      if (this.markedBushes.has(i)) {
+        this.markedBushes.delete(i);
+        this.claimedBushes.delete(i);
+      } else {
+        this.markedBushes.add(i);
+      }
     }
+  }
+
+  markTree(x: number, y: number): void {
+    if (this.get(x, y) === Tile.Tree) this.markedTrees.add(this.index(x, y));
+  }
+
+  markBush(x: number, y: number): void {
+    if (this.get(x, y) === Tile.Bush) this.markedBushes.add(this.index(x, y));
   }
 
   chopTree(x: number, y: number): void {
     const i = this.index(x, y);
-    this.marked.delete(i);
-    this.claimed.delete(i);
+    this.markedTrees.delete(i);
+    this.claimedTrees.delete(i);
     this.set(x, y, Tile.Grass);
   }
 
-  // Verilen konuma en yakın, sahiplenilmemiş işaretli ağacı bul
-  findNearestMarkedTree(px: number, py: number): { x: number; y: number } | null {
+  harvestBush(x: number, y: number): void {
+    const i = this.index(x, y);
+    this.markedBushes.delete(i);
+    this.claimedBushes.delete(i);
+    this.set(x, y, Tile.Grass);
+    this.regrow.push({ x, y, t: BUSH_REGROW_TIME });
+  }
+
+  // Verilen konuma en yakın, sahiplenilmemiş işaretli bloğu bul
+  findNearestMarked(
+    marked: Set<number>,
+    claimed: Set<number>,
+    px: number,
+    py: number
+  ): { x: number; y: number; dist: number } | null {
     const tx = Math.floor(px / TILE_SIZE);
     const ty = Math.floor(py / TILE_SIZE);
-    let best: { x: number; y: number } | null = null;
-    let bestDist = Infinity;
-    for (const i of this.marked) {
-      if (this.claimed.has(i)) continue;
+    let best: { x: number; y: number; dist: number } | null = null;
+    for (const i of marked) {
+      if (claimed.has(i)) continue;
       const x = i % this.width;
       const y = Math.floor(i / this.width);
       const d = Math.abs(x - tx) + Math.abs(y - ty);
-      if (d < bestDist) {
-        bestDist = d;
-        best = { x, y };
+      if (!best || d < best.dist) best = { x, y, dist: d };
+    }
+    return best;
+  }
+
+  // Bir merkez etrafındaki karede (yarıçap r) verilen tipte blok say / en yakını bul
+  countMarkedNear(marked: Set<number>, cx: number, cy: number, r: number): number {
+    let n = 0;
+    for (const i of marked) {
+      const x = i % this.width;
+      const y = Math.floor(i / this.width);
+      if (Math.abs(x - cx) <= r && Math.abs(y - cy) <= r) n++;
+    }
+    return n;
+  }
+
+  findNearestTileOfType(
+    type: Tile,
+    cx: number,
+    cy: number,
+    r: number,
+    exclude: Set<number>
+  ): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestDist = Infinity;
+    for (let y = Math.max(0, cy - r); y <= Math.min(this.height - 1, cy + r); y++) {
+      for (let x = Math.max(0, cx - r); x <= Math.min(this.width - 1, cx + r); x++) {
+        if (this.get(x, y) !== type || exclude.has(this.index(x, y))) continue;
+        const d = Math.abs(x - cx) + Math.abs(y - cy);
+        if (d < bestDist) {
+          bestDist = d;
+          best = { x, y };
+        }
       }
     }
     return best;

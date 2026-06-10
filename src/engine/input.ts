@@ -14,7 +14,11 @@ const PAN_KEYS: Record<string, [number, number]> = {
 export class Input {
   mouseX = 0;
   mouseY = 0;
-  onClick: ((worldX: number, worldY: number) => void) | null = null;
+  onClick:
+    | ((worldX: number, worldY: number, screenX: number, screenY: number) => void)
+    | null = null;
+  // sağ tık (sürüklemeden bırakılırsa): seçim iptali
+  onCancel: (() => void) | null = null;
 
   private keys = new Set<string>();
   private dragging = false;
@@ -62,11 +66,12 @@ export class Input {
     canvas.addEventListener("pointerup", (e) => {
       if (e.button === 1 || e.button === 2) {
         this.dragging = false;
+        if (e.button === 2 && this.dragMoved < 4) this.onCancel?.();
         return;
       }
       if (e.button === 0 && this.dragMoved < 4) {
         const w = this.camera.screenToWorld(e.offsetX, e.offsetY, canvas.width, canvas.height);
-        this.onClick?.(w.x, w.y);
+        this.onClick?.(w.x, w.y, e.offsetX, e.offsetY);
       }
     });
   }

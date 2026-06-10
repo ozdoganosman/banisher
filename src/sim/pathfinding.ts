@@ -107,6 +107,26 @@ export function findPath(
   return null;
 }
 
+function tryCandidates(
+  world: World,
+  sx: number,
+  sy: number,
+  candidates: PathNode[]
+): PathNode[] | null {
+  const walkable = candidates.filter((c) => world.walkableAt(c.x, c.y));
+  // en yakın adaydan başlayarak dene
+  walkable.sort(
+    (a, b) =>
+      Math.abs(a.x - sx) + Math.abs(a.y - sy) -
+      (Math.abs(b.x - sx) + Math.abs(b.y - sy))
+  );
+  for (const c of walkable) {
+    const path = findPath(world, sx, sy, c.x, c.y);
+    if (path) return path;
+  }
+  return null;
+}
+
 // Hedef bloğun (örn. ağaç) yanındaki yürünebilir bir bloğa yol bul
 export function findPathAdjacent(
   world: World,
@@ -115,23 +135,29 @@ export function findPathAdjacent(
   tx: number,
   ty: number
 ): PathNode[] | null {
-  const candidates: PathNode[] = [
+  return tryCandidates(world, sx, sy, [
     { x: tx + 1, y: ty },
     { x: tx - 1, y: ty },
     { x: tx, y: ty + 1 },
     { x: tx, y: ty - 1 },
-  ].filter((c) => world.walkableAt(c.x, c.y));
+  ]);
+}
 
-  // en yakın adaydan başlayarak dene
-  candidates.sort(
-    (a, b) =>
-      Math.abs(a.x - sx) + Math.abs(a.y - sy) -
-      (Math.abs(b.x - sx) + Math.abs(b.y - sy))
-  );
-
-  for (const c of candidates) {
-    const path = findPath(world, sx, sy, c.x, c.y);
-    if (path) return path;
+// Bir dikdörtgenin (örn. 2x2 bina) çevresindeki yürünebilir bir bloğa yol bul
+export function findPathAdjacentRect(
+  world: World,
+  sx: number,
+  sy: number,
+  rx: number,
+  ry: number,
+  size: number
+): PathNode[] | null {
+  const candidates: PathNode[] = [];
+  for (let i = 0; i < size; i++) {
+    candidates.push({ x: rx + i, y: ry - 1 }); // üst
+    candidates.push({ x: rx + i, y: ry + size }); // alt
+    candidates.push({ x: rx - 1, y: ry + i }); // sol
+    candidates.push({ x: rx + size, y: ry + i }); // sağ
   }
-  return null;
+  return tryCandidates(world, sx, sy, candidates);
 }
