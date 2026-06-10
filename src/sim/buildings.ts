@@ -58,7 +58,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildTime: 8,
     size: 2,
     maxWorkers: 3,
-    desc: "3 oduncu istihdam eder; çevresindeki ağaçları keserler",
+    desc: "3 oduncu: alanına fidan diker, büyüyen ağaçları keser",
   },
   [BuildingType.Gatherer]: {
     name: "Toplayıcı",
@@ -66,7 +66,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildTime: 8,
     size: 2,
     maxWorkers: 3,
-    desc: "3 toplayıcı istihdam eder; çevredeki çalı ve mantarları toplarlar",
+    desc: "3 toplayıcı: alanına mantar/yemiş eker ve toplar",
   },
   [BuildingType.Camp]: {
     name: "Kamp",
@@ -237,7 +237,8 @@ export class Building {
     if (this.type === BuildingType.Woodcutter) {
       const t = world.findNearestTileOfType(Tile.Tree, cx, cy, AUTO_MARK_RADIUS, world.markedTrees);
       const markedNear = world.countMarkedNear(world.markedTrees, cx, cy, AUTO_MARK_RADIUS);
-      this.outOfResources = !t && markedNear === 0;
+      this.outOfResources =
+        !t && markedNear === 0 && !world.findPlantSpot(cx, cy, AUTO_MARK_RADIUS, cx, cy);
       if (isFull("wood")) return; // depo dolu: işaretlemeyi durdur
       if (markedNear >= maxMarks) return;
       if (t) world.markTree(t.x, t.y);
@@ -255,7 +256,8 @@ export class Building {
           break;
         }
       }
-      this.outOfResources = !found && markedNear === 0;
+      this.outOfResources =
+        !found && markedNear === 0 && !world.findPlantSpot(cx, cy, AUTO_MARK_RADIUS, cx, cy);
     }
   }
 }

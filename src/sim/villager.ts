@@ -43,6 +43,9 @@ const STONE_PER_MINE = 3;
 const FISH_TIME = 6;
 const FISH_PER_CATCH = 2;
 const TEND_TIME = 2.5;
+const PLANT_TIME = 2;
+const FOREST_TARGET = 20; // ormancının alanında hedef ağaç+fidan
+const FOOD_TARGET = 14; // toplayıcının alanında hedef çalı/mantar/yemiş
 
 // Toplanabilir yemeklerin verimi (eşya başına)
 const GATHER_YIELD: Partial<Record<ItemType, number>> = {
@@ -102,6 +105,7 @@ type VillagerState =
   | "building"
   | "worshipping"
   | "fishing"
+  | "planting"
   | "tending"
   | "sleeping"
   | "eating";
@@ -111,6 +115,7 @@ type Job =
   | { kind: "gather"; tile: number; item: ItemType }
   | { kind: "mine"; tile: number }
   | { kind: "fish"; tile: number }
+  | { kind: "plant"; tile: number; target: Tile }
   | { kind: "tend"; animal: Animal }
   | { kind: "hunt"; animal: Animal }
   | { kind: "build"; building: Building }
@@ -127,7 +132,7 @@ export class Villager {
   facing: 1 | -1 = 1;
   walkPhase = 0; // bacak/kol salınımı için
   hunger: number;
-  morale = 80; // evsiz yerde yatanların morali düşer, evde uyuyanın yükselir
+  morale = 20; // düşük başlar; moral kaynaklarıyla (ev, ileride eğlence) yükselir
   groundSleep = false; // bu gece yerde mi uyuyor
   dead = false;
   assignment: Assignment = { kind: "laborer" };
@@ -195,6 +200,7 @@ export class Villager {
           case "gather": return "Toplamaya gidiyor";
           case "mine": return "Taş ocağına gidiyor";
           case "fish": return "Kıyıya gidiyor";
+          case "plant": return "Ekime gidiyor";
           case "tend": return "Hayvana gidiyor";
           case "hunt": return "Ava gidiyor";
           case "build": return "Şantiyeye gidiyor";
@@ -219,6 +225,9 @@ export class Villager {
         return "Taş kazıyor";
       case "fishing":
         return "Balık tutuyor";
+      case "planting":
+        return this.job?.kind === "plant" && this.job.target === Tile.Tree
+          ? "Fidan dikiyor" : "Ekim yapıyor";
       case "building":
         return "İnşaat yapıyor";
       case "worshipping":
@@ -266,7 +275,7 @@ export class Villager {
       this.state === "chopping" || this.state === "gathering" ||
       this.state === "mining" || this.state === "building" ||
       this.state === "worshipping" || this.state === "fishing" ||
-      this.state === "tending";
+      this.state === "tending" || this.state === "planting";
     if (working && ((isNight() && !isLit(buildings, this.x, this.y)) || isSleepTime())) {
       this.releaseJob(world);
       this.toIdle();
@@ -283,7 +292,7 @@ export class Villager {
     if (this.state === "sleeping") {
       this.morale = Math.max(
         0,
-        Math.min(100, this.morale + (this.groundSleep ? -0.45 : 0.3) * dt)
+        Math.min(100, this.morale + (this.groundSleep ? -0.133 : 0.08) * dt)
       );
       this.walkPhase += dt; // "z" animasyonu
       return;
@@ -311,6 +320,9 @@ export class Villager {
         break;
       case "fishing":
         this.fish(dt, world);
+        break;
+      case "planting":
+        this.plant(dt, world);
         break;
       case "tending":
         this.tend(dt);
@@ -345,6 +357,7 @@ export class Villager {
       case "chop": world.claimedTrees.delete(this.job.tile); break;
       case "gather": world.claimedBushes.delete(this.job.tile); break;
       case "mine": world.claimedStones.delete(this.job.tile); break;
+      case "plant": world.claimedPlants.delete(this.job.tile); break;
       case "build": this.job.building.claimed = false; break;
       case "tend": this.job.animal.claimed = false; break;
       case "hunt": this.job.animal.claimed = false; break;
@@ -459,15 +472,24 @@ export class Villager {
       const inArea = (x: number, y: number) =>
         Math.abs(x - hx) <= AUTO_MARK_RADIUS && Math.abs(y - hy) <= AUTO_MARK_RADIUS;
 
-      if (hut.type === BuildingType.Woodcutter && !isFull("wood") && !bagFull) {
-        this.pushTileJobCandidate(
-          world, candidates, world.markedTrees, world.claimedTrees,
-          (x, y) => inArea(x, y) && litTile(x, y),
-          (i) => {
-            world.claimedTrees.add(i);
-            this.job = { kind: "chop", tile: i };
-          }
-        );
+      if (hut.type === BuildingType.Woodcutter) {
+        if (!isFull("wood") && !bagFull) {
+          this.pushTileJobCandidate(
+            world, candidates, world.markedTrees, world.claimedTrees,
+            (x, y) => inArea(x, y) && litTile(x, y),
+            (i) => {
+              world.claimedTrees.add(i);
+              this.job = { kind: "chop", tile: i };
+            }
+          );
+        }
+        // kesilecek yoksa ve orman seyreldiyse fidan dik
+        if (
+          candidates.length === 0 &&
+          world.countTilesNear([Tile.Tree, Tile.Sapling], hx, hy, AUTO_MARK_RADIUS) < FOREST_TARGET
+        ) {
+          this.pushPlantCandidate(world, candidates, hx, hy, Tile.Tree, litTile);
+        }
       } else if (hut.type === BuildingType.Gatherer && !bagFull) {
         this.pushTileJobCandidate(
           world, candidates, world.markedBushes, world.claimedBushes,
@@ -481,6 +503,17 @@ export class Villager {
             this.job = { kind: "gather", tile: i, item };
           }
         );
+        // toplanacak yoksa ve alan seyreldiyse mantar/yemiş ek
+        if (
+          candidates.length === 0 &&
+          world.countTilesNear(
+            [Tile.Bush, Tile.Mushroom, Tile.NutBush, Tile.Sapling],
+            hx, hy, AUTO_MARK_RADIUS
+          ) < FOOD_TARGET
+        ) {
+          const crop = Math.random() < 0.5 ? Tile.Mushroom : Tile.NutBush;
+          this.pushPlantCandidate(world, candidates, hx, hy, crop, litTile);
+        }
       } else if (hut.type === BuildingType.Fisher) {
         if (!isFull("fish") && !bagFull) {
           // kulübe alanında su komşusu olan kıyı bloğu bul, oraya git
@@ -653,6 +686,31 @@ export class Villager {
     return true;
   }
 
+  // Ekim adayı: alandaki boş çimene gidip fidan/filiz diker
+  private pushPlantCandidate(
+    world: World,
+    candidates: { dist: number; start: () => boolean }[],
+    hx: number,
+    hy: number,
+    target: Tile,
+    litTile: (x: number, y: number) => boolean
+  ): void {
+    const spot = world.findPlantSpot(hx, hy, AUTO_MARK_RADIUS, this.tileX, this.tileY);
+    if (!spot || !litTile(spot.x, spot.y)) return;
+    candidates.push({
+      dist: Math.abs(spot.x - this.tileX) + Math.abs(spot.y - this.tileY),
+      start: () => {
+        const path = findPath(world, this.tileX, this.tileY, spot.x, spot.y);
+        if (!path) return false;
+        const i = world.index(spot.x, spot.y);
+        world.claimedPlants.add(i);
+        this.job = { kind: "plant", tile: i, target };
+        this.startPath(path);
+        return true;
+      },
+    });
+  }
+
   // İşaretli blok işi adayı ekler; en yakın hedefe yol yoksa
   // sıradaki birkaç hedefi dener (işçiler boşuna beklemesin)
   private pushTileJobCandidate(
@@ -798,6 +856,11 @@ export class Villager {
         return world.markedStones.has(this.job.tile) && !isFull("stone") && tileLit(this.job.tile);
       case "fish":
         return !isFull("fish") && tileLit(this.job.tile);
+      case "plant": {
+        const px = this.job.tile % world.width;
+        const py = Math.floor(this.job.tile / world.width);
+        return world.get(px, py) === Tile.Grass && tileLit(this.job.tile);
+      }
       case "tend":
         return !this.job.animal.dead;
       case "hunt":
@@ -836,7 +899,7 @@ export class Villager {
     const dist = Math.hypot(dx, dy);
     let speed = this.starving ? WALK_SPEED * 0.5 : WALK_SPEED;
     if (this.baby) speed *= 0.55; // bebekler tıpış tıpış yürür
-    speed *= 0.8 + this.morale / 500; // morali düşük köylü ağır çalışır
+    speed *= 0.6 + this.morale / 250; // moral 0 -> %60 hız, 100 -> tam hız
     const step = speed * dt;
 
     if (dx !== 0) this.facing = dx > 0 ? 1 : -1;
@@ -872,6 +935,10 @@ export class Villager {
       case "mine":
         this.state = "mining";
         this.timer = MINE_TIME;
+        break;
+      case "plant":
+        this.state = "planting";
+        this.timer = PLANT_TIME;
         break;
       case "fish": {
         this.state = "fishing";
@@ -1106,6 +1173,25 @@ export class Villager {
         }
       }
       a.claimed = false;
+      this.job = null;
+      this.toIdle();
+    }
+  }
+
+  private plant(dt: number, world: World): void {
+    const job = this.job;
+    if (!job || job.kind !== "plant") {
+      this.toIdle();
+      return;
+    }
+    this.walkPhase += dt * 7; // eğilip dikme
+    this.timer -= dt;
+    if (this.timer <= 0) {
+      world.plantSapling(
+        job.tile % world.width,
+        Math.floor(job.tile / world.width),
+        job.target
+      );
       this.job = null;
       this.toIdle();
     }

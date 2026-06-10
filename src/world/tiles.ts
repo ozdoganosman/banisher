@@ -15,6 +15,7 @@ export const enum Tile {
   OrangeTree = 9, // portakal ağacı
   TangerineTree = 10, // mandalina ağacı
   NutBush = 11, // yemiş (fındık) çalısı
+  Sapling = 12, // ormancının diktiği fidan: zamanla ağaca dönüşür
 }
 
 // Toplanabilir yemek blokları hangi eşyayı verir?
@@ -53,4 +54,5 @@ export const TILE_COLORS: Record<Tile, string[]> = {
   [Tile.OrangeTree]: ["#5a8f3c", "#558838", "#609541"],
   [Tile.TangerineTree]: ["#5a8f3c", "#558838", "#609541"],
   [Tile.NutBush]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.Sapling]: ["#5a8f3c", "#558838", "#609541"],
 };

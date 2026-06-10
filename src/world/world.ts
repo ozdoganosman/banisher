@@ -16,6 +16,11 @@ export class World {
   readonly claimedBushes = new Set<number>();
   readonly markedStones = new Set<number>();
   readonly claimedStones = new Set<number>();
+  // ormancının dikmek üzere sahiplendiği boş çimen blokları
+  readonly claimedPlants = new Set<number>();
+
+  // büyüyen fidanlar/filizler (target: olgunlaşınca dönüşeceği blok)
+  private saplings: { x: number; y: number; t: number; target: Tile }[] = [];
 
   // Bina kaplayan bloklar: yürünemez
   readonly blocked = new Set<number>();
@@ -134,6 +139,62 @@ export class World {
 
   markStone(x: number, y: number): void {
     if (this.get(x, y) === Tile.Stone) this.markedStones.add(this.index(x, y));
+  }
+
+  // Fidan/filizler zamanla hedef bloğa dönüşür
+  // (tek "yeniden büyüme" yolu ormancı/toplayıcı ekimleridir)
+  update(dt: number): void {
+    for (let i = this.saplings.length - 1; i >= 0; i--) {
+      const s = this.saplings[i];
+      s.t -= dt;
+      if (s.t <= 0) {
+        this.saplings.splice(i, 1);
+        if (this.get(s.x, s.y) === Tile.Sapling) this.set(s.x, s.y, s.target);
+      }
+    }
+  }
+
+  plantSapling(x: number, y: number, target: Tile): void {
+    this.claimedPlants.delete(this.index(x, y));
+    if (this.get(x, y) !== Tile.Grass || this.blocked.has(this.index(x, y))) return;
+    this.set(x, y, Tile.Sapling);
+    this.saplings.push({ x, y, t: target === Tile.Tree ? 90 : 70, target });
+  }
+
+  // Dikim için boş çimen blok bul (sahiplenilmemiş)
+  findPlantSpot(
+    cx: number,
+    cy: number,
+    r: number,
+    fromX: number,
+    fromY: number
+  ): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestDist = Infinity;
+    for (let y = Math.max(0, cy - r); y <= Math.min(this.height - 1, cy + r); y++) {
+      for (let x = Math.max(0, cx - r); x <= Math.min(this.width - 1, cx + r); x++) {
+        if (this.get(x, y) !== Tile.Grass) continue;
+        const i = this.index(x, y);
+        if (this.blocked.has(i) || this.claimedPlants.has(i)) continue;
+        const d = Math.abs(x - fromX) + Math.abs(y - fromY);
+        if (d < bestDist) {
+          bestDist = d;
+          best = { x, y };
+        }
+      }
+    }
+    return best;
+  }
+
+  // Çalışma alanındaki verilen tiplerin sayısı (doygunluk kontrolü)
+  countTilesNear(types: Tile[], cx: number, cy: number, r: number): number {
+    let n = 0;
+    for (let y = Math.max(0, cy - r); y <= Math.min(this.height - 1, cy + r); y++) {
+      for (let x = Math.max(0, cx - r); x <= Math.min(this.width - 1, cx + r); x++) {
+        if (types.includes(this.get(x, y))) n++;
+      }
+    }
+    return n;
   }
 
   // Kesilen/toplanan kaynaklar kalıcı olarak gider (yeniden büyümez)

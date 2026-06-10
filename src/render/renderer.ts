@@ -187,6 +187,7 @@ export class Renderer {
     if (t === Tile.Tree) this.paintTree(px, py, x, y);
     else if (t === Tile.Bush || t === Tile.NutBush) this.paintBush(px, py, x, y, t);
     else if (t === Tile.Mushroom) this.paintMushroom(px, py, x, y);
+    else if (t === Tile.Sapling) this.paintSapling(px, py, x, y);
     else if (t === Tile.AppleTree || t === Tile.OrangeTree || t === Tile.TangerineTree) {
       this.paintTree(px, py, x, y);
       this.paintTreeFruit(px, py, x, y, t);
@@ -221,6 +222,7 @@ export class Renderer {
       case Tile.Dirt: color = DIRT_BY_SEASON[s][0]; break;
       case Tile.Stone: color = STONE_BY_SEASON[s][0]; break;
       case Tile.Tree: color = CANOPY_BY_SEASON[s][1]; break;
+      case Tile.Sapling: color = "#6cbf4e"; break;
       case Tile.Bush: color = BUSH_BY_SEASON[s][1]; break;
       default: color = GRASS_BY_SEASON[s][0]; break;
     }
@@ -287,6 +289,24 @@ export class Renderer {
       x: ((sx - r.x) / r.w) * this.world.width * TILE_SIZE,
       y: ((sy - r.y) / r.h) * this.world.height * TILE_SIZE,
     };
+  }
+
+  // Fidan/filiz: toprak tümseği üstünde küçük yeşil sürgün
+  private paintSapling(px: number, py: number, x: number, y: number): void {
+    const c = this.tctx;
+    const cx = px + 8 + Math.floor(hash2(x, y, 131) * 3) - 1;
+    const cy = py + 10;
+    c.fillStyle = "rgba(10,20,10,0.15)";
+    c.fillRect(cx - 2, cy + 3, 5, 1);
+    c.fillStyle = "#7a5a36";
+    c.fillRect(cx - 2, cy + 2, 5, 2); // tümsek
+    c.fillStyle = "#57391f";
+    c.fillRect(cx, cy - 1, 1, 3); // ince gövde
+    c.fillStyle = "#54a83d";
+    c.fillRect(cx - 1, cy - 3, 3, 2); // yapraklar
+    c.fillRect(cx, cy - 4, 1, 1);
+    c.fillStyle = "#6cbf4e";
+    c.fillRect(cx - 1, cy - 3, 1, 1);
   }
 
   private paintMushroom(px: number, py: number, x: number, y: number): void {
@@ -1389,8 +1409,8 @@ export class Renderer {
         ctx.fillStyle = v.state === "chopping" ? "#9aa0a8" : "#6e7178";
         ctx.fillRect(ax - 1, ay - 1, 2, 2);
       }
-    } else if (v.state === "gathering" || v.state === "tending") {
-      // eğilip toplama / hayvanla ilgilenme: kollar aşağı uzanır
+    } else if (v.state === "gathering" || v.state === "tending" || v.state === "planting") {
+      // eğilip toplama / hayvan bakımı / ekim: kollar aşağı uzanır
       const reach = 1.5 + Math.sin(v.walkPhase) * 1.5;
       ctx.beginPath();
       ctx.moveTo(x, y - 8.5);
