@@ -17,6 +17,7 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | Girdi | İşlev |
 |---|---|
 | Sol tık | Ağaç/çalı işaretle veya seçili binayı yerleştir |
+| Köylüye sol tık | Profilini aç (ad, yaş, meslek, durum, tokluk) |
 | 1-4 | Bina seç (Ev, Depo, Oduncu, Toplayıcı) |
 | Esc / sağ tık | Bina seçimini iptal et |
 | WASD / Ok tuşları | Kamerayı kaydır |
@@ -40,6 +41,9 @@ Tarayıcıda `http://localhost:5173` adresini aç.
   - **Toplayıcı kulübesi**: çevresindeki çalıları otomatik işaretler
 - **Yemek ve açlık**: köylüler acıkınca stoktan yer; yemek biterse yavaşlar ve
   açlıktan ölebilir; çalılar toplandıktan bir süre sonra yeniden büyür
+- **Köylü kimlikleri**: her köylünün adı, soyadı, yaşı ve cinsiyeti var
+  (ilk köylü her zaman Cin Ali'dir); köylüye tıklayınca portreli profil paneli
+  açılır — anlık durum ("Ağaç kesiyor" vb.) ve tokluk barı canlı güncellenir
 - HUD: odun/yemek (kapasiteli), nüfus, bildirimler, açlık barları
 
 ## Yol haritası

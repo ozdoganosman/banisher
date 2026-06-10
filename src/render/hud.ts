@@ -1,5 +1,6 @@
 import { BUILDING_DEFS, BuildingType } from "../sim/buildings";
 import { resources } from "../sim/resources";
+import type { Villager } from "../sim/villager";
 
 export const TOOLBAR_HEIGHT = 64;
 
@@ -59,6 +60,125 @@ export function toolbarHitTest(
 
 export function isOverToolbar(sy: number, canvasH: number): boolean {
   return sy >= canvasH - TOOLBAR_HEIGHT;
+}
+
+// ---- Köylü profil paneli ----
+
+const PROFILE = { x: 12, y: 44, w: 248, h: 148 };
+const CLOSE = { x: PROFILE.x + PROFILE.w - 24, y: PROFILE.y + 6, w: 18, h: 18 };
+
+// Panel açıkken tıklama paneli mi hedefliyor? ("close" = X düğmesi)
+export function profileHitTest(sx: number, sy: number): "close" | "panel" | null {
+  if (sx >= CLOSE.x && sx <= CLOSE.x + CLOSE.w && sy >= CLOSE.y && sy <= CLOSE.y + CLOSE.h) {
+    return "close";
+  }
+  if (sx >= PROFILE.x && sx <= PROFILE.x + PROFILE.w && sy >= PROFILE.y && sy <= PROFILE.y + PROFILE.h) {
+    return "panel";
+  }
+  return null;
+}
+
+function drawPortrait(ctx: CanvasRenderingContext2D, v: Villager, cx: number, cy: number): void {
+  // büyütülmüş çöp adam portresi (ayaklar cy'de)
+  const s = 3; // ölçek
+  ctx.lineCap = "round";
+  // bacaklar
+  ctx.strokeStyle = "#26221e";
+  ctx.lineWidth = 1.1 * s;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 5 * s);
+  ctx.lineTo(cx - 1.5 * s, cy);
+  ctx.moveTo(cx, cy - 5 * s);
+  ctx.lineTo(cx + 1.5 * s, cy);
+  ctx.stroke();
+  // gövde
+  ctx.strokeStyle = v.shirt;
+  ctx.lineWidth = 1.8 * s;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 5 * s);
+  ctx.lineTo(cx, cy - 9 * s);
+  ctx.stroke();
+  if (v.identity.female) {
+    ctx.fillStyle = v.shirt;
+    ctx.beginPath();
+    ctx.moveTo(cx - 2.5 * s, cy - 3.5 * s);
+    ctx.lineTo(cx + 2.5 * s, cy - 3.5 * s);
+    ctx.lineTo(cx, cy - 6 * s);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // kollar
+  ctx.strokeStyle = "#26221e";
+  ctx.lineWidth = 1.1 * s;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 8.5 * s);
+  ctx.lineTo(cx - 2 * s, cy - 5.5 * s);
+  ctx.moveTo(cx, cy - 8.5 * s);
+  ctx.lineTo(cx + 2 * s, cy - 5.5 * s);
+  ctx.stroke();
+  // kafa
+  ctx.fillStyle = "#e8b88a";
+  ctx.lineWidth = 0.7 * s;
+  ctx.beginPath();
+  ctx.arc(cx, cy - 11 * s, 2 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
+  const { x, y, w, h } = PROFILE;
+  ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#5a5f68";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+  // portre kutusu
+  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  ctx.fillRect(x + 10, y + 12, 60, 86);
+  ctx.strokeStyle = "#3a3f48";
+  ctx.strokeRect(x + 10.5, y + 12.5, 59, 85);
+  drawPortrait(ctx, v, x + 40, y + 90);
+
+  // kapatma düğmesi
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(CLOSE.x, CLOSE.y, CLOSE.w, CLOSE.h);
+  ctx.strokeStyle = "#9a9488";
+  ctx.beginPath();
+  ctx.moveTo(CLOSE.x + 5, CLOSE.y + 5);
+  ctx.lineTo(CLOSE.x + CLOSE.w - 5, CLOSE.y + CLOSE.h - 5);
+  ctx.moveTo(CLOSE.x + CLOSE.w - 5, CLOSE.y + 5);
+  ctx.lineTo(CLOSE.x + 5, CLOSE.y + CLOSE.h - 5);
+  ctx.stroke();
+
+  // bilgiler
+  const tx = x + 82;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffe296";
+  ctx.font = "bold 14px monospace";
+  ctx.fillText(v.fullName, tx, y + 24, w - 82 - 34);
+  ctx.font = "13px monospace";
+  ctx.fillStyle = "#e8e2d0";
+  ctx.fillText(`Yaş: ${v.identity.age}`, tx, y + 46);
+  ctx.fillText(v.identity.female ? "Kadın" : "Erkek", tx, y + 64);
+  ctx.fillText("Meslek: İşçi", tx, y + 82);
+  ctx.fillStyle = "#9ad0ff";
+  ctx.fillText(v.statusText, tx, y + 100, w - 82 - 12);
+
+  // açlık barı
+  ctx.fillStyle = "#e8e2d0";
+  ctx.font = "12px monospace";
+  ctx.fillText("Tokluk", x + 10, y + 122);
+  const barX = x + 72;
+  const barW = w - 72 - 14;
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(barX, y + 116, barW, 12);
+  const fullness = 1 - v.hunger / 100;
+  ctx.fillStyle = fullness > 0.5 ? "#6fbf4a" : fullness > 0.2 ? "#e0a83c" : "#d4453f";
+  ctx.fillRect(barX + 1, y + 117, (barW - 2) * fullness, 10);
+  ctx.strokeStyle = "#3a3f48";
+  ctx.strokeRect(barX + 0.5, y + 116.5, barW - 1, 11);
 }
 
 export function drawHud(

@@ -4,7 +4,9 @@ import { Renderer, type Ghost } from "./render/renderer";
 import {
   addMessage,
   drawHud,
+  drawProfile,
   isOverToolbar,
+  profileHitTest,
   toolbarHitTest,
   updateMessages,
 } from "./render/hud";
@@ -58,6 +60,21 @@ const input = new Input(canvas, camera);
 const villagers: Villager[] = [];
 const buildings: Building[] = [];
 let selected: BuildingType | null = null;
+let selectedVillager: Villager | null = null;
+
+// Tıklanan dünya noktasına en yakın köylüyü bul (vücut hizasında, ~9 piksel tolerans)
+function villagerAt(wx: number, wy: number): Villager | null {
+  let best: Villager | null = null;
+  let bestDist = 9;
+  for (const v of villagers) {
+    const d = Math.hypot(wx - v.x, wy - (v.y - 6));
+    if (d < bestDist) {
+      bestDist = d;
+      best = v;
+    }
+  }
+  return best;
+}
 
 // Bir nokta etrafındaki yürünebilir bloklara köylü yerleştir (başlangıç ve yeni evler)
 function spawnVillagersAround(cx: number, cy: number, count: number): number {
@@ -89,6 +106,16 @@ input.onClick = (wx, wy, sx, sy) => {
     return;
   }
 
+  // profil paneli açıkken üzerine gelen tıklamalar dünyaya geçmesin
+  if (selectedVillager) {
+    const hit = profileHitTest(sx, sy);
+    if (hit === "close") {
+      selectedVillager = null;
+      return;
+    }
+    if (hit === "panel") return;
+  }
+
   // bina yerleştirirken hayalet önizlemeyle aynı hizalama (harita kenarına sıkıştır)
   const tx = selected !== null
     ? Math.min(Math.max(Math.floor(wx / TILE_SIZE), 0), MAP_W - BUILDING_SIZE)
@@ -114,17 +141,23 @@ input.onClick = (wx, wy, sx, sy) => {
     buildings.push(b);
     addMessage(`${def.name} şantiyesi kuruldu`);
   } else {
-    // ağaç/çalı işaretleme
-    world.toggleMark(tx, ty);
+    // köylüye tıklandıysa profilini aç, değilse ağaç/çalı işaretle
+    const v = villagerAt(wx, wy);
+    if (v) selectedVillager = v;
+    else world.toggleMark(tx, ty);
   }
 };
 
 input.onCancel = () => {
   selected = null;
+  selectedVillager = null;
 };
 
 window.addEventListener("keydown", (e) => {
-  if (e.code === "Escape") selected = null;
+  if (e.code === "Escape") {
+    selected = null;
+    selectedVillager = null;
+  }
   else if (e.code.startsWith("Digit")) {
     const n = Number(e.code.slice(5));
     const types = [
@@ -151,8 +184,9 @@ function step(dt: number) {
   // açlıktan ölenleri çıkar
   for (let i = villagers.length - 1; i >= 0; i--) {
     if (villagers[i].dead) {
+      addMessage(`${villagers[i].fullName} açlıktan öldü!`);
+      if (selectedVillager === villagers[i]) selectedVillager = null;
       villagers.splice(i, 1);
-      addMessage("Bir köylü açlıktan öldü!");
     }
   }
 
@@ -218,9 +252,11 @@ function frame(now: number) {
     buildings,
     hoverValid ? hoverTile : null,
     ghost,
+    selectedVillager,
     now / 1000
   );
   drawHud(ctx, villagers.length, selected);
+  if (selectedVillager) drawProfile(ctx, selectedVillager);
 
   requestAnimationFrame(frame);
 }

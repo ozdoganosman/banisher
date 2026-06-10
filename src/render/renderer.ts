@@ -102,6 +102,7 @@ export class Renderer {
     buildings: Building[],
     hoverTile: { x: number; y: number } | null,
     ghost: Ghost | null,
+    selectedVillager: Villager | null,
     time: number
   ): void {
     const vw = ctx.canvas.width;
@@ -136,6 +137,16 @@ export class Renderer {
           TILE_SIZE - 1
         );
       }
+    }
+
+    // Seçili köylünün ayaklarının altında yanıp sönen halka
+    if (selectedVillager) {
+      const ringPulse = 0.6 + 0.3 * Math.sin(time * 6);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${ringPulse})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(selectedVillager.x, selectedVillager.y + 0.5, 4.5, 2, 0, 0, Math.PI * 2);
+      ctx.stroke();
     }
 
     // Binalar ve köylüler: taban çizgisine (y) göre sırala ki önde olan üstte çizilsin
@@ -334,6 +345,17 @@ export class Renderer {
     ctx.moveTo(x, y - 5);
     ctx.lineTo(x, y - 9);
     ctx.stroke();
+
+    // kadın köylülerde küçük etek
+    if (v.identity.female) {
+      ctx.fillStyle = v.shirt;
+      ctx.beginPath();
+      ctx.moveTo(x - 2.5, y - 3.5);
+      ctx.lineTo(x + 2.5, y - 3.5);
+      ctx.lineTo(x, y - 6);
+      ctx.closePath();
+      ctx.fill();
+    }
 
     // kollar
     ctx.strokeStyle = LINE;

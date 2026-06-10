@@ -2,6 +2,7 @@ import { TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
 import type { Building } from "./buildings";
 import { BUILDING_SIZE } from "./buildings";
+import { randomIdentity, type Identity } from "./names";
 import {
   findPath,
   findPathAdjacent,
@@ -48,6 +49,7 @@ export class Villager {
   walkPhase = 0; // bacak/kol salınımı için
   hunger: number;
   dead = false;
+  readonly identity: Identity = randomIdentity();
   private starveTimer = 0;
   private path: PathNode[] = [];
   private pathIdx = 0;
@@ -69,6 +71,31 @@ export class Villager {
   }
   get starving(): boolean {
     return this.hunger >= 100;
+  }
+
+  get fullName(): string {
+    return `${this.identity.firstName} ${this.identity.lastName}`.trim();
+  }
+
+  // Profil panelinde gösterilen anlık durum
+  get statusText(): string {
+    switch (this.state) {
+      case "idle":
+        return this.starving ? "Açlıktan bitkin" : "Boşta";
+      case "walking":
+        if (!this.job) return "Geziniyor";
+        if (this.job.kind === "chop") return "Ağaca gidiyor";
+        if (this.job.kind === "gather") return "Çalıya gidiyor";
+        return "Şantiyeye gidiyor";
+      case "chopping":
+        return "Ağaç kesiyor";
+      case "gathering":
+        return "Meyve topluyor";
+      case "building":
+        return "İnşaat yapıyor";
+      case "eating":
+        return "Yemek yiyor";
+    }
   }
 
   update(dt: number, world: World, buildings: Building[]): void {
