@@ -1,10 +1,5 @@
-import { regrowFactor } from "../sim/time";
 import { fractalNoise, hash2 } from "./noise";
-import { Tile, foodItemOf, isFruitTree, isWalkable, TILE_SIZE } from "./tiles";
-
-const BUSH_REGROW_TIME = 75; // saniye
-const MUSHROOM_REGROW_TIME = 95;
-const TREE_REGROW_TIME = 210; // kesilen ağaçlar uzun sürede geri gelir
+import { Tile, foodItemOf, isWalkable, TILE_SIZE } from "./tiles";
 
 export class World {
   readonly width: number;
@@ -24,10 +19,6 @@ export class World {
 
   // Bina kaplayan bloklar: yürünemez
   readonly blocked = new Set<number>();
-
-  // Toplanan bitkiler bir süre sonra yeniden büyür
-  // (base: büyüme gerçekleşene dek blokta duran zemin)
-  private regrow: { x: number; y: number; t: number; tile: Tile; base: Tile }[] = [];
 
   // Bir blok değiştiğinde (örn. ağaç kesildi) renderer'ın haberi olsun
   onTileChange: ((x: number, y: number) => void) | null = null;
@@ -72,22 +63,6 @@ export class World {
     );
   }
 
-  update(dt: number): void {
-    // mevsim etkisi: bitkiler baharda hızlı büyür, kışın hiç büyümez
-    const growth = dt * regrowFactor();
-    for (let i = this.regrow.length - 1; i >= 0; i--) {
-      const r = this.regrow[i];
-      r.t -= growth;
-      if (r.t <= 0) {
-        this.regrow.splice(i, 1);
-        // arada blok değişmediyse aynı tipte geri gelsin
-        if (this.get(r.x, r.y) === r.base && !this.blocked.has(this.index(r.x, r.y))) {
-          this.set(r.x, r.y, r.tile);
-        }
-      }
-    }
-  }
-
   private generate(seed: number): void {
     // kenar sönümü: yükseklikten kademeli pay düşülür; noise sayesinde kıyı
     // çizgisi düzensiz olur ve sular derinleşerek açık denize doğal karışır
@@ -112,12 +87,8 @@ export class World {
         if (t === Tile.Grass) {
           const f = fractalNoise(x * 0.09, y * 0.09, seed + 7777, 3);
           if (f > 0.55 && hash2(x, y, seed + 13) > 0.35) {
-            // orman kuşakları; bazı ağaçlar meyve ağacıdır
-            const v = hash2(x, y, seed + 91);
-            if (v < 0.05) t = Tile.AppleTree;
-            else if (v < 0.1) t = Tile.OrangeTree;
-            else if (v < 0.14) t = Tile.TangerineTree;
-            else t = Tile.Tree;
+            // orman kuşakları
+            t = Tile.Tree;
           } else if (f > 0.55 && hash2(x, y, seed + 61) > 0.8) {
             // orman içlerinde mantarlar (ağaç çıkmayan boşluklarda)
             t = Tile.Mushroom;
@@ -165,33 +136,19 @@ export class World {
     if (this.get(x, y) === Tile.Stone) this.markedStones.add(this.index(x, y));
   }
 
+  // Kesilen/toplanan kaynaklar kalıcı olarak gider (yeniden büyümez)
   chopTree(x: number, y: number): void {
     const i = this.index(x, y);
     this.markedTrees.delete(i);
     this.claimedTrees.delete(i);
     this.set(x, y, Tile.Grass);
-    // orman tükenmesin: ağaç uzun vadede yeniden büyür
-    this.regrow.push({ x, y, t: TREE_REGROW_TIME, tile: Tile.Tree, base: Tile.Grass });
   }
 
   harvestFood(x: number, y: number): void {
     const i = this.index(x, y);
-    const t = this.get(x, y) as Tile;
     this.markedBushes.delete(i);
     this.claimedBushes.delete(i);
-    if (isFruitTree(t)) {
-      // meyve ağacı yerinde kalır (sade ağaç olur), meyvesi sonra geri gelir
-      this.set(x, y, Tile.Tree);
-      this.regrow.push({ x, y, t: 110, tile: t, base: Tile.Tree });
-    } else {
-      this.set(x, y, Tile.Grass);
-      this.regrow.push({
-        x, y,
-        t: t === Tile.Mushroom ? MUSHROOM_REGROW_TIME : BUSH_REGROW_TIME,
-        tile: t,
-        base: Tile.Grass,
-      });
-    }
+    this.set(x, y, Tile.Grass);
   }
 
   // Taş kazıldığında blok toprağa döner (taş ocağı); yükseklik de düşer ki

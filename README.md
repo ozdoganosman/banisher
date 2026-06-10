@@ -32,6 +32,10 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
+> **Denge notu**: Doğal kaynaklar kalıcıdır — kesilen ağaç, kazılan taş ve
+> toplanan çalı/mantar/yemiş **yeniden çıkmaz**. Sürdürülebilir kaynaklar:
+> çiftlik ürünleri, balıkçılık ve avcılıktır.
+
 ## Şu anki özellikler (v1.1)
 
 ### v1.1: Hayvancılık, yeni yiyecekler ve UI iyileştirmeleri
@@ -43,9 +47,7 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 - **Hayvan ürünleri**: tavuk→yumurta, inek/keçi→süt, koyun→yün,
   domuz→et (kesilir, 90 sn sonra yenisi gelir); hazır hayvanın üstünde
   yeşil nokta belirir, çiftçi gidip toplar
-- **Meyve ağaçları**: ormanlarda elma/portakal/mandalina ağaçları —
-  toplanır, ağaç yerinde kalır ve bir süre sonra yeniden meyve verir;
-  **yemiş çalıları** fındık verir
+- **Yemiş çalıları** fındık verir
 - **Yeni eşyalar**: elma, portakal, mandalina, yemiş, yumurta, süt, et
   (hepsi yenir) ve yün (malzeme)
 - **UI**: mini haritada sürükleyerek gezinme, tıklanabilir duraklat/hız
@@ -55,9 +57,8 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 ### v1.0: Mevsimler, balıkçılık ve teknoloji ağacı
 
 - **Mevsimler**: takvim hızlandı (5 gün = 1 ay); 3'er aylık İlkbahar/Yaz/
-  Sonbahar/Kış üst barda renkli rozetle gösterilir. Baharda bitkiler hızlı
-  büyür, **kışın hiç büyümez**; kışın kar yağar ve harita soğuk tona bürünür,
-  sonbahar hafif turuncudur
+  Sonbahar/Kış üst barda renkli rozetle gösterilir; kışın kar yağar ve
+  harita soğuk tona bürünür, sonbahar turuncu, baharda çiçekler açar
 - **Balıkçı kulübesi (12 odun, 2 balıkçı)**: yalnızca su kenarına kurulur
   (hayalette ve yerleştirmede doğrulanır); balıkçılar kıyıya gidip olta
   sallar, **balık** yeni yemek türüdür ve kışın da tutulabilir — kış
@@ -93,7 +94,6 @@ Tarayıcıda `http://localhost:5173` adresini aç.
   (bebekler pembe), görüş alanı çerçevesi; tıklayınca kamera oraya gider
 - **Sürükleyerek işaretleme**: sol tuş basılı gezdir, yol üstündeki tüm
   ağaç/çalı/mantar/taşlar işaretlenir
-- **Ağaçlar yeniden büyür** (~3.5 dk): orman kalıcı tükenmez
 - **Kıtlık uyarısı**: yemek stoğu sıfırlanınca bildirim
 - **Oyun sonu**: tüm köylüler ölürse "KOLONİ YOK OLDU" perdesi, simülasyon durur
 
@@ -185,7 +185,7 @@ Tarayıcıda `http://localhost:5173` adresini aç.
   - **Oduncu kulübesi**: çevresindeki ağaçları otomatik işaretler
   - **Toplayıcı kulübesi**: çevresindeki çalıları otomatik işaretler
 - **Yemek ve açlık**: köylüler acıkınca stoktan yer; yemek biterse yavaşlar ve
-  açlıktan ölebilir; çalılar toplandıktan bir süre sonra yeniden büyür
+  açlıktan ölebilir
 - **Köylü kimlikleri**: her köylünün adı, soyadı, yaşı ve cinsiyeti var
   (ilk köylü her zaman Cin Ali'dir); köylüye tıklayınca portreli profil paneli
   açılır — anlık durum ("Ağaç kesiyor" vb.) ve tokluk barı canlı güncellenir

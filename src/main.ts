@@ -702,7 +702,6 @@ function checkStorageFull() {
 
 function step(dt: number) {
   updateTime(dt);
-  world.update(dt);
   updateEffects(dt);
   checkStorageFull();
   checkMilestones();
