@@ -268,8 +268,12 @@ function updateHotbar(): void {
 
 function drawInventoryBar(ctx: CanvasRenderingContext2D): void {
   updateHotbar();
-  const slotS = 44;
   const gap = 5;
+  // dar pencerede slotlar küçülür
+  const slotS = Math.min(
+    44,
+    Math.floor((ctx.canvas.width - 24 - (HOTBAR_SLOTS - 1) * gap) / HOTBAR_SLOTS)
+  );
   const total = HOTBAR_SLOTS * slotS + (HOTBAR_SLOTS - 1) * gap;
   const x0 = (ctx.canvas.width - total) / 2;
   const y0 = ctx.canvas.height - TOOLBAR_HEIGHT - slotS - 10;
@@ -287,7 +291,7 @@ function drawInventoryBar(ctx: CanvasRenderingContext2D): void {
     const isKnowledge = item === "knowledge";
     const full = !isKnowledge && isFull(item as ItemType);
     drawSlot(ctx, x, y0, slotS, full ? "#d4453f" : isKnowledge ? "#8a6cc0" : undefined);
-    drawItemIcon(ctx, item, x + 7, y0 + 5, 30);
+    drawItemIcon(ctx, item, x + slotS * 0.16, y0 + slotS * 0.11, slotS * 0.68);
     drawSlotCount(ctx, x, y0, slotS, itemCount(item));
     // depolanabilirlerde kapasite çizgisi
     if (!isKnowledge) {
@@ -333,12 +337,15 @@ export function updateMessages(dt: number): void {
 }
 
 function buttonRect(slot: number, canvasW: number, canvasH: number) {
-  const total = TOOLBAR_TYPES.length * BTN_W + (TOOLBAR_TYPES.length - 1) * BTN_GAP;
+  // dar pencerede düğmeler ekrana sığacak şekilde daralır
+  const n = TOOLBAR_TYPES.length;
+  const bw = Math.min(BTN_W, Math.floor((canvasW - 16 - (n - 1) * BTN_GAP) / n));
+  const total = n * bw + (n - 1) * BTN_GAP;
   const x0 = (canvasW - total) / 2;
   return {
-    x: x0 + slot * (BTN_W + BTN_GAP),
+    x: x0 + slot * (bw + BTN_GAP),
     y: canvasH - TOOLBAR_HEIGHT + (TOOLBAR_HEIGHT - BTN_H) / 2,
-    w: BTN_W,
+    w: bw,
     h: BTN_H,
   };
 }
@@ -366,7 +373,7 @@ export function isOverToolbar(sy: number, canvasH: number): boolean {
 
 // ---- Köylü profil paneli ----
 
-const PROFILE = { x: 12, y: 44, w: 252, h: 184 };
+const PROFILE = { x: 12, y: 44, w: 262, h: 184 };
 const CLOSE = { x: PROFILE.x + PROFILE.w - 24, y: PROFILE.y + 6, w: 18, h: 18 };
 
 export type ProfileHit = { kind: "close" } | { kind: "panel" } | null;
@@ -489,14 +496,14 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   // gerisi boş kalır
   ctx.fillStyle = "#e8e2d0";
   ctx.fillText("Çanta", x + 10, y + 145);
-  const slotS = 28;
+  const slotS = 26;
   const held = ITEM_TYPES.filter((it) => v.inventory[it] > 0);
   for (let i = 0; i < 6; i++) {
-    const sx = x + 66 + i * (slotS + 4);
+    const sx = x + 64 + i * (slotS + 4);
     drawSlot(ctx, sx, y + 130, slotS);
     const item = held[i];
     if (!item) continue;
-    drawItemIcon(ctx, item, sx + 4, y + 134, 20);
+    drawItemIcon(ctx, item, sx + 3, y + 133, 20);
     drawSlotCount(ctx, sx, y + 130, slotS, v.inventory[item]);
   }
 
@@ -705,7 +712,7 @@ export function drawBuildingPanel(
       if (isFull(item)) {
         ctx.fillStyle = "#ff6655";
         ctx.font = "bold 11px monospace";
-        ctx.fillText("DOLU!", x + 170, ly);
+        ctx.fillText("DOLU!", x + 186, ly);
         ctx.font = "12px monospace";
       }
       ly += 17;
@@ -1126,30 +1133,31 @@ export function drawHud(
     cx += bw + 12;
   }
 
-  // grup ayracı
-  ctx.strokeStyle = "rgba(255,255,255,0.15)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx + 0.5, 7);
-  ctx.lineTo(cx + 0.5, 27);
-  ctx.stroke();
-  cx += 14;
+  // tarih (takvim ikonu) — sağdaki düğmelere sığıyorsa
+  if (cx + 175 < w - 100) {
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx + 0.5, 7);
+    ctx.lineTo(cx + 0.5, 27);
+    ctx.stroke();
+    cx += 14;
 
-  // tarih (takvim ikonu)
-  entry((ix) => {
-    ctx.fillStyle = "#e8e2d0";
-    ctx.fillRect(ix + 1, 12, 12, 11);
-    ctx.fillStyle = "#c0473f";
-    ctx.fillRect(ix + 1, 12, 12, 4);
-    ctx.fillStyle = "#3a3f48";
-    ctx.fillRect(ix + 3, 18, 2, 2);
-    ctx.fillRect(ix + 7, 18, 2, 2);
-    ctx.fillRect(ix + 3, 21, 2, 1);
-    ctx.fillRect(ix + 11, 18, 1, 2);
-  }, `Tarih: ${dateString()}`);
+    entry((ix) => {
+      ctx.fillStyle = "#e8e2d0";
+      ctx.fillRect(ix + 1, 12, 12, 11);
+      ctx.fillStyle = "#c0473f";
+      ctx.fillRect(ix + 1, 12, 12, 4);
+      ctx.fillStyle = "#3a3f48";
+      ctx.fillRect(ix + 3, 18, 2, 2);
+      ctx.fillRect(ix + 7, 18, 2, 2);
+      ctx.fillRect(ix + 3, 21, 2, 1);
+      ctx.fillRect(ix + 11, 18, 1, 2);
+    }, `Tarih: ${dateString()}`);
+  }
 
   // saat (gündüz güneş / gece hilal ikonu)
-  {
+  if (cx + 150 < w - 100) {
     const dark = darkness();
     if (dark < 0.5) {
       // güneş
@@ -1185,7 +1193,7 @@ export function drawHud(
   }
 
   // mevsim rozeti
-  {
+  if (cx + 100 < w - 100) {
     const sIdx = season();
     const label = SEASON_NAMES[sIdx];
     ctx.font = "bold 12px monospace";
