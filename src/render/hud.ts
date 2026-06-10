@@ -371,9 +371,60 @@ export function isOverToolbar(sy: number, canvasH: number): boolean {
   return sy >= canvasH - TOOLBAR_HEIGHT;
 }
 
+// ---- İşaretleme filtresi (alan seçimi neyi işaretlesin?) ----
+
+export type MarkFilter = "all" | "wood" | "food" | "stone";
+
+export const MARK_FILTERS: { id: MarkFilter; label: string; color: string }[] = [
+  { id: "all", label: "Tümü", color: "#e8e2d0" },
+  { id: "wood", label: "Odun", color: "#c9a35a" },
+  { id: "food", label: "Yiyecek", color: "#8fd05e" },
+  { id: "stone", label: "Taş", color: "#9ad0ff" },
+];
+
+let filterRects: { id: MarkFilter; x: number; y: number; w: number; h: number }[] = [];
+
+export function markFilterHitTest(sx: number, sy: number): MarkFilter | null {
+  for (const r of filterRects) {
+    if (sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h) return r.id;
+  }
+  return null;
+}
+
+export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilter): void {
+  const h = ctx.canvas.height;
+  let x = 12;
+  const y = h - TOOLBAR_HEIGHT - 34;
+  ctx.font = "11px monospace";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(10, 12, 16, 0.7)";
+  const totalW = 64 + MARK_FILTERS.reduce(
+    (s, f) => s + ctx.measureText(f.label).width + 22, 0
+  );
+  ctx.fillRect(x - 6, y - 4, totalW, 28);
+  ctx.fillStyle = "#9a9488";
+  ctx.fillText("İşaretle:", x, y + 10);
+  x += 60;
+  filterRects = [];
+  for (const f of MARK_FILTERS) {
+    const w = ctx.measureText(f.label).width + 16;
+    const active = current === f.id;
+    ctx.fillStyle = active ? "rgba(90, 143, 60, 0.45)" : "rgba(255,255,255,0.07)";
+    ctx.fillRect(x, y, w, 20);
+    ctx.strokeStyle = active ? "#8fd05e" : "#4a4f58";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 19);
+    ctx.fillStyle = active ? "#d8f0c0" : f.color;
+    ctx.fillText(f.label, x + 8, y + 10);
+    filterRects.push({ id: f.id, x, y, w, h: 20 });
+    x += w + 6;
+  }
+}
+
 // ---- Köylü profil paneli ----
 
-const PROFILE = { x: 12, y: 44, w: 262, h: 184 };
+const PROFILE = { x: 12, y: 44, w: 262, h: 206 };
 const CLOSE = { x: PROFILE.x + PROFILE.w - 24, y: PROFILE.y + 6, w: 18, h: 18 };
 
 export type ProfileHit = { kind: "close" } | { kind: "panel" } | null;
@@ -492,19 +543,31 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.strokeStyle = "#3a3f48";
   ctx.strokeRect(barX + 0.5, y + 110.5, barW - 1, 11);
 
+  // moral barı: evde uyumak yükseltir, yerde yatmak düşürür
+  ctx.fillStyle = "#e8e2d0";
+  ctx.font = "12px monospace";
+  ctx.fillText("Moral", x + 10, y + 136);
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(barX, y + 130, barW, 12);
+  const m = v.morale / 100;
+  ctx.fillStyle = m > 0.5 ? "#7aa8e0" : m > 0.25 ? "#e0a83c" : "#d4453f";
+  ctx.fillRect(barX + 1, y + 131, (barW - 2) * m, 10);
+  ctx.strokeStyle = "#3a3f48";
+  ctx.strokeRect(barX + 0.5, y + 130.5, barW - 1, 11);
+
   // çanta: Minecraft tarzı — taşınan eşyalar sırayla slotlara dolar,
   // gerisi boş kalır
   ctx.fillStyle = "#e8e2d0";
-  ctx.fillText("Çanta", x + 10, y + 145);
+  ctx.fillText("Çanta", x + 10, y + 165);
   const slotS = 26;
   const held = ITEM_TYPES.filter((it) => v.inventory[it] > 0);
   for (let i = 0; i < 6; i++) {
     const sx = x + 64 + i * (slotS + 4);
-    drawSlot(ctx, sx, y + 130, slotS);
+    drawSlot(ctx, sx, y + 150, slotS);
     const item = held[i];
     if (!item) continue;
-    drawItemIcon(ctx, item, sx + 3, y + 133, 20);
-    drawSlotCount(ctx, sx, y + 130, slotS, v.inventory[item]);
+    drawItemIcon(ctx, item, sx + 3, y + 153, 20);
+    drawSlotCount(ctx, sx, y + 150, slotS, v.inventory[item]);
   }
 
   // görev ataması iş panelinden (N) ve bina panellerinden yapılır
@@ -512,7 +575,7 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.font = "11px monospace";
   ctx.fillText(
     v.baby ? "Bebekler büyüyünce çalışmaya başlar." : "Görevler binalardan ve N menüsünden atanır.",
-    x + 10, y + 172, w - 20
+    x + 10, y + 192, w - 20
   );
 }
 

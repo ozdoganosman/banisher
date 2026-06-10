@@ -1,4 +1,5 @@
 import { Camera } from "./engine/camera";
+import { foodItemOf, Tile } from "./world/tiles";
 import { Input } from "./engine/input";
 import { Renderer, type Ghost } from "./render/renderer";
 import {
@@ -12,8 +13,12 @@ import {
   isOverToolbar,
   popButtonHitTest,
   popPanelHitTest,
+  drawMarkFilters,
+  MARK_FILTERS,
+  markFilterHitTest,
   pauseButtonHitTest,
   popScrollBy,
+  type MarkFilter,
   profileHitTest,
   speedButtonHitTest,
   drawTechPanel,
@@ -95,6 +100,12 @@ let selectedVillager: Villager | null = null;
 let selectedBuilding: Building | null = null;
 let showPopulation = false;
 let showTech = false;
+let markFilter: MarkFilter = "all";
+// sol tuş sürükleme: alan seçimi veya mini harita gezdirme
+let selecting:
+  | { mode: "rect"; x0: number; y0: number; x1: number; y1: number }
+  | { mode: "minimap" }
+  | null = null;
 let paused = false;
 let gameSpeed = 1;
 
@@ -304,6 +315,13 @@ input.onClick = (wx, wy, sx, sy) => {
     return;
   }
 
+  // işaretleme filtresi çipleri
+  const mf = markFilterHitTest(sx, sy);
+  if (mf) {
+    markFilter = mf;
+    return;
+  }
+
   // üst bardaki nüfus ve teknoloji düğmeleri
   if (popButtonHitTest(sx, sy)) {
     showPopulation = !showPopulation;
@@ -451,25 +469,84 @@ input.onCancel = () => {
   showTech = false;
 };
 
-// Sol tuş basılı sürükleme: mini haritada kamera gezdirme,
-// dünyada ise üzerinden geçilen kaynakları topluca işaretleme
-input.onPaint = (wx, wy) => {
-  const mm = renderer.minimapHit(input.mouseX, input.mouseY);
-  if (mm) {
-    camera.x = mm.x;
-    camera.y = mm.y;
+// Sol tuş sürükleme: mini haritada kamera gezdirme, dünyada alan seçimi
+input.onLeftDragStart = (wx, wy, sx, sy) => {
+  if (renderer.minimapHit(sx, sy)) {
+    selecting = { mode: "minimap" };
     return;
   }
-  if (selected !== null || showPopulation || selectedVillager || selectedBuilding) return;
-  if (isOverToolbar(input.mouseY, canvas.height)) return;
-  const tx = Math.floor(wx / TILE_SIZE);
-  const ty = Math.floor(wy / TILE_SIZE);
-  if (!world.inBounds(tx, ty)) return;
-  // boya gibi: yalnızca işaret ekle (kaldırmak için tek tıkla)
-  world.markTree(tx, ty);
-  world.markFood(tx, ty);
-  world.markStone(tx, ty);
+  if (selected !== null || showPopulation || showTech || selectedVillager || selectedBuilding) return;
+  if (isOverToolbar(sy, canvas.height)) return;
+  selecting = { mode: "rect", x0: wx, y0: wy, x1: wx, y1: wy };
 };
+
+input.onLeftDragMove = (wx, wy, sx, sy) => {
+  if (!selecting) return;
+  if (selecting.mode === "minimap") {
+    const mm = renderer.minimapHit(sx, sy);
+    if (mm) {
+      camera.x = mm.x;
+      camera.y = mm.y;
+    }
+    return;
+  }
+  selecting.x1 = wx;
+  selecting.y1 = wy;
+};
+
+input.onLeftDragEnd = () => {
+  if (selecting?.mode === "rect") {
+    const n = markSelection(selecting);
+    if (n > 0) {
+      const label = MARK_FILTERS.find((f) => f.id === markFilter)?.label ?? "";
+      addMessage(`${n} blok işaretlendi (${label})`);
+    }
+  }
+  selecting = null;
+};
+
+// Seçim karesindeki blokları say (canlı gösterge için)
+function countSelection(sel: { x0: number; y0: number; x1: number; y1: number }) {
+  const tx0 = Math.max(0, Math.floor(Math.min(sel.x0, sel.x1) / TILE_SIZE));
+  const ty0 = Math.max(0, Math.floor(Math.min(sel.y0, sel.y1) / TILE_SIZE));
+  const tx1 = Math.min(MAP_W - 1, Math.floor(Math.max(sel.x0, sel.x1) / TILE_SIZE));
+  const ty1 = Math.min(MAP_H - 1, Math.floor(Math.max(sel.y0, sel.y1) / TILE_SIZE));
+  let trees = 0, food = 0, stone = 0;
+  for (let y = ty0; y <= ty1; y++) {
+    for (let x = tx0; x <= tx1; x++) {
+      const t = world.get(x, y);
+      if (t === Tile.Tree) trees++;
+      else if (foodItemOf(t)) food++;
+      else if (t === Tile.Stone) stone++;
+    }
+  }
+  return { trees, food, stone };
+}
+
+// Seçimi filtreye göre işaretle; işaretlenen blok sayısını döndürür
+function markSelection(sel: { x0: number; y0: number; x1: number; y1: number }): number {
+  const tx0 = Math.max(0, Math.floor(Math.min(sel.x0, sel.x1) / TILE_SIZE));
+  const ty0 = Math.max(0, Math.floor(Math.min(sel.y0, sel.y1) / TILE_SIZE));
+  const tx1 = Math.min(MAP_W - 1, Math.floor(Math.max(sel.x0, sel.x1) / TILE_SIZE));
+  const ty1 = Math.min(MAP_H - 1, Math.floor(Math.max(sel.y0, sel.y1) / TILE_SIZE));
+  let n = 0;
+  for (let y = ty0; y <= ty1; y++) {
+    for (let x = tx0; x <= tx1; x++) {
+      const t = world.get(x, y);
+      if ((markFilter === "all" || markFilter === "wood") && t === Tile.Tree) {
+        if (!world.markedTrees.has(world.index(x, y))) n++;
+        world.markTree(x, y);
+      } else if ((markFilter === "all" || markFilter === "food") && foodItemOf(t)) {
+        if (!world.markedBushes.has(world.index(x, y))) n++;
+        world.markFood(x, y);
+      } else if ((markFilter === "all" || markFilter === "stone") && t === Tile.Stone) {
+        if (!world.markedStones.has(world.index(x, y))) n++;
+        world.markStone(x, y);
+      }
+    }
+  }
+  return n;
+}
 
 // Nüfus menüsü açıkken üzerindeyken tekerlek menüyü kaydırır
 input.wheelInterceptor = (sx, sy, deltaY) => {
@@ -498,6 +575,9 @@ window.addEventListener("keydown", (e) => {
   } else if (e.code === "KeyT") {
     showTech = !showTech;
     showPopulation = false;
+  } else if (e.code === "KeyF") {
+    const i = MARK_FILTERS.findIndex((f) => f.id === markFilter);
+    markFilter = MARK_FILTERS[(i + 1) % MARK_FILTERS.length].id;
   }
   else if (e.code.startsWith("Digit")) {
     const n = Number(e.code.slice(5));
@@ -781,10 +861,33 @@ function frame(now: number) {
     ghost,
     selectedVillager,
     selectedBuilding,
+    selecting?.mode === "rect" ? selecting : null,
     now / 1000
   );
   renderer.drawMinimap(ctx, camera, villagers, buildings, TOOLBAR_HEIGHT);
   drawHud(ctx, villagers.length, selected, paused, gameSpeed);
+  if (villagers.length > 0) drawMarkFilters(ctx, markFilter);
+
+  // alan seçerken imlecin yanında canlı sayım
+  if (selecting?.mode === "rect") {
+    const c = countSelection(selecting);
+    const parts: string[] = [];
+    if (markFilter === "all" || markFilter === "wood") parts.push(`Ağaç ${c.trees}`);
+    if (markFilter === "all" || markFilter === "food") parts.push(`Yiyecek ${c.food}`);
+    if (markFilter === "all" || markFilter === "stone") parts.push(`Taş ${c.stone}`);
+    const text = parts.join("  •  ");
+    ctx.font = "bold 12px monospace";
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText(text).width + 16;
+    const lx = Math.min(input.mouseX + 16, canvas.width - tw - 4);
+    const lyy = Math.max(40, input.mouseY - 18);
+    ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
+    ctx.fillRect(lx, lyy - 10, tw, 20);
+    ctx.strokeStyle = "rgba(160, 240, 180, 0.7)";
+    ctx.strokeRect(lx + 0.5, lyy - 9.5, tw - 1, 19);
+    ctx.fillStyle = "#d8f0c0";
+    ctx.fillText(text, lx + 8, lyy);
+  }
   if (villagers.length > 0) {
     if (selectedVillager) drawProfile(ctx, selectedVillager);
     if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers);

@@ -417,6 +417,7 @@ export class Renderer {
     ghost: Ghost | null,
     selectedVillager: Villager | null,
     selectedBuilding: Building | null,
+    selectionRect: { x0: number; y0: number; x1: number; y1: number } | null,
     time: number
   ): void {
     // mevsim değiştiyse zemini yeni paletle baştan boya
@@ -599,6 +600,21 @@ export class Renderer {
     }
     ctx.globalAlpha = 1;
     ctx.textAlign = "left";
+
+    // Alan seçimi karesi (blok ızgarasına oturur)
+    if (selectionRect) {
+      const tx0 = Math.floor(Math.min(selectionRect.x0, selectionRect.x1) / TILE_SIZE) * TILE_SIZE;
+      const ty0 = Math.floor(Math.min(selectionRect.y0, selectionRect.y1) / TILE_SIZE) * TILE_SIZE;
+      const tx1 = (Math.floor(Math.max(selectionRect.x0, selectionRect.x1) / TILE_SIZE) + 1) * TILE_SIZE;
+      const ty1 = (Math.floor(Math.max(selectionRect.y0, selectionRect.y1) / TILE_SIZE) + 1) * TILE_SIZE;
+      ctx.fillStyle = "rgba(140, 220, 160, 0.15)";
+      ctx.fillRect(tx0, ty0, tx1 - tx0, ty1 - ty0);
+      ctx.strokeStyle = "rgba(160, 240, 180, 0.9)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(tx0 + 0.5, ty0 + 0.5, tx1 - tx0 - 1, ty1 - ty0 - 1);
+      ctx.setLineDash([]);
+    }
 
     // Hayalet bina (yerleştirme önizlemesi)
     if (ghost) {
@@ -1247,6 +1263,40 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(x, y + 0.5, 3, 1.2, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // uyuyan köylü: yerde yatar, üstünde "z" harfleri süzülür
+    if (v.state === "sleeping") {
+      ctx.strokeStyle = v.shirt;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(x - 3, y - 1.5);
+      ctx.lineTo(x + 2.5, y - 1.5);
+      ctx.stroke();
+      ctx.strokeStyle = LINE;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(x + 2.5, y - 1.5);
+      ctx.lineTo(x + 4.5, y - 0.5);
+      ctx.stroke();
+      ctx.fillStyle = SKIN;
+      ctx.strokeStyle = LINE;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.arc(x - 4.5, y - 2, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // z... z...
+      const zt = (v.walkPhase % 2) / 2;
+      ctx.globalAlpha = 1 - zt;
+      ctx.font = "bold 4px monospace";
+      ctx.fillStyle = "#cfe0f0";
+      ctx.fillText("z", x + 1, y - 6 - zt * 4);
+      ctx.font = "bold 3px monospace";
+      ctx.fillText("z", x + 4, y - 9 - zt * 4);
+      ctx.globalAlpha = 1;
+      if (k !== 1) ctx.restore();
+      return;
+    }
 
     // bacaklar
     ctx.strokeStyle = LINE;

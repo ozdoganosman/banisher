@@ -15,7 +15,7 @@ import {
 } from "./buildings";
 import { babyIdentity, randomIdentity, type Identity } from "./names";
 import { hasTech } from "./tech";
-import { isNight, totalDays } from "./time";
+import { isNight, isSleepTime, totalDays } from "./time";
 import {
   findPath,
   findPathAdjacent,
@@ -103,6 +103,7 @@ type VillagerState =
   | "worshipping"
   | "fishing"
   | "tending"
+  | "sleeping"
   | "eating";
 
 type Job =
@@ -114,6 +115,7 @@ type Job =
   | { kind: "hunt"; animal: Animal }
   | { kind: "build"; building: Building }
   | { kind: "worship"; building: Building }
+  | { kind: "sleep"; building: Building | null }
   | { kind: "eat"; building: Building }
   | { kind: "deposit"; building: Building };
 
@@ -125,6 +127,8 @@ export class Villager {
   facing: 1 | -1 = 1;
   walkPhase = 0; // bacak/kol salınımı için
   hunger: number;
+  morale = 80; // evsiz yerde yatanların morali düşer, evde uyuyanın yükselir
+  groundSleep = false; // bu gece yerde mi uyuyor
   dead = false;
   assignment: Assignment = { kind: "laborer" };
   baby: boolean;
@@ -195,6 +199,9 @@ export class Villager {
           case "hunt": return "Ava gidiyor";
           case "build": return "Şantiyeye gidiyor";
           case "worship": return "Tapınağa gidiyor";
+          case "sleep":
+            return this.job.building && this.job.building === this.home
+              ? "Eve dönüyor" : "Kampa dönüyor";
           case "eat": return "Yemekhaneye gidiyor";
           case "deposit": return "Depoya taşıyor";
         }
@@ -216,6 +223,8 @@ export class Villager {
         return "İnşaat yapıyor";
       case "worshipping":
         return "Tapınıyor";
+      case "sleeping":
+        return this.groundSleep ? "Yerde uyuyor" : "Uyuyor";
       case "eating":
         return "Yemek yiyor";
     }
@@ -251,17 +260,32 @@ export class Villager {
       this.starveTimer = 0;
     }
 
-    // Gece çöktü ve çalıştığı yer karanlıkta kaldıysa işi bırak
-    if (
-      isNight() &&
-      !isLit(buildings, this.x, this.y) &&
-      (this.state === "chopping" || this.state === "gathering" ||
-        this.state === "mining" || this.state === "building" ||
-        this.state === "worshipping" || this.state === "fishing" ||
-        this.state === "tending")
-    ) {
+    // Gece çöktü ve çalıştığı yer karanlıkta kaldıysa, ya da uyku vakti
+    // geldiyse işi bırak
+    const working =
+      this.state === "chopping" || this.state === "gathering" ||
+      this.state === "mining" || this.state === "building" ||
+      this.state === "worshipping" || this.state === "fishing" ||
+      this.state === "tending";
+    if (working && ((isNight() && !isLit(buildings, this.x, this.y)) || isSleepTime())) {
       this.releaseJob(world);
       this.toIdle();
+    }
+
+    // sabah oldu: uyan
+    if (this.state === "sleeping" && !isSleepTime()) {
+      this.groundSleep = false;
+      this.toIdle();
+    }
+
+    // uyurken moral değişir: evde dinlenmek iyi, yerde yatmak kötü
+    if (this.state === "sleeping") {
+      this.morale = Math.max(
+        0,
+        Math.min(100, this.morale + (this.groundSleep ? -0.45 : 0.3) * dt)
+      );
+      this.walkPhase += dt; // "z" animasyonu
+      return;
     }
 
     switch (this.state) {
@@ -357,6 +381,12 @@ export class Villager {
       }
       this.state = "eating";
       this.timer = EAT_TIME;
+      return;
+    }
+
+    // Uyku vakti: eve (yoksa kampın yanına) git ve uyu
+    if (isSleepTime()) {
+      this.goSleep(world, buildings);
       return;
     }
 
@@ -671,6 +701,34 @@ export class Villager {
     return true;
   }
 
+  // Eve, ev yoksa kampın yakınına gidip uyu (evsizler yerde yatar)
+  private goSleep(world: World, buildings: Building[]): void {
+    const target =
+      this.home ??
+      buildings.find((b) => b.type === BuildingType.Camp && b.done) ??
+      null;
+    this.groundSleep = !this.home;
+    if (target) {
+      const d = Math.abs(this.x - target.centerX) + Math.abs(this.y - target.centerY);
+      if (d <= TILE_SIZE * 2.5) {
+        this.state = "sleeping";
+        this.walkPhase = 0;
+        return;
+      }
+      const path = findPathAdjacentRect(
+        world, this.tileX, this.tileY, target.x, target.y, target.size
+      );
+      if (path) {
+        this.job = { kind: "sleep", building: target };
+        this.startPath(path);
+        return;
+      }
+    }
+    // hedefe ulaşılamıyorsa olduğu yerde uyu
+    this.state = "sleeping";
+    this.walkPhase = 0;
+  }
+
   private startPath(path: PathNode[]): void {
     this.path = path;
     this.pathIdx = 0;
@@ -705,6 +763,8 @@ export class Villager {
       case "worship":
         return !this.job.building.removed &&
           (!night || isLit(buildings, this.job.building.centerX, this.job.building.centerY));
+      case "sleep":
+        return isSleepTime();
       case "eat":
         return foodTotal() >= FOOD_PER_MEAL; // hayatta kalma: ışık aranmaz
       case "deposit":
@@ -733,6 +793,7 @@ export class Villager {
     const dist = Math.hypot(dx, dy);
     let speed = this.starving ? WALK_SPEED * 0.5 : WALK_SPEED;
     if (this.baby) speed *= 0.55; // bebekler tıpış tıpış yürür
+    speed *= 0.8 + this.morale / 500; // morali düşük köylü ağır çalışır
     const step = speed * dt;
 
     if (dx !== 0) this.facing = dx > 0 ? 1 : -1;
@@ -793,6 +854,11 @@ export class Villager {
         this.state = "worshipping";
         this.timer = WORSHIP_TIME;
         this.faceTowards(this.job.building.centerX);
+        break;
+      case "sleep":
+        this.job = null;
+        this.state = "sleeping";
+        this.walkPhase = 0;
         break;
       case "eat":
         this.atCafeteria = true;

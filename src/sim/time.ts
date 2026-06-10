@@ -69,3 +69,8 @@ export function darkness(): number {
 export function isNight(): boolean {
   return darkness() > 0.5;
 }
+
+// 00:00 - 06:00 arası uyku vaktidir (köylüler eve/kampa döner)
+export function isSleepTime(): boolean {
+  return dayFrac() >= 0.75;
+}

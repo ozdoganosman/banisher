@@ -19,14 +19,19 @@ export class Input {
     | null = null;
   // sağ tık (sürüklemeden bırakılırsa): seçim iptali
   onCancel: (() => void) | null = null;
-  // sol tuş basılı sürüklerken çağrılır (toplu kaynak işaretleme)
-  onPaint: ((worldX: number, worldY: number) => void) | null = null;
+  // sol tuş sürükleme yaşam döngüsü (alan seçimi / mini harita gezdirme)
+  onLeftDragStart: ((wx: number, wy: number, sx: number, sy: number) => void) | null = null;
+  onLeftDragMove: ((wx: number, wy: number, sx: number, sy: number) => void) | null = null;
+  onLeftDragEnd: (() => void) | null = null;
   // tekerleği yakala (örn. menü kaydırma); true dönerse zoom yapılmaz
   wheelInterceptor: ((sx: number, sy: number, deltaY: number) => boolean) | null = null;
 
   private keys = new Set<string>();
   private dragging = false;
   private dragMoved = 0;
+  private leftDragging = false;
+  private downWorld = { x: 0, y: 0 };
+  private downScreen = { x: 0, y: 0 };
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -52,6 +57,12 @@ export class Input {
 
     canvas.addEventListener("pointerdown", (e) => {
       this.dragMoved = 0;
+      if (e.button === 0) {
+        const w = this.camera.screenToWorld(e.offsetX, e.offsetY, canvas.width, canvas.height);
+        this.downWorld = w;
+        this.downScreen = { x: e.offsetX, y: e.offsetY };
+        this.leftDragging = false;
+      }
       // sağ veya orta tuş ile sürükleyerek kaydırma
       if (e.button === 1 || e.button === 2) {
         this.dragging = true;
@@ -66,11 +77,17 @@ export class Input {
         this.camera.pan(-e.movementX / this.camera.zoom, -e.movementY / this.camera.zoom);
         this.dragMoved += Math.abs(e.movementX) + Math.abs(e.movementY);
       } else if (e.buttons & 1) {
-        // sol tuş basılı sürükleme: boya gibi işaretleme
         this.dragMoved += Math.abs(e.movementX) + Math.abs(e.movementY);
-        if (this.dragMoved >= 4) {
+        if (!this.leftDragging && this.dragMoved >= 4) {
+          this.leftDragging = true;
+          this.onLeftDragStart?.(
+            this.downWorld.x, this.downWorld.y,
+            this.downScreen.x, this.downScreen.y
+          );
+        }
+        if (this.leftDragging) {
           const w = this.camera.screenToWorld(e.offsetX, e.offsetY, canvas.width, canvas.height);
-          this.onPaint?.(w.x, w.y);
+          this.onLeftDragMove?.(w.x, w.y, e.offsetX, e.offsetY);
         }
       }
     });
@@ -81,9 +98,14 @@ export class Input {
         if (e.button === 2 && this.dragMoved < 4) this.onCancel?.();
         return;
       }
-      if (e.button === 0 && this.dragMoved < 4) {
-        const w = this.camera.screenToWorld(e.offsetX, e.offsetY, canvas.width, canvas.height);
-        this.onClick?.(w.x, w.y, e.offsetX, e.offsetY);
+      if (e.button === 0) {
+        if (this.leftDragging) {
+          this.leftDragging = false;
+          this.onLeftDragEnd?.();
+        } else if (this.dragMoved < 4) {
+          const w = this.camera.screenToWorld(e.offsetX, e.offsetY, canvas.width, canvas.height);
+          this.onClick?.(w.x, w.y, e.offsetX, e.offsetY);
+        }
       }
     });
   }
