@@ -28,6 +28,11 @@ export function addItem(item: ItemType, n: number): number {
   return added;
 }
 
+// Bu ürünün deposu dolu mu? Doluysa köylüler onu toplamayı bırakır
+export function isFull(item: ItemType): boolean {
+  return resources[item] >= resources.cap;
+}
+
 // Yenebilir toplam: meyve + mantar
 export function foodTotal(): number {
   return resources.berry + resources.mushroom;

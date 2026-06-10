@@ -3,9 +3,16 @@ import { Input } from "./engine/input";
 import { Renderer, type Ghost } from "./render/renderer";
 import {
   addMessage,
+  buildingPanelHitTest,
+  drawBuildingPanel,
   drawHud,
+  drawPopulationPanel,
   drawProfile,
+  isOverPopPanel,
   isOverToolbar,
+  popButtonHitTest,
+  popPanelHitTest,
+  popScrollBy,
   profileHitTest,
   toolbarHitTest,
   updateMessages,
@@ -18,7 +25,7 @@ import {
   canPlace,
   placeBuilding,
 } from "./sim/buildings";
-import { resources } from "./sim/resources";
+import { isFull, ITEM_INFO, ITEM_TYPES, resources, type ItemType } from "./sim/resources";
 import { Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
 import { TILE_SIZE } from "./world/tiles";
@@ -63,6 +70,8 @@ const villagers: Villager[] = [];
 const buildings: Building[] = [];
 let selected: BuildingType | null = null;
 let selectedVillager: Villager | null = null;
+let selectedBuilding: Building | null = null;
+let showPopulation = false;
 let paused = false;
 let gameSpeed = 1;
 
@@ -78,6 +87,16 @@ function villagerAt(wx: number, wy: number): Villager | null {
     }
   }
   return best;
+}
+
+// Tıklanan blok bir binanın ayak izindeyse o binayı döndür
+function buildingAt(tx: number, ty: number): Building | null {
+  for (const b of buildings) {
+    if (tx >= b.x && tx < b.x + BUILDING_SIZE && ty >= b.y && ty < b.y + BUILDING_SIZE) {
+      return b;
+    }
+  }
+  return null;
 }
 
 // Bir nokta etrafındaki yürünebilir bloklara köylü yerleştir (başlangıç ve yeni evler)
@@ -131,6 +150,36 @@ input.onClick = (wx, wy, sx, sy) => {
     return;
   }
 
+  // üst bardaki nüfus düğmesi
+  if (popButtonHitTest(sx, sy)) {
+    showPopulation = !showPopulation;
+    return;
+  }
+
+  // nüfus yönetim menüsü açıkken tıklamalar önce ona gider
+  if (showPopulation) {
+    const hit = popPanelHitTest(sx, sy, villagers.length);
+    if (hit) {
+      if (hit.kind === "close") {
+        showPopulation = false;
+      } else if (hit.kind === "profession") {
+        villagers[hit.index].profession = hit.profession;
+      } else if (hit.kind === "select") {
+        // isme tıkla: menüyü kapat, köylünün profilini aç ve kameraya al
+        const v = villagers[hit.index];
+        showPopulation = false;
+        selectedVillager = v;
+        selectedBuilding = null;
+        camera.x = v.x;
+        camera.y = v.y;
+      }
+      return;
+    }
+    // panel dışına tıklama menüyü kapatır
+    showPopulation = false;
+    return;
+  }
+
   // profil paneli açıkken üzerine gelen tıklamalar dünyaya geçmesin
   if (selectedVillager) {
     const hit = profileHitTest(sx, sy);
@@ -140,6 +189,15 @@ input.onClick = (wx, wy, sx, sy) => {
       } else if (hit.kind === "profession") {
         selectedVillager.profession = hit.profession;
       }
+      return;
+    }
+  }
+
+  // bina paneli açıkken
+  if (selectedBuilding) {
+    const hit = buildingPanelHitTest(sx, sy);
+    if (hit) {
+      if (hit === "close") selectedBuilding = null;
       return;
     }
   }
@@ -169,27 +227,52 @@ input.onClick = (wx, wy, sx, sy) => {
     buildings.push(b);
     addMessage(`${def.name} şantiyesi kuruldu`);
   } else {
-    // köylüye tıklandıysa profilini aç, değilse ağaç/çalı işaretle
+    // köylü > bina > blok işaretleme önceliğiyle tıklamayı yönlendir
     const v = villagerAt(wx, wy);
-    if (v) selectedVillager = v;
-    else world.toggleMark(tx, ty);
+    if (v) {
+      selectedVillager = v;
+      selectedBuilding = null;
+      return;
+    }
+    const b = buildingAt(tx, ty);
+    if (b) {
+      selectedBuilding = b;
+      selectedVillager = null;
+      return;
+    }
+    world.toggleMark(tx, ty);
   }
 };
 
 input.onCancel = () => {
   selected = null;
   selectedVillager = null;
+  selectedBuilding = null;
+  showPopulation = false;
+};
+
+// Nüfus menüsü açıkken üzerindeyken tekerlek menüyü kaydırır
+input.wheelInterceptor = (sx, sy, deltaY) => {
+  if (showPopulation && isOverPopPanel(sx, sy)) {
+    popScrollBy(deltaY > 0 ? 1 : -1, villagers.length);
+    return true;
+  }
+  return false;
 };
 
 window.addEventListener("keydown", (e) => {
   if (e.code === "Escape") {
     selected = null;
     selectedVillager = null;
+    selectedBuilding = null;
+    showPopulation = false;
   } else if (e.code === "Space") {
     e.preventDefault();
     paused = !paused;
   } else if (e.code === "KeyX") {
     gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : 1;
+  } else if (e.code === "KeyN") {
+    showPopulation = !showPopulation;
   }
   else if (e.code.startsWith("Digit")) {
     const n = Number(e.code.slice(5));
@@ -207,9 +290,26 @@ window.addEventListener("keydown", (e) => {
 
 // ---- Simülasyon adımı ----
 
+// Depo dolduğunda bir kez bildirim göster (boşalınca sıfırlanır)
+const wasFull: Record<ItemType, boolean> = {
+  wood: false, stone: false, berry: false, mushroom: false,
+};
+
+function checkStorageFull() {
+  for (const item of ITEM_TYPES) {
+    const full = isFull(item);
+    if (full && !wasFull[item]) {
+      const name = ITEM_INFO[item].name;
+      addMessage(`${name[0].toUpperCase()}${name.slice(1)} deposu doldu! İşçiler başka işlere yöneliyor.`);
+    }
+    wasFull[item] = full;
+  }
+}
+
 function step(dt: number) {
   world.update(dt);
   updateEffects(dt);
+  checkStorageFull();
 
   for (const v of villagers) v.update(dt, world, buildings);
 
@@ -291,10 +391,13 @@ function frame(now: number) {
     hoverValid ? hoverTile : null,
     ghost,
     selectedVillager,
+    selectedBuilding,
     now / 1000
   );
   drawHud(ctx, villagers.length, selected, paused, gameSpeed);
   if (selectedVillager) drawProfile(ctx, selectedVillager);
+  if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world);
+  if (showPopulation) drawPopulationPanel(ctx, villagers);
 
   requestAnimationFrame(frame);
 }

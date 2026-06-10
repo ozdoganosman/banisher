@@ -19,6 +19,8 @@ export class Input {
     | null = null;
   // sağ tık (sürüklemeden bırakılırsa): seçim iptali
   onCancel: (() => void) | null = null;
+  // tekerleği yakala (örn. menü kaydırma); true dönerse zoom yapılmaz
+  wheelInterceptor: ((sx: number, sy: number, deltaY: number) => boolean) | null = null;
 
   private keys = new Set<string>();
   private dragging = false;
@@ -41,6 +43,7 @@ export class Input {
 
     canvas.addEventListener("wheel", (e) => {
       e.preventDefault();
+      if (this.wheelInterceptor?.(e.offsetX, e.offsetY, e.deltaY)) return;
       const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
       this.camera.zoomAt(e.offsetX, e.offsetY, factor, canvas.width, canvas.height);
     }, { passive: false });

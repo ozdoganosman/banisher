@@ -18,6 +18,8 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 |---|---|
 | Sol tık | Ağaç/çalı/mantar/taş işaretle veya seçili binayı yerleştir |
 | Köylüye sol tık | Profilini aç (kimlik, durum, çanta, meslek atama) |
+| Binaya sol tık | Detay paneli (depo içeriği, inşaat ilerlemesi vb.) |
+| N / "Nüfus" düğmesi | Nüfus yönetim menüsü: tüm köylüler tek listede |
 | 1-4 | Bina seç (Ev, Depo, Oduncu, Toplayıcı) |
 | Esc / sağ tık | Seçimi iptal et |
 | Space | Duraklat / devam et |
@@ -28,7 +30,19 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
-## Şu anki özellikler (v0.3)
+## Şu anki özellikler (v0.4)
+
+### v0.4: Yönetim panelleri ve depo dolu davranışı
+
+- **Tıklanabilir binalar**: her binaya tıklayınca detay paneli açılır —
+  şantiyelerde inşaat ilerlemesi, depolarda stok listesi (dolu ürünler
+  kırmızı "DOLU!" etiketiyle), üretim kulübelerinde çevredeki işaret sayısı
+- **Nüfus yönetim menüsü** (N): tüm köylüler tek listede — yaş, anlık durum,
+  tokluk ve tek tıkla meslek atama; isme tıklayınca köylünün profili açılır
+  ve kamera ona gider; uzun listede tekerlekle kaydırma
+- **Depo dolu uyarısı**: bir ürün kapasiteye ulaşınca teslimat binalarının
+  üstünde sallanan "!" işareti çıkar, bildirim düşer ve işçiler o hammaddeyi
+  toplamayı bırakıp diğer işlere yönelir (depo boşalınca otomatik dönerler)
 
 ### v0.3: Envanter, meslekler, madencilik, yemek çeşitliliği
 

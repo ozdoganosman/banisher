@@ -13,6 +13,7 @@ import {
 import {
   addItem,
   foodTotal,
+  isFull,
   ITEM_INFO,
   ITEM_TYPES,
   takeFood,
@@ -256,7 +257,7 @@ export class Villager {
       }
     }
 
-    if (this.canDo("chop")) {
+    if (this.canDo("chop") && !isFull("wood")) {
       const tree = world.findNearestMarked(world.markedTrees, world.claimedTrees, this.x, this.y);
       if (tree) {
         candidates.push({
@@ -270,7 +271,11 @@ export class Villager {
     }
 
     if (this.canDo("gather")) {
-      const food = world.findNearestMarked(world.markedBushes, world.claimedBushes, this.x, this.y);
+      // deposu dolu olan yemek türünü toplamaya gitme
+      const food = world.findNearestMarked(
+        world.markedBushes, world.claimedBushes, this.x, this.y,
+        (x, y) => world.get(x, y) === Tile.Mushroom ? !isFull("mushroom") : !isFull("berry")
+      );
       if (food) {
         candidates.push({
           dist: food.dist,
@@ -283,7 +288,7 @@ export class Villager {
       }
     }
 
-    if (this.canDo("mine")) {
+    if (this.canDo("mine") && !isFull("stone")) {
       const stone = world.findNearestMarked(world.markedStones, world.claimedStones, this.x, this.y);
       if (stone) {
         candidates.push({
@@ -356,14 +361,18 @@ export class Villager {
     this.state = "walking";
   }
 
-  // İş yürürken iptal edildiyse (işaret kaldırıldı) doğru/yanlış döner
+  // İş yürürken iptal edildiyse (işaret kaldırıldı veya depo dolduysa)
   private jobStillValid(world: World): boolean {
     if (!this.job) return true;
     switch (this.job.kind) {
-      case "chop": return world.markedTrees.has(this.job.tile);
-      case "gather": return world.markedBushes.has(this.job.tile);
-      case "mine": return world.markedStones.has(this.job.tile);
-      default: return true;
+      case "chop":
+        return world.markedTrees.has(this.job.tile) && !isFull("wood");
+      case "gather":
+        return world.markedBushes.has(this.job.tile) && !isFull(this.job.item);
+      case "mine":
+        return world.markedStones.has(this.job.tile) && !isFull("stone");
+      default:
+        return true;
     }
   }
 

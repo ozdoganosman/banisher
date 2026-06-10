@@ -1,6 +1,7 @@
 import { TILE_SIZE } from "../world/tiles";
 import { Tile } from "../world/tiles";
 import type { World } from "../world/world";
+import { isFull } from "./resources";
 
 export const enum BuildingType {
   House = 0,
@@ -100,14 +101,17 @@ export class Building {
     const cx = this.x + 1;
     const cy = this.y + 1;
     if (this.type === BuildingType.Woodcutter) {
+      if (isFull("wood")) return; // depo dolu: işaretlemeyi durdur
       if (world.countMarkedNear(world.markedTrees, cx, cy, AUTO_MARK_RADIUS) >= AUTO_MARK_MAX) return;
       const t = world.findNearestTileOfType(Tile.Tree, cx, cy, AUTO_MARK_RADIUS, world.markedTrees);
       if (t) world.markTree(t.x, t.y);
     } else {
       if (world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS) >= AUTO_MARK_MAX) return;
       const b =
-        world.findNearestTileOfType(Tile.Bush, cx, cy, AUTO_MARK_RADIUS, world.markedBushes) ??
-        world.findNearestTileOfType(Tile.Mushroom, cx, cy, AUTO_MARK_RADIUS, world.markedBushes);
+        (isFull("berry") ? null
+          : world.findNearestTileOfType(Tile.Bush, cx, cy, AUTO_MARK_RADIUS, world.markedBushes)) ??
+        (isFull("mushroom") ? null
+          : world.findNearestTileOfType(Tile.Mushroom, cx, cy, AUTO_MARK_RADIUS, world.markedBushes));
       if (b) world.markFood(b.x, b.y);
     }
   }

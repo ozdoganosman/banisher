@@ -1,11 +1,17 @@
-import { BUILDING_DEFS, BuildingType } from "../sim/buildings";
-import { ITEM_INFO, ITEM_TYPES, resources } from "../sim/resources";
+import {
+  BUILDING_DEFS,
+  BuildingType,
+  isDepositPoint,
+  type Building,
+} from "../sim/buildings";
+import { isFull, ITEM_INFO, ITEM_TYPES, resources } from "../sim/resources";
 import {
   PROFESSION_NAMES,
   PROFESSIONS,
   type Profession,
   type Villager,
 } from "../sim/villager";
+import type { World } from "../world/world";
 
 export const TOOLBAR_HEIGHT = 64;
 
@@ -248,7 +254,290 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   }
 }
 
+// ---- Bina detay paneli ----
+
+// Son çizilen panelin konumu (hit-test ile aynı kalması için)
+let bpanel = { x: 12, y: 44, w: 252, h: 120 };
+
+export function buildingPanelHitTest(sx: number, sy: number): "close" | "panel" | null {
+  const cx = bpanel.x + bpanel.w - 24;
+  const cy = bpanel.y + 6;
+  if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return "close";
+  if (sx >= bpanel.x && sx <= bpanel.x + bpanel.w && sy >= bpanel.y && sy <= bpanel.y + bpanel.h) {
+    return "panel";
+  }
+  return null;
+}
+
+function drawCloseButton(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(x, y, 18, 18);
+  ctx.strokeStyle = "#9a9488";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + 5, y + 5);
+  ctx.lineTo(x + 13, y + 13);
+  ctx.moveTo(x + 13, y + 5);
+  ctx.lineTo(x + 5, y + 13);
+  ctx.stroke();
+}
+
+// Uzun açıklamayı panel genişliğine göre satırlara böl
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const tryLine = line ? `${line} ${word}` : word;
+    if (ctx.measureText(tryLine).width > maxW && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = tryLine;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+export function drawBuildingPanel(
+  ctx: CanvasRenderingContext2D,
+  b: Building,
+  world: World
+): void {
+  const def = b.def;
+  const w = 252;
+  const x = 12;
+  const y = 44;
+  ctx.font = "11px monospace";
+  const descLines = wrapText(ctx, def.desc, w - 24);
+
+  // içerik yüksekliğini hesapla
+  let h = 40 + descLines.length * 14 + 10;
+  if (!b.done) h += 34;
+  else if (isDepositPoint(b)) h += 14 + ITEM_TYPES.length * 17 + 6;
+  else if (b.type === BuildingType.Woodcutter || b.type === BuildingType.Gatherer) h += 22;
+  bpanel = { x, y, w, h };
+
+  ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#5a5f68";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  drawCloseButton(ctx, x + w - 24, y + 6);
+
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffe296";
+  ctx.font = "bold 14px monospace";
+  ctx.fillText(b.done ? def.name : `${def.name} (şantiye)`, x + 12, y + 18);
+
+  ctx.font = "11px monospace";
+  ctx.fillStyle = "#9a9488";
+  let ly = y + 40;
+  for (const line of descLines) {
+    ctx.fillText(line, x + 12, ly);
+    ly += 14;
+  }
+  ly += 4;
+
+  if (!b.done) {
+    // inşaat ilerlemesi
+    const pct = Math.floor((b.progress / def.buildTime) * 100);
+    ctx.fillStyle = "#e8e2d0";
+    ctx.font = "12px monospace";
+    ctx.fillText(`İnşa ediliyor: %${pct}`, x + 12, ly + 4);
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillRect(x + 12, ly + 14, w - 24, 8);
+    ctx.fillStyle = "#ffd23c";
+    ctx.fillRect(x + 13, ly + 15, (w - 26) * (b.progress / def.buildTime), 6);
+  } else if (isDepositPoint(b)) {
+    // depo içeriği: her ürün ayrı satır, dolanlar kırmızı "DOLU" etiketli
+    ctx.font = "12px monospace";
+    for (const item of ITEM_TYPES) {
+      ctx.fillStyle = ITEM_INFO[item].color;
+      ctx.fillRect(x + 12, ly - 5, 10, 10);
+      ctx.strokeStyle = "#3a3f48";
+      ctx.strokeRect(x + 12.5, ly - 4.5, 9, 9);
+      const name = ITEM_INFO[item].name;
+      ctx.fillStyle = "#e8e2d0";
+      ctx.fillText(
+        `${name[0].toUpperCase()}${name.slice(1)}: ${resources[item]}/${resources.cap}`,
+        x + 30, ly
+      );
+      if (isFull(item)) {
+        ctx.fillStyle = "#ff6655";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("DOLU!", x + 170, ly);
+        ctx.font = "12px monospace";
+      }
+      ly += 17;
+    }
+  } else if (b.type === BuildingType.Woodcutter || b.type === BuildingType.Gatherer) {
+    const marked = b.type === BuildingType.Woodcutter
+      ? world.countMarkedNear(world.markedTrees, b.x + 1, b.y + 1, 9)
+      : world.countMarkedNear(world.markedBushes, b.x + 1, b.y + 1, 9);
+    ctx.fillStyle = "#e8e2d0";
+    ctx.font = "12px monospace";
+    ctx.fillText(`Çevrede işaretli: ${marked}`, x + 12, ly + 2);
+  }
+}
+
+// ---- Nüfus yönetim menüsü ----
+
+const POP_ROW_H = 26;
+const POP_MAX_ROWS = 12;
+const POP_W = 620;
+let popScroll = 0;
+let popRect = { x: 0, y: 0, w: POP_W, h: 0 };
+
+export function popScrollBy(n: number, count: number): void {
+  popScroll = Math.max(0, Math.min(Math.max(0, count - POP_MAX_ROWS), popScroll + n));
+}
+
+export function isOverPopPanel(sx: number, sy: number): boolean {
+  return sx >= popRect.x && sx <= popRect.x + popRect.w &&
+    sy >= popRect.y && sy <= popRect.y + popRect.h;
+}
+
+// Satırdaki meslek mini düğmeleri
+function popProfButtons(rowY: number) {
+  return PROFESSIONS.map((p, i) => ({
+    profession: p,
+    x: popRect.x + 408 + i * 40,
+    y: rowY + 3,
+    w: 37,
+    h: POP_ROW_H - 6,
+  }));
+}
+
+export type PopHit =
+  | { kind: "close" }
+  | { kind: "profession"; index: number; profession: Profession }
+  | { kind: "select"; index: number }
+  | { kind: "panel" }
+  | null;
+
+export function popPanelHitTest(sx: number, sy: number, count: number): PopHit {
+  const cx = popRect.x + popRect.w - 26;
+  const cy = popRect.y + 8;
+  if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
+
+  const rowsY = popRect.y + 58;
+  const visible = Math.min(count, POP_MAX_ROWS);
+  if (sy >= rowsY && sy < rowsY + visible * POP_ROW_H) {
+    const row = Math.floor((sy - rowsY) / POP_ROW_H);
+    const index = popScroll + row;
+    if (index < count) {
+      for (const b of popProfButtons(rowsY + row * POP_ROW_H)) {
+        if (sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) {
+          return { kind: "profession", index, profession: b.profession };
+        }
+      }
+      if (sx >= popRect.x + 10 && sx <= popRect.x + 180) return { kind: "select", index };
+    }
+  }
+  if (isOverPopPanel(sx, sy)) return { kind: "panel" };
+  return null;
+}
+
+const PROF_SHORT: Record<Profession, string> = {
+  worker: "İşçi",
+  woodcutter: "Odun",
+  gatherer: "Topl",
+  miner: "Madn",
+  builder: "İnşa",
+};
+
+export function drawPopulationPanel(
+  ctx: CanvasRenderingContext2D,
+  villagers: Villager[]
+): void {
+  const count = villagers.length;
+  popScroll = Math.max(0, Math.min(Math.max(0, count - POP_MAX_ROWS), popScroll));
+  const visible = Math.min(count, POP_MAX_ROWS);
+  const w = POP_W;
+  const h = 58 + visible * POP_ROW_H + 12;
+  const x = (ctx.canvas.width - w) / 2;
+  const y = 60;
+  popRect = { x, y, w, h };
+
+  ctx.fillStyle = "rgba(10, 12, 16, 0.92)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#5a5f68";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  drawCloseButton(ctx, x + w - 26, y + 8);
+
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffe296";
+  ctx.font = "bold 15px monospace";
+  ctx.fillText(`Nüfus Yönetimi (${count})`, x + 12, y + 18);
+
+  // meslek özeti
+  const counts = new Map<Profession, number>();
+  for (const v of villagers) counts.set(v.profession, (counts.get(v.profession) ?? 0) + 1);
+  ctx.font = "11px monospace";
+  ctx.fillStyle = "#9a9488";
+  ctx.fillText(
+    PROFESSIONS.map((p) => `${PROFESSION_NAMES[p]}: ${counts.get(p) ?? 0}`).join("  •  "),
+    x + 12, y + 40
+  );
+  if (count > POP_MAX_ROWS) {
+    ctx.textAlign = "right";
+    ctx.fillText(`▲▼ kaydır (${popScroll + 1}-${popScroll + visible})`, x + w - 36, y + 40);
+    ctx.textAlign = "left";
+  }
+
+  const rowsY = y + 58;
+  for (let row = 0; row < visible; row++) {
+    const v = villagers[popScroll + row];
+    const ry = rowsY + row * POP_ROW_H;
+    if (row % 2 === 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      ctx.fillRect(x + 4, ry, w - 8, POP_ROW_H);
+    }
+    // isim (tıklanınca köylüyü seçer) ve yaş
+    ctx.fillStyle = "#9ad0ff";
+    ctx.font = "bold 12px monospace";
+    ctx.fillText(v.fullName, x + 12, ry + POP_ROW_H / 2, 160);
+    ctx.fillStyle = "#8a8478";
+    ctx.font = "11px monospace";
+    ctx.fillText(`${v.identity.age}`, x + 184, ry + POP_ROW_H / 2);
+    // durum
+    ctx.fillStyle = "#c8c2b0";
+    ctx.fillText(v.statusText, x + 210, ry + POP_ROW_H / 2, 130);
+    // tokluk mini bar
+    const fullness = 1 - v.hunger / 100;
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillRect(x + 348, ry + 9, 50, 8);
+    ctx.fillStyle = fullness > 0.5 ? "#6fbf4a" : fullness > 0.2 ? "#e0a83c" : "#d4453f";
+    ctx.fillRect(x + 349, ry + 10, 48 * fullness, 6);
+    // meslek düğmeleri
+    for (const b of popProfButtons(ry)) {
+      const active = v.profession === b.profession;
+      ctx.fillStyle = active ? "rgba(90, 143, 60, 0.5)" : "rgba(255,255,255,0.07)";
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = active ? "#8fd05e" : "#4a4f58";
+      ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+      ctx.fillStyle = active ? "#d8f0c0" : "#b8b2a0";
+      ctx.font = "10px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(PROF_SHORT[b.profession], b.x + b.w / 2, b.y + b.h / 2 + 1);
+      ctx.textAlign = "left";
+    }
+  }
+}
+
 // ---- Üst bar, bildirimler, araç çubuğu ----
+
+let popButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+
+export function popButtonHitTest(sx: number, sy: number): boolean {
+  return sx >= popButtonRect.x && sx <= popButtonRect.x + popButtonRect.w &&
+    sy >= popButtonRect.y && sy <= popButtonRect.y + popButtonRect.h;
+}
 
 export function drawHud(
   ctx: CanvasRenderingContext2D,
@@ -311,25 +600,36 @@ export function drawHud(
     ctx.fillRect(ix + 4, 13, 2, 2);
   }, `Mantar: ${resources.mushroom}`);
 
-  // nüfus
-  entry((ix) => {
+  // nüfus: tıklanabilir düğme (nüfus yönetim menüsünü açar)
+  {
+    const label = `Nüfus: ${population} ▾`;
+    ctx.font = "15px monospace";
+    const bw = 20 + ctx.measureText(label).width + 10;
+    popButtonRect = { x: cx - 6, y: 4, w: bw, h: 26 };
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(popButtonRect.x, popButtonRect.y, popButtonRect.w, popButtonRect.h);
+    ctx.strokeStyle = "#4a4f58";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(popButtonRect.x + 0.5, popButtonRect.y + 0.5, popButtonRect.w - 1, popButtonRect.h - 1);
     ctx.strokeStyle = "#e8e2d0";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(ix + 6, 12, 3, 0, Math.PI * 2);
-    ctx.moveTo(ix + 6, 15);
-    ctx.lineTo(ix + 6, 22);
-    ctx.moveTo(ix + 2, 26);
-    ctx.lineTo(ix + 6, 22);
-    ctx.lineTo(ix + 10, 26);
+    ctx.arc(cx + 6, 12, 3, 0, Math.PI * 2);
+    ctx.moveTo(cx + 6, 15);
+    ctx.lineTo(cx + 6, 22);
+    ctx.moveTo(cx + 2, 26);
+    ctx.lineTo(cx + 6, 22);
+    ctx.lineTo(cx + 10, 26);
     ctx.stroke();
-  }, `Nüfus: ${population}`);
+    ctx.fillStyle = "#e8e2d0";
+    ctx.fillText(label, cx + 20, 18);
+  }
 
   // sağda hız ve kısa yardım
   ctx.textAlign = "right";
   ctx.fillStyle = speed > 1 ? "#ffd23c" : "#9a9488";
   ctx.font = "12px monospace";
-  const help = "1-4: bina • Esc: iptal • Space: duraklat • X: hız";
+  const help = "1-4: bina • N: nüfus • Esc: iptal • Space: duraklat • X: hız";
   ctx.fillText(`Hız: ${speed}x`, w - 12, 10);
   ctx.fillStyle = "#9a9488";
   ctx.fillText(help, w - 12, 25);

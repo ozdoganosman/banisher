@@ -178,11 +178,13 @@ export class World {
   }
 
   // Verilen konuma en yakın, sahiplenilmemiş işaretli bloğu bul
+  // (accept verilirse onu da geçmesi gerekir; örn. deposu dolu ürünler elenir)
   findNearestMarked(
     marked: Set<number>,
     claimed: Set<number>,
     px: number,
-    py: number
+    py: number,
+    accept?: (x: number, y: number) => boolean
   ): { x: number; y: number; dist: number } | null {
     const tx = Math.floor(px / TILE_SIZE);
     const ty = Math.floor(py / TILE_SIZE);
@@ -191,6 +193,7 @@ export class World {
       if (claimed.has(i)) continue;
       const x = i % this.width;
       const y = Math.floor(i / this.width);
+      if (accept && !accept(x, y)) continue;
       const d = Math.abs(x - tx) + Math.abs(y - ty);
       if (!best || d < best.dist) best = { x, y, dist: d };
     }

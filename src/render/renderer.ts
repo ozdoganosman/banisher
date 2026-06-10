@@ -1,6 +1,7 @@
 import type { Camera } from "../engine/camera";
 import type { Villager } from "../sim/villager";
-import { Building, BuildingType, BUILDING_SIZE } from "../sim/buildings";
+import { Building, BuildingType, BUILDING_SIZE, isDepositPoint } from "../sim/buildings";
+import { isFull, ITEM_INFO, ITEM_TYPES } from "../sim/resources";
 import { floaters, particles, FLOATER_TTL } from "./effects";
 import { hash2 } from "../world/noise";
 import { Tile, TILE_COLORS, TILE_SIZE } from "../world/tiles";
@@ -220,6 +221,7 @@ export class Renderer {
     hoverTile: { x: number; y: number } | null,
     ghost: Ghost | null,
     selectedVillager: Villager | null,
+    selectedBuilding: Building | null,
     time: number
   ): void {
     const vw = ctx.canvas.width;
@@ -277,6 +279,19 @@ export class Renderer {
       }
     }
 
+    // Seçili binanın etrafında yanıp sönen çerçeve
+    if (selectedBuilding) {
+      const bPulse = 0.5 + 0.35 * Math.sin(time * 6);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${bPulse})`;
+      ctx.lineWidth = 1;
+      const s = BUILDING_SIZE * TILE_SIZE;
+      ctx.strokeRect(
+        selectedBuilding.x * TILE_SIZE - 1.5,
+        selectedBuilding.y * TILE_SIZE - 1.5,
+        s + 3, s + 3
+      );
+    }
+
     // Seçili köylünün ayaklarının altında yanıp sönen halka
     if (selectedVillager) {
       const ringPulse = 0.6 + 0.3 * Math.sin(time * 6);
@@ -301,6 +316,31 @@ export class Renderer {
     }
     drawables.sort((a, b) => a.baseY - b.baseY);
     for (const d of drawables) d.draw();
+
+    // Depo dolu uyarısı: dolu ürün varsa teslimat binalarının üstünde sallanan "!"
+    const fullItems = ITEM_TYPES.filter((i) => isFull(i));
+    if (fullItems.length > 0) {
+      const bob = Math.sin(time * 4) * 1.5;
+      for (const b of buildings) {
+        if (!isDepositPoint(b)) continue;
+        const wx = b.centerX;
+        const wy = b.y * TILE_SIZE - 8 + bob;
+        ctx.fillStyle = "#ffd23c";
+        ctx.fillRect(wx - 3, wy - 4, 6, 8);
+        ctx.strokeStyle = "#3a2c1a";
+        ctx.lineWidth = 0.6;
+        ctx.strokeRect(wx - 3, wy - 4, 6, 8);
+        ctx.fillStyle = "#3a2c1a";
+        ctx.fillRect(wx - 0.6, wy - 2.5, 1.2, 3.5);
+        ctx.fillRect(wx - 0.6, wy + 2, 1.2, 1.2);
+        // hangi ürünler dolu: küçük renk kareleri
+        const total = fullItems.length * 4 - 1;
+        fullItems.forEach((item, k) => {
+          ctx.fillStyle = ITEM_INFO[item].color;
+          ctx.fillRect(wx - total / 2 + k * 4, wy + 6, 3, 3);
+        });
+      }
+    }
 
     // parçacıklar (talaş, taş kırıntısı) ve uçan kazanç yazıları
     for (const p of particles) {
