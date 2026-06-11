@@ -733,7 +733,8 @@ export function drawBuildingPanel(
 ): void {
   const def = b.def;
   const w = 252;
-  const x = 12 + panelOffsets.building.x;
+  // varsayılan konum profil panelinin sağı: ikisi aynı anda açılabilir
+  const x = 284 + panelOffsets.building.x;
   const y = 44 + panelOffsets.building.y;
   ctx.font = "11px monospace";
   const descLines = wrapText(ctx, def.desc, w - 24);

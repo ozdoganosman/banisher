@@ -365,12 +365,10 @@ input.onClick = (wx, wy, sx, sy) => {
   // üst bardaki nüfus ve teknoloji düğmeleri
   if (popButtonHitTest(sx, sy)) {
     showPopulation = !showPopulation;
-    showTech = false;
     return;
   }
   if (techButtonHitTest(sx, sy)) {
     showTech = !showTech;
-    showPopulation = false;
     return;
   }
   if (pauseButtonHitTest(sx, sy)) {
@@ -382,7 +380,8 @@ input.onClick = (wx, wy, sx, sy) => {
     return;
   }
 
-  // teknoloji paneli açıkken
+  // teknoloji paneli: yalnızca üzerine gelen tıklamaları yutar
+  // (dışarı tıklamak paneli kapatmaz; birden fazla panel açık kalabilir)
   if (showTech) {
     const hit = techPanelHitTest(sx, sy);
     if (hit) {
@@ -392,11 +391,9 @@ input.onClick = (wx, wy, sx, sy) => {
       }
       return;
     }
-    showTech = false;
-    return;
   }
 
-  // nüfus yönetim menüsü açıkken tıklamalar önce ona gider
+  // nüfus yönetim menüsü: yalnızca üzerine gelen tıklamaları yutar
   if (showPopulation) {
     const hit = popPanelHitTest(sx, sy, villagers, buildings);
     if (hit) {
@@ -407,19 +404,14 @@ input.onClick = (wx, wy, sx, sy) => {
       } else if (hit.kind === "fire") {
         fire(hit.building);
       } else if (hit.kind === "select") {
-        // isme tıkla: menüyü kapat, köylünün profilini aç ve kameraya al
+        // isme tıkla: köylünün profilini de aç ve kameraya al (menü açık kalır)
         const v = villagers[hit.index];
-        showPopulation = false;
         selectedVillager = v;
-        selectedBuilding = null;
         camera.x = v.x;
         camera.y = v.y;
       }
       return;
     }
-    // panel dışına tıklama menüyü kapatır
-    showPopulation = false;
-    return;
   }
 
   // profil paneli açıkken üzerine gelen tıklamalar dünyaya geçmesin
@@ -482,7 +474,6 @@ input.onClick = (wx, wy, sx, sy) => {
     const v = villagerAt(wx, wy);
     if (v) {
       selectedVillager = v;
-      selectedBuilding = null;
       return;
     }
     const wa = wildAnimalAt(wx, wy);
@@ -494,7 +485,6 @@ input.onClick = (wx, wy, sx, sy) => {
     const b = buildingAt(tx, ty);
     if (b) {
       selectedBuilding = b;
-      selectedVillager = null;
       return;
     }
     // iptal modunda tek tıklama yalnızca işaret kaldırır
@@ -691,10 +681,8 @@ window.addEventListener("keydown", (e) => {
     gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : gameSpeed === 4 ? 8 : gameSpeed === 8 ? 16 : 1;
   } else if (e.code === "KeyN") {
     showPopulation = !showPopulation;
-    showTech = false;
   } else if (e.code === "KeyT") {
     showTech = !showTech;
-    showPopulation = false;
   } else if (e.code === "KeyF") {
     const visibleFilters = MARK_FILTERS.filter(
       (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
