@@ -17,6 +17,7 @@ export const enum Tile {
   NutBush = 11, // yemiş (fındık) çalısı
   Sapling = 12, // ormancının diktiği fidan: zamanla ağaca dönüşür
   PrunedTree = 13, // budanmış ağaç: dal toplandıktan sonra; zamanla Tree'ye döner
+  Pebbles = 14, // yerde çakıl: Sert Cisimler ile toplanır, taş verir
 }
 
 // Toplanabilir yemek blokları hangi eşyayı verir?
@@ -53,4 +54,5 @@ export const TILE_COLORS: Record<Tile, string[]> = {
   [Tile.NutBush]: ["#5a8f3c", "#558838", "#609541"],
   [Tile.Sapling]: ["#5a8f3c", "#558838", "#609541"],
   [Tile.PrunedTree]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, çıplak gövde çizilir
+  [Tile.Pebbles]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, çakıllar üstüne çizilir
 };

@@ -105,6 +105,9 @@ export class World {
           } else if (hash2(x, y, seed + 47) > 0.996) {
             // açık alanda tek tük çalı
             t = Tile.Bush;
+          } else if (hash2(x, y, seed + 53) > 0.99) {
+            // yerde çakıl kümeleri (Sert Cisimler ile toplanır)
+            t = Tile.Pebbles;
           }
         }
         this.tiles[this.index(x, y)] = t;
@@ -127,7 +130,7 @@ export class World {
     };
     if (t === Tile.Tree) toggle(this.markedTrees, this.claimedTrees);
     else if (foodItemOf(t)) toggle(this.markedBushes, this.claimedBushes);
-    else if (t === Tile.Stone) toggle(this.markedStones, this.claimedStones);
+    else if (t === Tile.Stone || t === Tile.Pebbles) toggle(this.markedStones, this.claimedStones);
   }
 
   markTree(x: number, y: number): void {
@@ -140,7 +143,18 @@ export class World {
   }
 
   markStone(x: number, y: number): void {
-    if (this.get(x, y) === Tile.Stone) this.markedStones.add(this.index(x, y));
+    const t = this.get(x, y);
+    if (t === Tile.Stone || t === Tile.Pebbles) {
+      this.markedStones.add(this.index(x, y));
+    }
+  }
+
+  // Çakıl toplandı: zemin çimene döner (yenilenmez)
+  harvestPebbles(x: number, y: number): void {
+    const i = this.index(x, y);
+    this.markedStones.delete(i);
+    this.claimedStones.delete(i);
+    this.set(x, y, Tile.Grass);
   }
 
   // Bloğun üzerindeki iş işaretini (varsa) kaldır; kaldırıldıysa true döner

@@ -511,6 +511,10 @@ input.onClick = (wx, wy, sx, sy) => {
       addMessage("Taş kazmak için önce Beşer araştırılmalı!");
       return;
     }
+    if (t === Tile.Pebbles && !hasTech("hardobjects")) {
+      addMessage("Çakıl toplamak için önce Sert Cisimler araştırılmalı!");
+      return;
+    }
     world.toggleMark(tx, ty);
   }
 };
@@ -627,7 +631,7 @@ function countSelection(sel: { x0: number; y0: number; x1: number; y1: number })
       const t = world.get(x, y);
       if (t === Tile.Tree) trees++;
       else if (foodItemOf(t)) food++;
-      else if (t === Tile.Stone) stone++;
+      else if (t === Tile.Stone || t === Tile.Pebbles) stone++;
       const i = world.index(x, y);
       if (world.markedTrees.has(i) || world.markedBushes.has(i) || world.markedStones.has(i)) {
         marked++;
@@ -654,8 +658,12 @@ function markSelection(sel: { x0: number; y0: number; x1: number; y1: number }):
         if (t === Tile.Mushroom && !hasTech("mushroomology")) continue;
         if (!world.markedBushes.has(world.index(x, y))) n++;
         world.markFood(x, y);
-      } else if ((markFilter === "all" || markFilter === "stone") && t === Tile.Stone) {
-        if (!hasTech("humanity")) continue;
+      } else if (
+        (markFilter === "all" || markFilter === "stone") &&
+        (t === Tile.Stone || t === Tile.Pebbles)
+      ) {
+        if (t === Tile.Stone && !hasTech("humanity")) continue;
+        if (t === Tile.Pebbles && !hasTech("hardobjects")) continue;
         if (!world.markedStones.has(world.index(x, y))) n++;
         world.markStone(x, y);
       }
@@ -688,7 +696,9 @@ window.addEventListener("keydown", (e) => {
     showTech = !showTech;
     showPopulation = false;
   } else if (e.code === "KeyF") {
-    const visibleFilters = MARK_FILTERS.filter(f => f.id !== "stone" || hasTech("humanity"));
+    const visibleFilters = MARK_FILTERS.filter(
+      (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
+    );
     const i = visibleFilters.findIndex((f) => f.id === markFilter);
     markFilter = visibleFilters[(i + 1) % visibleFilters.length].id;
   }

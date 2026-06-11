@@ -38,6 +38,7 @@ const CHOP_TIME = 8; // elle dal toplama: yavaş iş
 const GATHER_TIME = 8; // elle yemiş/mantar toplama: dal toplamayla aynı yavaşlıkta
 const MINE_TIME = 4;
 const STONE_PER_MINE = 3;
+const PEBBLE_YIELD = 2; // çakıl elle toplanır, daha az taş verir
 
 const FISH_TIME = 6;
 const FISH_PER_CATCH = 2;
@@ -1367,14 +1368,23 @@ export class Villager {
       this.toIdle();
       return;
     }
+    const tx = job.tile % world.width;
+    const ty = Math.floor(job.tile / world.width);
+    const isPebbles = world.get(tx, ty) === Tile.Pebbles;
     const c = this.jobTileCenter(world, job.tile);
     this.faceTowards(c.x);
-    this.walkPhase += dt * 11; // kazma sallama
-    this.hitParticles(dt, c.x, c.y - 2, "#aab0b8");
+    // çakıl elle toplanır (eğilme), kaya kazmayla kırılır
+    this.walkPhase += dt * (isPebbles ? 7 : 11);
+    if (!isPebbles) this.hitParticles(dt, c.x, c.y - 2, "#aab0b8");
     this.timer -= dt;
     if (this.timer <= 0) {
-      world.mineStone(job.tile % world.width, Math.floor(job.tile / world.width));
-      this.gainItem("stone", STONE_PER_MINE, c.x, c.y - 10);
+      if (isPebbles) {
+        world.harvestPebbles(tx, ty);
+        this.gainItem("stone", PEBBLE_YIELD, c.x, c.y - 10);
+      } else {
+        world.mineStone(tx, ty);
+        this.gainItem("stone", STONE_PER_MINE, c.x, c.y - 10);
+      }
       this.job = null;
       this.toIdle();
     }

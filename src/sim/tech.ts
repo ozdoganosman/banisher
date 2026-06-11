@@ -9,7 +9,7 @@ export type TechId =
   | "capital"
   | "collective"
   | "mushroomology"
-  | "fishing";
+  | "hardobjects";
 
 export interface Tech {
   id: TechId;
@@ -57,13 +57,13 @@ export const TECHS: Tech[] = [
     gridY: 2,
   },
   {
-    id: "fishing",
-    name: "Balıkçılık",
+    id: "hardobjects",
+    name: "Sert Cisimler",
     cost: 12,
-    desc: "Balıkçı kulübesini açar",
-    prereq: "nature",
-    gridX: 1,
-    gridY: 3,
+    desc: "Yerden çakıl toplanabilir (taş verir)",
+    prereq: "capital",
+    gridX: 2,
+    gridY: 0,
   },
   {
     id: "mushroomology",

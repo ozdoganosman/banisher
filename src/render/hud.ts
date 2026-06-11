@@ -245,13 +245,13 @@ function isItemVisible(item: IconItem): boolean {
     return true;
   }
   if (item === "stone") {
-    return hasTech("humanity") || resources.stone > 0;
+    return hasTech("humanity") || hasTech("hardobjects") || resources.stone > 0;
   }
   if (item === "mushroom") {
     return hasTech("mushroomology") || resources.mushroom > 0;
   }
   if (item === "fish") {
-    return hasTech("fishing") || resources.fish > 0;
+    return hasTech("nature") || resources.fish > 0;
   }
   return false;
 }

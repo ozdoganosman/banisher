@@ -189,6 +189,7 @@ export class Renderer {
     else if (t === Tile.Bush || t === Tile.NutBush) this.paintBush(px, py, x, y, t);
     else if (t === Tile.Mushroom) this.paintMushroom(px, py, x, y);
     else if (t === Tile.Sapling) this.paintSapling(px, py, x, y);
+    else if (t === Tile.Pebbles) this.paintPebbles(px, py, x, y);
     else if (t === Tile.AppleTree || t === Tile.OrangeTree || t === Tile.TangerineTree) {
       this.paintTree(px, py, x, y);
       this.paintTreeFruit(px, py, x, y, t);
@@ -225,6 +226,7 @@ export class Renderer {
       case Tile.Tree: color = CANOPY_BY_SEASON[s][1]; break;
       case Tile.PrunedTree: color = "#7a5a30"; break;
       case Tile.Sapling: color = "#6cbf4e"; break;
+      case Tile.Pebbles: color = "#8e9296"; break;
       case Tile.Bush: color = BUSH_BY_SEASON[s][1]; break;
       default: color = GRASS_BY_SEASON[s][0]; break;
     }
@@ -367,6 +369,22 @@ export class Renderer {
     if (land(x, y + 1)) this.tctx.fillRect(px, py + TILE_SIZE - 2, TILE_SIZE, 2);
     if (land(x - 1, y)) this.tctx.fillRect(px, py, 2, TILE_SIZE);
     if (land(x + 1, y)) this.tctx.fillRect(px + TILE_SIZE - 2, py, 2, TILE_SIZE);
+  }
+
+  // Yerde çakıl kümesi: irili ufaklı gri taşlar
+  private paintPebbles(px: number, py: number, x: number, y: number): void {
+    const c = this.tctx;
+    for (let k = 0; k < 5; k++) {
+      const gx = px + 2 + Math.floor(hash2(x * 5 + k, y, 141) * 11);
+      const gy = py + 3 + Math.floor(hash2(x, y * 5 + k, 142) * 10);
+      const size = 1.5 + hash2(x + k, y + k, 143) * 1.5;
+      c.fillStyle = "rgba(10,15,10,0.18)";
+      c.fillRect(gx - 0.5, gy + size - 0.5, size + 1, 1);
+      c.fillStyle = k % 2 ? "#9aa0a8" : "#84878e";
+      c.fillRect(gx, gy, size, size);
+      c.fillStyle = "#b8bdc4";
+      c.fillRect(gx, gy, size * 0.5, size * 0.4);
+    }
   }
 
   private paintPrunedTree(px: number, py: number): void {
@@ -534,7 +552,10 @@ export class Renderer {
     // İmleç altındaki toplanabilir bloğa beyaz çerçeve (bina yerleştirilmiyorken)
     if (!ghost && hoverTile) {
       const t = this.world.get(hoverTile.x, hoverTile.y);
-      if (t === Tile.Tree || t === Tile.Bush || t === Tile.Mushroom || t === Tile.Stone) {
+      if (
+        t === Tile.Tree || t === Tile.Bush || t === Tile.Mushroom ||
+        t === Tile.Stone || t === Tile.Pebbles
+      ) {
         ctx.strokeStyle = "rgba(255,255,255,0.8)";
         ctx.strokeRect(
           hoverTile.x * TILE_SIZE + 0.5,

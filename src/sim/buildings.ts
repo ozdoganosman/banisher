@@ -313,7 +313,7 @@ export function isBuildingUnlocked(type: BuildingType): boolean {
   if (type === BuildingType.Woodcutter) return hasTech("humanity");
   if (type === BuildingType.Gatherer) return hasTech("nature");
   if (type === BuildingType.Collective) return hasTech("collective");
-  if (type === BuildingType.Fisher) return hasTech("fishing");
+  if (type === BuildingType.Fisher) return hasTech("nature");
   if (type === BuildingType.MushroomGatherer) return hasTech("mushroomology");
   if (
     type === BuildingType.Barn ||
