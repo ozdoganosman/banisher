@@ -1108,8 +1108,12 @@ export function drawPopulationPanel(
   }
 }
 
-const TECH_W = 640;
-const TECH_H = 520;
+const TECH_CARD_W = 200;
+const TECH_CARD_H = 116;
+const TECH_COL_W = 220;
+const TECH_ROW_H = 78;
+const TECH_W = 24 + 2 * TECH_COL_W + TECH_CARD_W + 24; // 688
+const TECH_H = 64 + 3 * TECH_ROW_H + TECH_CARD_H + 20; // 434
 let techRect = { x: 0, y: 0, w: TECH_W, h: TECH_H };
 
 export type TechHit =
@@ -1119,13 +1123,11 @@ export type TechHit =
   | null;
 
 function getTechPos(tech: Tech, panelX: number, panelY: number) {
-  const colW = 190;
-  const rowH = 72;
   const startX = panelX + 24;
-  const startY = panelY + 56;
+  const startY = panelY + 64;
   return {
-    x: startX + tech.gridX * colW,
-    y: startY + tech.gridY * rowH,
+    x: startX + tech.gridX * TECH_COL_W,
+    y: startY + tech.gridY * TECH_ROW_H,
   };
 }
 
@@ -1134,8 +1136,8 @@ export function techPanelHitTest(sx: number, sy: number): TechHit {
   const cy = techRect.y + 8;
   if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
 
-  const cardW = 172;
-  const cardH = 56;
+  const cardW = TECH_CARD_W;
+  const cardH = TECH_CARD_H;
   for (let i = 0; i < TECHS.length; i++) {
     const tech = TECHS[i];
     const pos = getTechPos(tech, techRect.x, techRect.y);
@@ -1181,8 +1183,8 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
   ctx.font = "11px monospace";
   ctx.fillText("(rahipler tapınakta üretir)", x + 110, y + 40);
 
-  const cardW = 172;
-  const cardH = 56;
+  const cardW = TECH_CARD_W;
+  const cardH = TECH_CARD_H;
 
   // 1. Bağlantı çizgilerini çiz (kartların arkasında kalması için)
   TECHS.forEach((tech) => {
@@ -1243,30 +1245,48 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
     ctx.strokeRect(pos.x + 0.5, pos.y + 0.5, cardW - 1, cardH - 1);
 
     // İsim
-    ctx.font = "bold 11px monospace";
+    ctx.font = "bold 14px monospace";
     if (owned) ctx.fillStyle = "#8fd05e";
     else if (locked) ctx.fillStyle = "#6a6458";
     else ctx.fillStyle = "#e8e2d0";
-    ctx.fillText(tech.name, pos.x + 8, pos.y + 14, cardW - 16);
+    ctx.fillText(tech.name, pos.x + 10, pos.y + 17, cardW - 20);
 
     // Maliyet / Durum
-    ctx.font = "9px monospace";
+    ctx.font = "12px monospace";
     if (owned) {
       ctx.fillStyle = "#8fd05e";
-      ctx.fillText("✓ Araştırıldı", pos.x + 8, pos.y + 26);
+      ctx.fillText("✓ Araştırıldı", pos.x + 10, pos.y + 37);
     } else if (locked) {
-      ctx.fillStyle = "#9a6055";
+      ctx.fillStyle = "#b06a5c";
       const parentName = TECHS.find((t) => t.id === tech.prereq)?.name ?? "";
-      ctx.fillText(`Kilitli (${parentName})`, pos.x + 8, pos.y + 26, cardW - 16);
+      ctx.fillText(`Kilitli — önce ${parentName}`, pos.x + 10, pos.y + 37, cardW - 20);
     } else {
-      ctx.fillStyle = affordable ? "#c9a35a" : "#9a6055";
-      ctx.fillText(`Maliyet: ${tech.cost} bilgi`, pos.x + 8, pos.y + 26);
+      ctx.fillStyle = affordable ? "#e0b864" : "#b06a5c";
+      ctx.fillText(`Maliyet: ${tech.cost} bilgi`, pos.x + 10, pos.y + 37);
     }
 
-    // Açıklama
-    ctx.font = "9px monospace";
-    ctx.fillStyle = locked ? "#5a5448" : "#9a9488";
-    ctx.fillText(tech.desc, pos.x + 8, pos.y + 42, cardW - 16);
+    // Ayraç çizgisi
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.beginPath();
+    ctx.moveTo(pos.x + 10, pos.y + 48.5);
+    ctx.lineTo(pos.x + cardW - 10, pos.y + 48.5);
+    ctx.stroke();
+
+    // Açıklama (satırlara bölünmüş)
+    ctx.font = "11px monospace";
+    ctx.fillStyle = locked ? "#6a6458" : "#b8b2a4";
+    const descLines = wrapText(ctx, tech.desc, cardW - 20);
+    const maxLines = !owned && !locked && affordable ? 3 : 4;
+    for (let i = 0; i < Math.min(descLines.length, maxLines); i++) {
+      ctx.fillText(descLines[i], pos.x + 10, pos.y + 62 + i * 14, cardW - 20);
+    }
+
+    // Satın alınabilir kartlarda tıklama ipucu
+    if (!owned && !locked && affordable) {
+      ctx.font = "bold 11px monospace";
+      ctx.fillStyle = "#b08fe0";
+      ctx.fillText("▶ Araştırmak için tıkla", pos.x + 10, pos.y + cardH - 11);
+    }
   });
 }
 
