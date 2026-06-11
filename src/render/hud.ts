@@ -437,10 +437,53 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
   }
 }
 
+// ---- Sürüklenebilir paneller ----
+// Her panel başlangıç konumuna göre bir ofset taşır; sürükleyince değişir.
+
+export type PanelId = "profile" | "building" | "tech" | "pop";
+
+const panelOffsets: Record<PanelId, { x: number; y: number }> = {
+  profile: { x: 0, y: 0 },
+  building: { x: 0, y: 0 },
+  tech: { x: 0, y: 0 },
+  pop: { x: 0, y: 0 },
+};
+
+// Panelin son çizilen (ofset dahil) dikdörtgeni
+export function panelRectOf(id: PanelId): { x: number; y: number; w: number; h: number } {
+  switch (id) {
+    case "profile":
+      return {
+        x: PROFILE.x + panelOffsets.profile.x,
+        y: PROFILE.y + panelOffsets.profile.y,
+        w: PROFILE.w,
+        h: profileDrawnH,
+      };
+    case "building": return bpanel;
+    case "tech": return techRect;
+    case "pop": return popRect;
+  }
+}
+
+// Paneli sürükle (ekran içinde kalacak şekilde sınırlanır)
+export function dragPanelBy(id: PanelId, dx: number, dy: number, vw: number, vh: number): void {
+  const r = panelRectOf(id);
+  const nx = Math.max(4, Math.min(vw - r.w - 4, r.x + dx));
+  const ny = Math.max(36, Math.min(vh - 80, r.y + dy));
+  panelOffsets[id].x += nx - r.x;
+  panelOffsets[id].y += ny - r.y;
+}
+
 // ---- Köylü profil paneli ----
 
 const PROFILE = { x: 12, y: 44, w: 262, h: 206 };
-const CLOSE = { x: PROFILE.x + PROFILE.w - 24, y: PROFILE.y + 6, w: 18, h: 18 };
+function profilePos() {
+  return { x: PROFILE.x + panelOffsets.profile.x, y: PROFILE.y + panelOffsets.profile.y };
+}
+function profileCloseRect() {
+  const p = profilePos();
+  return { x: p.x + PROFILE.w - 24, y: p.y + 6, w: 18, h: 18 };
+}
 // Moral dökümü satırlarına göre panel uzar; hit-test son çizilen yüksekliği kullanır
 let profileDrawnH = PROFILE.h;
 
@@ -448,10 +491,12 @@ export type ProfileHit = { kind: "close" } | { kind: "panel" } | null;
 
 // Panel açıkken tıklama paneli mi hedefliyor?
 export function profileHitTest(sx: number, sy: number): ProfileHit {
-  if (sx >= CLOSE.x && sx <= CLOSE.x + CLOSE.w && sy >= CLOSE.y && sy <= CLOSE.y + CLOSE.h) {
+  const c = profileCloseRect();
+  if (sx >= c.x && sx <= c.x + c.w && sy >= c.y && sy <= c.y + c.h) {
     return { kind: "close" };
   }
-  if (sx >= PROFILE.x && sx <= PROFILE.x + PROFILE.w && sy >= PROFILE.y && sy <= PROFILE.y + profileDrawnH) {
+  const p = profilePos();
+  if (sx >= p.x && sx <= p.x + PROFILE.w && sy >= p.y && sy <= p.y + profileDrawnH) {
     return { kind: "panel" };
   }
   return null;
@@ -507,7 +552,9 @@ function drawPortrait(ctx: CanvasRenderingContext2D, v: Villager, cx: number, cy
 }
 
 export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
-  const { x, y, w } = PROFILE;
+  const { x, y } = profilePos();
+  const w = PROFILE.w;
+  const CLOSE = profileCloseRect();
   // moral dökümü satırları (en çok etkiden aza sıralı); panel buna göre uzar
   const moraleEntries = [...v.moraleLog]
     .filter(([, d]) => Math.abs(d) >= 0.05)
@@ -686,8 +733,8 @@ export function drawBuildingPanel(
 ): void {
   const def = b.def;
   const w = 252;
-  const x = 12;
-  const y = 44;
+  const x = 12 + panelOffsets.building.x;
+  const y = 44 + panelOffsets.building.y;
   ctx.font = "11px monospace";
   const descLines = wrapText(ctx, def.desc, w - 24);
 
@@ -953,8 +1000,8 @@ export function drawPopulationPanel(
   const rows = employmentRows(buildings);
 
   const w = POP_W;
-  const x = (ctx.canvas.width - w) / 2;
-  const y = 54;
+  const x = (ctx.canvas.width - w) / 2 + panelOffsets.pop.x;
+  const y = 54 + panelOffsets.pop.y;
   popJobsY = y + 64;
   popListY = popJobsY + rows.length * POP_JOB_ROW_H + 26;
   const h = popListY - y + visible * POP_LIST_ROW_H + 12;
@@ -1110,8 +1157,8 @@ export function techPanelHitTest(sx: number, sy: number): TechHit {
 export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
   const w = TECH_W;
   const h = TECH_H;
-  const x = (ctx.canvas.width - w) / 2;
-  const y = 54;
+  const x = (ctx.canvas.width - w) / 2 + panelOffsets.tech.x;
+  const y = 54 + panelOffsets.tech.y;
   techRect = { x, y, w, h };
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.95)";

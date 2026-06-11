@@ -30,6 +30,9 @@ import {
   updateMessages,
   drawTaskList,
   type TaskCounts,
+  dragPanelBy,
+  panelRectOf,
+  type PanelId,
 } from "./render/hud";
 import { buyTech, hasTech } from "./sim/tech";
 import { Animal, ANIMAL_DEFS, BARN_HERD, WILD_POOL, type AnimalType } from "./sim/animals";
@@ -128,6 +131,7 @@ let markFilter: MarkFilter = "all";
 let selecting:
   | { mode: "rect"; x0: number; y0: number; x1: number; y1: number }
   | { mode: "minimap" }
+  | { mode: "panel"; id: PanelId; lx: number; ly: number }
   | null = null;
 let paused = false;
 let gameSpeed = 1;
@@ -511,12 +515,18 @@ input.onClick = (wx, wy, sx, sy) => {
   }
 };
 
+// Açık olan en üstteki şeyi kapat; her çağrıda yalnızca bir tane
+function closeTopmost(): boolean {
+  if (selected !== null) { selected = null; return true; }
+  if (showTech) { showTech = false; return true; }
+  if (showPopulation) { showPopulation = false; return true; }
+  if (selectedVillager) { selectedVillager = null; return true; }
+  if (selectedBuilding) { selectedBuilding = null; return true; }
+  return false;
+}
+
 input.onCancel = () => {
-  selected = null;
-  selectedVillager = null;
-  selectedBuilding = null;
-  showPopulation = false;
-  showTech = false;
+  closeTopmost();
 };
 
 // Sol tuş sürükleme: mini haritada kamera gezdirme, dünyada alan seçimi
@@ -525,12 +535,23 @@ input.onLeftDragStart = (wx, wy, sx, sy) => {
     selecting = { mode: "minimap" };
     return;
   }
-  if (selected !== null) return;
   if (isOverToolbar(sy, canvas.height)) return;
-  if (showPopulation && isOverPopPanel(sx, sy)) return;
-  if (showTech && techPanelHitTest(sx, sy) !== null) return;
-  if (selectedVillager && profileHitTest(sx, sy) !== null) return;
-  if (selectedBuilding && buildingPanelHitTest(sx, sy) !== null) return;
+  // panel üzerinden sürükleme: paneli taşı (üstteki panel önceliklidir)
+  const inRect = (r: { x: number; y: number; w: number; h: number }) =>
+    sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h;
+  const panelOrder: [boolean, PanelId][] = [
+    [showTech, "tech"],
+    [showPopulation, "pop"],
+    [!!selectedVillager, "profile"],
+    [!!selectedBuilding, "building"],
+  ];
+  for (const [open, id] of panelOrder) {
+    if (open && inRect(panelRectOf(id))) {
+      selecting = { mode: "panel", id, lx: sx, ly: sy };
+      return;
+    }
+  }
+  if (selected !== null) return;
   selecting = { mode: "rect", x0: wx, y0: wy, x1: wx, y1: wy };
 };
 
@@ -542,6 +563,12 @@ input.onLeftDragMove = (wx, wy, sx, sy) => {
       camera.x = mm.x;
       camera.y = mm.y;
     }
+    return;
+  }
+  if (selecting.mode === "panel") {
+    dragPanelBy(selecting.id, sx - selecting.lx, sy - selecting.ly, canvas.width, canvas.height);
+    selecting.lx = sx;
+    selecting.ly = sy;
     return;
   }
   selecting.x1 = wx;
@@ -648,11 +675,7 @@ input.wheelInterceptor = (sx, sy, deltaY) => {
 
 window.addEventListener("keydown", (e) => {
   if (e.code === "Escape") {
-    selected = null;
-    selectedVillager = null;
-    selectedBuilding = null;
-    showPopulation = false;
-    showTech = false;
+    closeTopmost(); // her basışta üstteki bir panel kapanır
   } else if (e.code === "Space") {
     e.preventDefault();
     paused = !paused;
