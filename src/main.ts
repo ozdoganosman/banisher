@@ -736,6 +736,15 @@ window.addEventListener("keydown", (e) => {
     );
     const i = visibleFilters.findIndex((f) => f.id === markFilter);
     markFilter = visibleFilters[(i + 1) % visibleFilters.length].id;
+  } else if (
+    e.code === "KeyG" || e.code === "KeyH" || e.code === "KeyJ" ||
+    e.code === "KeyK" || e.code === "KeyL"
+  ) {
+    // işaret filtreleri: yan yana tuşlar (G H J K L)
+    const f = MARK_FILTERS.find((f) => f.key === e.code.slice(3));
+    if (f && (f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects"))) {
+      markFilter = f.id;
+    }
   }
   else if (e.code.startsWith("Digit")) {
     const n = Number(e.code.slice(5));

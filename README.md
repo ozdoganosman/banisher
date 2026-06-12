@@ -93,6 +93,7 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | Sol tık | Ağaç/çalı/mantar/taş işaretle veya seçili binayı yerleştir |
 | Sol tık sürükle | Alan seçimi: filtreye göre kaynakları topluca işaretle |
 | İşaret filtresi çipleri / F | Tümü / Odun / Yiyecek / Taş / ✕ İptal modu arasında geçiş |
+| G H J K L | İşaret filtresini doğrudan seç (çiplerde yazılı, yan yana tuşlar) |
 | ✕ İptal modu | Tıklama veya alan seçimiyle iş ve av işaretlerini topluca kaldır |
 | Mini haritaya tık/sürükle | Kamerayı o noktaya götür / gezdir |
 | Köylüye sol tık | Profilini aç (kimlik, durum, tokluk, moral dökümü, çanta) |

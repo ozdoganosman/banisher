@@ -447,12 +447,13 @@ export function isOverToolbar(sy: number, canvasH: number): boolean {
 
 export type MarkFilter = "all" | "wood" | "food" | "stone" | "cancel";
 
-export const MARK_FILTERS: { id: MarkFilter; label: string; color: string }[] = [
-  { id: "all", label: "Tümü", color: "#e8e2d0" },
-  { id: "wood", label: "Odun", color: "#c9a35a" },
-  { id: "food", label: "Yiyecek", color: "#8fd05e" },
-  { id: "stone", label: "Taş", color: "#9ad0ff" },
-  { id: "cancel", label: "✕ İptal", color: "#e88a7a" },
+// Kısayollar yan yana ev sırası tuşlarıdır: G H J K L
+export const MARK_FILTERS: { id: MarkFilter; label: string; color: string; key: string }[] = [
+  { id: "all", label: "Tümü", color: "#e8e2d0", key: "G" },
+  { id: "wood", label: "Odun", color: "#c9a35a", key: "H" },
+  { id: "food", label: "Yiyecek", color: "#8fd05e", key: "J" },
+  { id: "stone", label: "Taş", color: "#9ad0ff", key: "K" },
+  { id: "cancel", label: "✕ İptal", color: "#e88a7a", key: "L" },
 ];
 
 let filterRects: { id: MarkFilter; x: number; y: number; w: number; h: number }[] = [];
@@ -476,7 +477,7 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
     (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
   );
   const totalW = 64 + visibleFilters.reduce(
-    (s, f) => s + ctx.measureText(f.label).width + 22, 0
+    (s, f) => s + ctx.measureText(f.label).width + 22 + 14, 0
   );
   ctx.fillRect(x - 6, y - 4, totalW, 28);
   ctx.fillStyle = "#9a9488";
@@ -484,15 +485,26 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
   x += 60;
   filterRects = [];
   for (const f of visibleFilters) {
-    const w = ctx.measureText(f.label).width + 16;
+    const w = ctx.measureText(f.label).width + 16 + 14;
     const active = current === f.id;
     ctx.fillStyle = active ? "rgba(90, 143, 60, 0.45)" : "rgba(255,255,255,0.07)";
     ctx.fillRect(x, y, w, 20);
     ctx.strokeStyle = active ? "#8fd05e" : "#4a4f58";
     ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 19);
+    // tuş kapağı: çipin başında küçük harf kutusu
+    ctx.fillStyle = active ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.12)";
+    ctx.fillRect(x + 3, y + 4, 12, 12);
+    ctx.strokeStyle = "#6a6f78";
+    ctx.strokeRect(x + 3.5, y + 4.5, 11, 11);
+    ctx.fillStyle = active ? "#ffffff" : "#c8c2b0";
+    ctx.font = "bold 9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(f.key, x + 9, y + 10.5);
+    ctx.textAlign = "left";
+    ctx.font = "11px monospace";
     ctx.fillStyle = active ? "#d8f0c0" : f.color;
-    ctx.fillText(f.label, x + 8, y + 10);
+    ctx.fillText(f.label, x + 19, y + 10);
     filterRects.push({ id: f.id, x, y, w, h: 20 });
     x += w + 6;
   }
