@@ -77,6 +77,7 @@ import {
   resources,
   type ItemType,
 } from "./sim/resources";
+import { DIFFICULTY_PRESETS, difficulty, type DifficultyLevel } from "./sim/difficulty";
 import { addJournal } from "./sim/journal";
 import { screams, updateScreams, Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
@@ -155,8 +156,59 @@ let selecting:
   | { mode: "minimap" }
   | { mode: "panel"; id: PanelId; lx: number; ly: number }
   | null = null;
-let paused = false;
+let paused = true; // zorluk seçilene kadar bekle
 let gameSpeed = 1;
+
+// ---- Zorluk seçim ekranı (oyun başlamadan önce) ----
+function showDifficultyScreen(): void {
+  const overlay = document.createElement("div");
+  overlay.style.cssText =
+    "position:fixed;inset:0;background:rgba(8,10,14,0.92);display:flex;" +
+    "flex-direction:column;align-items:center;justify-content:center;" +
+    "font-family:monospace;color:#e8e2d0;z-index:10;gap:14px";
+  const title = document.createElement("div");
+  title.textContent = "BANISHER";
+  title.style.cssText = "font-size:34px;font-weight:bold;color:#ffe296;letter-spacing:6px";
+  const sub = document.createElement("div");
+  sub.textContent = "Kabilen için bir kader seç:";
+  sub.style.cssText = "font-size:14px;color:#9a9488;margin-bottom:8px";
+  overlay.append(title, sub);
+  (Object.keys(DIFFICULTY_PRESETS) as DifficultyLevel[]).forEach((level) => {
+    const p = DIFFICULTY_PRESETS[level];
+    const btn = document.createElement("button");
+    btn.innerHTML = `<div style="font-size:17px;font-weight:bold">${p.name}</div>` +
+      `<div style="font-size:11px;color:#b8b2a4;margin-top:4px">${p.desc}</div>`;
+    btn.style.cssText =
+      "width:380px;padding:12px 16px;background:rgba(255,255,255,0.06);" +
+      "border:1px solid #5a5f68;color:#e8e2d0;font-family:monospace;" +
+      "cursor:pointer;text-align:left;border-radius:6px";
+    btn.onmouseenter = () => (btn.style.borderColor = "#8fd05e");
+    btn.onmouseleave = () => (btn.style.borderColor = "#5a5f68");
+    btn.onclick = () => {
+      p.apply();
+      applyDifficultyToColony();
+      overlay.remove();
+      paused = false;
+    };
+    overlay.append(btn);
+  });
+  document.body.append(overlay);
+}
+
+// Seçilen zorluğu canlı koloniye uygula (köylü sayısı, erzak, moral)
+function applyDifficultyToColony(): void {
+  resources.berry = difficulty.startBerry;
+  while (villagers.length > difficulty.startVillagers) villagers.pop();
+  if (difficulty.startMoraleBonus !== 0) {
+    for (const v of villagers) {
+      v.changeMorale(
+        difficulty.startMoraleBonus,
+        difficulty.startMoraleBonus > 0 ? "Bereketli topraklar" : "Çetin topraklar"
+      );
+    }
+  }
+  addMessage(`Zorluk: ${DIFFICULTY_PRESETS[difficulty.level].name}`);
+}
 
 // Tıklanan dünya noktasına en yakın köylüyü bul (vücut hizasında, ~9 piksel tolerans)
 function villagerAt(wx: number, wy: number): Villager | null {
@@ -232,8 +284,8 @@ function spawnWildAnimal(): boolean {
     const type = WILD_POOL[Math.floor(Math.random() * WILD_POOL.length)];
     // yırtıcılar takvime bağlı gelir: kurt Kış/1'den, ayı Kış/2'den itibaren
     // (kış = yılın 4. günü; Kış/1 = 7. gün, Kış/2 = 11. gün)
-    if (type === "wolf" && totalDays() < 7) continue;
-    if (type === "bear" && totalDays() < 11) continue;
+    if (type === "wolf" && totalDays() < difficulty.wolfDay) continue;
+    if (type === "bear" && totalDays() < difficulty.bearDay) continue;
     // yırtıcılar yerleşimden uzakta türer (sürpriz katliam olmasın)
     if (ANIMAL_DEFS[type].predator) {
       const d = Math.max(Math.abs(x - campCenter.x), Math.abs(y - campCenter.y));
@@ -1274,7 +1326,7 @@ function step(dt: number) {
     lastDayCount = days;
     nightlyConceptions();
     // doğa kendini yeniler: yabani nüfus azaldıysa yenileri türer
-    const wildCount = animals.filter((a) => a.wild).length;
+    const wildCount = animals.filter((a) => a.wild && a.type !== "dog").length;
     if (wildCount < WILD_CAP) {
       spawnWildAnimal();
       if (wildCount < WILD_CAP / 2) spawnWildAnimal();
@@ -1487,6 +1539,8 @@ console.info(
   "%cBanisher debug: konsola hile.yardim() yaz",
   "color:#8fd05e;font-weight:bold"
 );
+
+showDifficultyScreen();
 
 let last = performance.now();
 let accumulator = 0;

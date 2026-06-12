@@ -27,6 +27,7 @@ import {
   TORCH_LIGHT_RADIUS,
   WORSHIP_TIME,
 } from "./buildings";
+import { difficulty } from "./difficulty";
 import { addJournal } from "./journal";
 import { babyIdentity, randomIdentity, type Identity } from "./names";
 import { hasTech } from "./tech";
@@ -98,9 +99,9 @@ function forageBonus(): number {
   return 0;
 }
 
-// Günde 40 birim açlık: gün süresi tuning'den okunur (gün uzarsa oran düşer)
+// Günlük açlık zorluk seviyesinden, gün süresi tuning'den okunur
 function hungerRate(): number {
-  return 40 / tuning.dayLength;
+  return difficulty.hungerPerDay / tuning.dayLength;
 }
 export const EAT_THRESHOLD = 40;
 const EAT_TIME = 1.2;
@@ -1442,7 +1443,8 @@ export class Villager {
       if (bestT) {
         const target = bestT;
         candidates.push({
-          dist: bestTD / TILE_SIZE,
+          // oyuncunun verdiği doğrudan emirdir: mesafe yarışında güçlü öncelik
+          dist: (bestTD / TILE_SIZE) * 0.2,
           start: () => {
             const path = findPath(
               world, this.tileX, this.tileY,
@@ -1829,11 +1831,29 @@ export class Villager {
         this.timer = TEND_TIME / speedFactor;
         this.faceTowards(this.job.animal.x);
         break;
-      case "tame":
+      case "tame": {
+        const a2 = this.job.animal;
+        const d2 = Math.hypot(a2.x - this.x, a2.y - this.y);
+        if (d2 > 2.5 * TILE_SIZE) {
+          // hayvan bu sırada uzaklaştı: peşinden git (sahiplik korunur)
+          const chase = findPath(
+            world, this.tileX, this.tileY,
+            Math.floor(a2.x / TILE_SIZE), Math.floor(a2.y / TILE_SIZE)
+          );
+          if (chase) {
+            this.startPath(chase);
+          } else {
+            a2.claimed = false;
+            this.job = null;
+            this.toIdle();
+          }
+          break;
+        }
         this.state = "tending";
         this.timer = TAME_TIME / speedFactor;
-        this.faceTowards(this.job.animal.x);
+        this.faceTowards(a2.x);
         break;
+      }
       case "build":
         this.state = "building";
         this.faceTowards(this.job.building.centerX);
@@ -2336,6 +2356,13 @@ export class Villager {
     if (this.timer <= 0) {
       const a = job.animal;
       if (job.kind === "tame") {
+        // hayvan süreç içinde kaçtıysa yeniden yaklaş
+        if (Math.hypot(a.x - this.x, a.y - this.y) > 3 * TILE_SIZE) {
+          a.claimed = false;
+          this.job = null;
+          this.toIdle();
+          return;
+        }
         // evcilleştirme: yabani tür evcil karşılığına dönüşür
         const target = TAME_TARGET[a.type];
         if (target) {
