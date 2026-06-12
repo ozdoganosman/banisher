@@ -1,13 +1,29 @@
 # Banisher
 
-2D blok bazlı, Banished benzeri koloni simülasyonu. Köylüler Cin Ali tarzı
-çöp adamlardır; dünya pixel-art bloklardan oluşur ve prosedürel üretilir.
+2D blok bazlı, insanlığın gelişim yolculuğunu konu alan kabile/koloni
+simülasyonu. Karakterler Cin Ali tarzı çöp adamlardır; dünya pixel-art
+bloklardan oluşur ve prosedürel üretilir.
 
-## Oyunun Mantığı (Özet)
+## Oyunun Ana Fikri
 
-Banisher'da prosedürel bir adada 6 köylüyle ve hazır kurulu bir kampla
-başlarsın. Amaç koloniyi hayatta tutup büyütmektir; oyunun çekirdeği şu
-döngülere dayanır:
+**Banisher bir medeniyet yolculuğudur.** Prosedürel bir adada, elleriyle
+dal toplayan ilkel bir kabileyle (mağara insanı seviyesinde) başlarsın.
+Amacın iki katmanlıdır:
+
+1. **Hayatta tut**: açlık, gece, kış, moral — doğa acımasızdır ve hiçbir
+   kaynak bedavaya yenilenmez.
+2. **İleri taşı**: kavmini insanoğlunun gerçek gelişim basamaklarından
+   geçir — ateşin keşfi, taş aletler, inanç, beceriler, tarım, zanaat,
+   kültür, sanat ve bilim... mağara adamından günümüze, adım adım.
+
+Gelişimin para birimi **bilgi**dir: rahipler tapınakta üretir, sen bunu
+teknoloji ağacında (T) insanlık tarihine uygun araştırmalara harcarsın.
+Her araştırma kabilenin **yapabildiklerini** genişletir: ateş olmadan gece
+çalışılmaz, balta olmadan ağaç devrilemez, bakımevi olmadan anne bebeğinden
+ayrılamaz. Teknoloji "sayı arttıran bonus" değil, **yeni davranış** açar —
+kabile her araştırmayla biraz daha "insan" olur.
+
+## Oyunun Mantığı (Mekanik Özet)
 
 **Emek ve iş sistemi (Banished tarzı).** "Boşta" sınıfı yoktur: herkes
 varsayılan **ortalık işçisidir** — elle işaretlediğin ağaç, çalı, mantar,
@@ -27,11 +43,14 @@ yenilenir (oduncunun diktiği fidanlar, toplayıcının ektiği çalılar,
 binalardan uzak, el değmemiş yerlerde kendiliğinden biter.
 
 **Bilgi ve teknoloji.** Rahipler tapınakta tapınarak **bilgi** üretir;
-bilgiyle teknoloji ağacı (T) açılır: Beşer (tanrı inancı, +10 moral),
+bilgiyle teknoloji ağacı (T) açılır. Mevcut araştırmalar insanlığın en
+erken (Paleolitik) basamaklarıdır: Beşer (tanrı inancı, +10 moral),
 Doğa (ateşin keşfi → meşale ve gece çalışması), Sermaye → Depo,
 Sert Cisimler → çakıl toplama, Kollektif → gıda ambarı, Mantaroloji →
 mantar tanıma, Motor Beceriler (+%20 hız), Bilişsel Beceriler →
-bakımevi ve eğitim, Alet Atölyesi → balta üretimi.
+bakımevi ve eğitim, Alet Atölyesi → balta üretimi. Sonraki çağlar için
+yol haritasına bak: dil, avcılık teknikleri, pişirme, tarım, çömlek,
+maden ve yazıya doğru ilerlenecek.
 
 **Zaman ve yaşam döngüsü.** Takvimde **1 gün = 1 mevsim, 4 gün = 1 yıl**.
 Gece 00:00-06:00 arası uyku vaktidir: evi olan evinde uyur (moral kazanır),
@@ -305,16 +324,54 @@ Tarayıcıda `http://localhost:5173` adresini aç.
   açılır — anlık durum ("Ağaç kesiyor" vb.) ve tokluk barı canlı güncellenir
 - HUD: odun/yemek (kapasiteli), nüfus, bildirimler, açlık barları
 
-## Yol haritası
+## Yol haritası: Çağlar boyunca gelişim
 
-- [x] Bina inşaatı (depo, ev, oduncu kulübesi) — odun harcayarak
-- [x] Yemek ve açlık: toplayıcı kulübesi, köylü ihtiyaçları ve ölüm
-- [x] Mevsimler ve gün/gece döngüsü
-- [x] Köylülerin eve/depoya taşıma yapması
-- [x] Taş madenciliği
-- [ ] Tarlalar ve ekin yetiştirme
-- [ ] Demir madenciliği
+Oyun, insanlığın gerçek gelişim sırasını izleyen çağlara bölünerek
+genişleyecek. Her çağ yeni araştırmalar, binalar ve davranışlar getirir.
+
+### 🪨 Paleolitik — Mağara Çağı (mevcut durum, büyük ölçüde tamam)
+
+- [x] Elle toplayıcılık: dal budama, yemiş/mantar/çakıl toplama
+- [x] Ateşin keşfi (Doğa): meşale, gece çalışması, ateş başında moral
+- [x] İnanç (Beşer): tapınak, bilgi üretimi, moral
+- [x] Taş aletler (Sert Cisimler → Alet Atölyesi): balta ile ağaç devirme
+- [x] Beceriler (Motor + Bilişsel): hız, bakımevi, çocuk eğitimi
+- [x] Avcılık (temel): yabani hayvan işaretleyip avlama
+- [ ] **Dil**: işbirliği — yakın çalışan köylüler birbirini hızlandırır
+- [ ] **Mızrak** (Alet Atölyesi'nde üretilir): büyük av güvenli ve verimli
+- [ ] **Ateşte pişirme**: ocak binası — pişmiş yemek daha doyurucu
+- [ ] **Deri işleme**: posttan giysi — kışın dışarıda çalışma/moral koruması
+- [ ] **Mağara resmi**: ilk sanat — kalıcı moral kaynağı binası
+
+### 🌾 Neolitik — Tarım Devrimi
+
+- [ ] **Tarım**: tarla, tohum ekme, mevsimlik hasat (kışın tarla durur)
+- [ ] **Hayvan evcilleştirme**: yabani hayvan yakalayıp çiftliğe katma
+- [ ] **Çanak çömlek**: yiyecek saklama — gıda bozulması mekaniğiyle birlikte
+- [ ] **Dokumacılık**: yünden kıyafet (deri işlemenin gelişmişi)
+- [ ] **Kerpiç evler**: daha büyük konut, daha iyi uyku morali
+- [ ] **Takas**: gezgin tüccar — fazla ürünü olmayanla değiş tokuş
+
+### ⚒️ Kalkolitik / Tunç Çağı
+
+- [ ] **Bakır madenciliği**: yeni cevher blokları, eritme ocağı
+- [ ] **Tunç aletler**: balta/kazma/orak verimi artar, aletler eskir
+- [ ] **Tekerlek**: el arabası — taşıma kapasitesi artar
+- [ ] **Müzik**: çalgılar ve meydan — şenlik günleri (toplu moral)
+- [ ] **Yazı**: tablet evi/okul — bilgi üretimi rahip dışına çıkar
+
+### 🗡️ Demir Çağı ve sonrası (uzak ufuk)
+
+- [ ] Demir madenciliği ve demircilik
+- [ ] Para ve pazar yeri
+- [ ] Tıp/şifacı (hastalık sistemiyle birlikte)
+- [ ] Yollar (hızlı yürüme), köprüler
+- [ ] ... günümüze doğru
+
+### Teknik
+
 - [ ] Kaydet/yükle
+- [ ] Ses efektleri ve müzik
 
 ## Mimari
 
