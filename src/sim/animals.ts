@@ -5,10 +5,12 @@ import { Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
 import type { Building } from "./buildings";
 import type { ItemType } from "./resources";
+import type { Villager } from "./villager";
 
 export type AnimalType =
   | "chicken" | "cow" | "pig" | "sheep" | "goat" // çiftlik
-  | "rabbit" | "deer" | "boar"; // yabani (avlanabilir)
+  | "rabbit" | "deer" | "boar" // yabani (avlanabilir)
+  | "wolf" | "bear"; // yırtıcı: insanları görünce saldırır
 
 export interface AnimalDef {
   name: string;
@@ -16,31 +18,46 @@ export interface AnimalDef {
   yieldAmount: number;
   interval: number; // saniye: ürün hazırlanma süresi
   speed: number;
+  hp: number; // mızrak avına dayanıklılık (büyük hayvan zor ölür)
   huntYield: number; // avlanınca verilen et
+  leatherYield: number; // işlenince verilen deri
+  woolYield: number; // işlenince verilen yün
   slaughter?: boolean; // ürün almak hayvanı götürür (yenisi sonra gelir)
+  predator?: boolean; // insanlara saldırır
+  attackDamage?: number;
 }
 
 const NEVER = 1e9; // yabaniler "ürün" hazırlamaz (sahipsizler tüketilemez)
 
+// Boyuta göre denge: büyük hayvan yavaş ama çok et/deri verir ve zor ölür
 export const ANIMAL_DEFS: Record<AnimalType, AnimalDef> = {
-  chicken: { name: "Tavuk", product: "fish", yieldAmount: 2, interval: 30, speed: 14, huntYield: 1 },
-  cow: { name: "İnek", product: "fish", yieldAmount: 2, interval: 45, speed: 9, huntYield: 4 },
-  pig: { name: "Domuz", product: "fish", yieldAmount: 4, interval: 70, speed: 11, slaughter: true, huntYield: 4 },
-  sheep: { name: "Koyun", product: "fish", yieldAmount: 2, interval: 50, speed: 10, huntYield: 2 },
-  goat: { name: "Keçi", product: "fish", yieldAmount: 2, interval: 40, speed: 12, huntYield: 2 },
-  rabbit: { name: "Tavşan", product: "fish", yieldAmount: 1, interval: NEVER, speed: 24, huntYield: 1 },
-  deer: { name: "Geyik", product: "fish", yieldAmount: 4, interval: NEVER, speed: 18, huntYield: 4 },
-  boar: { name: "Yaban Domuzu", product: "fish", yieldAmount: 3, interval: NEVER, speed: 13, huntYield: 3 },
+  chicken: { name: "Tavuk", product: "meat", yieldAmount: 1, interval: 30, speed: 14, hp: 2, huntYield: 1, leatherYield: 0, woolYield: 0 },
+  cow: { name: "İnek", product: "meat", yieldAmount: 2, interval: 45, speed: 8, hp: 6, huntYield: 5, leatherYield: 2, woolYield: 0 },
+  pig: { name: "Domuz", product: "meat", yieldAmount: 4, interval: 70, speed: 11, hp: 4, huntYield: 4, leatherYield: 1, woolYield: 0, slaughter: true },
+  sheep: { name: "Koyun", product: "wool", yieldAmount: 2, interval: 50, speed: 10, hp: 4, huntYield: 2, leatherYield: 1, woolYield: 2 },
+  goat: { name: "Keçi", product: "meat", yieldAmount: 1, interval: 40, speed: 12, hp: 4, huntYield: 2, leatherYield: 1, woolYield: 1 },
+  rabbit: { name: "Tavşan", product: "meat", yieldAmount: 1, interval: NEVER, speed: 24, hp: 2, huntYield: 1, leatherYield: 0, woolYield: 0 },
+  deer: { name: "Geyik", product: "meat", yieldAmount: 4, interval: NEVER, speed: 20, hp: 6, huntYield: 4, leatherYield: 2, woolYield: 0 },
+  boar: { name: "Yaban Domuzu", product: "meat", yieldAmount: 3, interval: NEVER, speed: 13, hp: 5, huntYield: 3, leatherYield: 1, woolYield: 0 },
+  wolf: { name: "Kurt", product: "meat", yieldAmount: 1, interval: NEVER, speed: 22, hp: 4, huntYield: 1, leatherYield: 1, woolYield: 0, predator: true, attackDamage: 12 },
+  bear: { name: "Ayı", product: "meat", yieldAmount: 5, interval: NEVER, speed: 16, hp: 9, huntYield: 5, leatherYield: 3, woolYield: 0, predator: true, attackDamage: 22 },
 };
 
 // Çiftlik tamamlanınca gelen sürü
 export const BARN_HERD: AnimalType[] = ["chicken", "chicken", "cow", "pig", "sheep", "goat"];
 
-// Yabani doğum havuzu (ağırlıklı): normal hayvanlar da doğada rastgele türer
+// Yabani doğum havuzu (ağırlıklı): normal hayvanlar da doğada rastgele türer;
+// yırtıcılar seyrek ama gerçek bir tehdittir
 export const WILD_POOL: AnimalType[] = [
   "rabbit", "rabbit", "rabbit", "deer", "deer", "boar",
   "chicken", "chicken", "cow", "pig", "sheep", "sheep", "goat",
+  "wolf", "bear",
 ];
+
+export const PREDATOR_AGGRO_RANGE = 6 * TILE_SIZE; // insanı bu mesafede görür
+export const PREDATOR_ATTACK_RANGE = 12; // dünya-piksel
+const PREDATOR_ATTACK_INTERVAL = 1.4; // saniye
+const PREDATOR_CHASE_GIVEUP = 11 * TILE_SIZE;
 
 const WANDER_RADIUS = 4; // çiftlik merkezinden blok
 const HUNGER_RATE = 100 / 120; // 2 dakikada acıkır
@@ -59,6 +76,11 @@ export class Animal {
   hunted = false; // oyuncu av için işaretledi (yalnızca yabaniler)
   claimed = false; // bir köylü bu hayvana yöneldi
   produceTimer: number;
+  hp: number; // mızrak/balta darbeleriyle azalır
+  fleeTimer = 0; // mızrak yiyen hayvan kaçar
+  private fleeDirX = 0;
+  private fleeDirY = 0;
+  private attackTimer = 0; // yırtıcı saldırı ritmi
   // yabaniler doğdukları noktanın çevresinde dolanır
   private anchorX: number;
   private anchorY: number;
@@ -84,6 +106,18 @@ export class Animal {
     this.produceTimer = barn
       ? ANIMAL_DEFS[type].interval * (0.4 + Math.random() * 0.6)
       : 1e9;
+    this.hp = ANIMAL_DEFS[type].hp;
+  }
+
+  // Mızrak isabeti: hasar al ve saldırgandan kaçmaya başla
+  takeHit(damage: number, fromX: number, fromY: number): void {
+    this.hp -= damage;
+    const dx = this.x - fromX;
+    const dy = this.y - fromY;
+    const d = Math.hypot(dx, dy) || 1;
+    this.fleeDirX = dx / d;
+    this.fleeDirY = dy / d;
+    this.fleeTimer = 3;
   }
 
   get wild(): boolean {
@@ -98,7 +132,66 @@ export class Animal {
     return !this.dead && this.produceTimer <= 0 && !this.claimed;
   }
 
-  update(dt: number, world: World): void {
+  update(dt: number, world: World, villagers?: Villager[]): void {
+    // mızrak yiyen hayvan kaçar (yırtıcılar bile geri çekilir)
+    if (this.fleeTimer > 0) {
+      this.fleeTimer -= dt;
+      this.grazing = false;
+      const speed = this.def.speed * 1.7;
+      const nx = this.x + this.fleeDirX * speed * dt;
+      const ny = this.y + this.fleeDirY * speed * dt;
+      if (world.walkableAt(Math.floor(nx / TILE_SIZE), Math.floor(ny / TILE_SIZE))) {
+        this.x = nx;
+        this.y = ny;
+        if (this.fleeDirX !== 0) this.facing = this.fleeDirX > 0 ? 1 : -1;
+        this.walkPhase += dt * 11;
+      } else {
+        // duvara çarptı: yön değiştir
+        this.fleeDirX = -this.fleeDirX;
+        this.fleeDirY = -this.fleeDirY;
+      }
+      return;
+    }
+
+    // yırtıcı: görüş alanındaki en yakın insana saldırır
+    if (this.def.predator && villagers && !this.dead) {
+      let prey: Villager | null = null;
+      let preyD = PREDATOR_AGGRO_RANGE;
+      for (const v of villagers) {
+        if (v.dead || v.state === "sleeping") continue;
+        const d = Math.hypot(v.x - this.x, v.y - this.y);
+        if (d < preyD) {
+          preyD = d;
+          prey = v;
+        }
+      }
+      this.attackTimer -= dt;
+      if (prey && preyD <= PREDATOR_CHASE_GIVEUP) {
+        this.grazing = false;
+        if (preyD <= PREDATOR_ATTACK_RANGE) {
+          // ısır
+          if (this.attackTimer <= 0) {
+            this.attackTimer = PREDATOR_ATTACK_INTERVAL;
+            prey.takeDamage(this.def.attackDamage ?? 10, this, world);
+          }
+        } else {
+          // kovala
+          const dx = prey.x - this.x;
+          const dy = prey.y - this.y;
+          const d = Math.hypot(dx, dy) || 1;
+          const nx = this.x + (dx / d) * this.def.speed * 1.3 * dt;
+          const ny = this.y + (dy / d) * this.def.speed * 1.3 * dt;
+          if (world.walkableAt(Math.floor(nx / TILE_SIZE), Math.floor(ny / TILE_SIZE))) {
+            this.x = nx;
+            this.y = ny;
+            this.facing = dx > 0 ? 1 : -1;
+            this.walkPhase += dt * 10;
+          }
+        }
+        return;
+      }
+    }
+
     // açlık ve telef
     this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
     if (this.hunger >= 100) {

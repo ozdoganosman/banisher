@@ -7,6 +7,7 @@ import {
   BuildingType,
   isDepositPoint,
   LIGHT_RADIUS,
+  TORCH_LIGHT_RADIUS,
 } from "../sim/buildings";
 import { isFull, ITEM_INFO, ITEM_TYPES, foodTotal } from "../sim/resources";
 import { darkness, season } from "../sim/time";
@@ -772,7 +773,7 @@ export class Renderer {
       let li = 0;
       for (const b of buildings) {
         if (!b.done) continue;
-        const r = LIGHT_RADIUS[b.type];
+        const r = b.hasTorch ? TORCH_LIGHT_RADIUS : LIGHT_RADIUS[b.type];
         if (!r) continue;
         const sx = (b.centerX - camera.x) * camera.zoom + vw / 2;
         const sy = (b.centerY - camera.y) * camera.zoom + vh / 2;
@@ -817,6 +818,10 @@ export class Renderer {
       else this.drawSite(ctx, px, py, b.progress / b.def.buildTime);
       return;
     }
+    if (b.hasTorch) {
+      // sağ üst köşeye asılı meşale
+      this.drawAttachedTorch(ctx, px + b.size * TILE_SIZE - 4, py + 6, time);
+    }
     switch (b.type) {
       case BuildingType.House: this.drawHouse(ctx, px, py); break;
       case BuildingType.Depot: this.drawDepot(ctx, px, py); break;
@@ -831,6 +836,7 @@ export class Renderer {
       case BuildingType.Fisher: this.drawFisher(ctx, px, py); break;
       case BuildingType.Barn: this.drawBarn(ctx, px, py); break;
       case BuildingType.ToolWorkshop: this.drawToolWorkshop(ctx, px, py); break;
+      case BuildingType.HunterLodge: this.drawHunterLodge(ctx, px, py); break;
     }
   }
 
@@ -985,6 +991,40 @@ export class Renderer {
         ctx.fillRect(x + 1.8, y - 1.5, 1, 1.5);
         break;
       }
+      case "wolf": {
+        // gri kurt: sivri kulaklar, kalkık kuyruk
+        ctx.fillStyle = "#8a8e96";
+        ctx.fillRect(x - 3.5, y - 5 + bob, 7, 3.2);
+        ctx.fillRect(x + f * 3.5 - 1, y - 5.8 + bob + headDrop, 2.6, 2.6); // kafa
+        ctx.fillRect(x + f * 3.4, y - 7 + bob + headDrop, 0.9, 1.4); // kulak
+        ctx.fillRect(x + f * 4.4, y - 6.8 + bob + headDrop, 0.9, 1.2);
+        ctx.fillStyle = "#6a6e76";
+        ctx.fillRect(x - f * 4.4, y - 6.2 + bob, 1.4, 2.6); // kuyruk
+        ctx.fillStyle = "#2a2622";
+        ctx.fillRect(x + f * 5, y - 4.6 + bob + headDrop, 0.9, 0.9); // burun
+        ctx.fillStyle = "#d44";
+        ctx.fillRect(x + f * 4.2, y - 4.7 + bob + headDrop, 0.8, 0.8); // göz
+        ctx.fillStyle = "#6a6e76";
+        ctx.fillRect(x - 2.8, y - 2, 1, 2);
+        ctx.fillRect(x + 1.8, y - 2, 1, 2);
+        break;
+      }
+      case "bear": {
+        // iri kahverengi ayı
+        ctx.fillStyle = "#6a4a32";
+        ctx.fillRect(x - 4.5, y - 7.5 + bob, 9, 5.5);
+        ctx.fillRect(x + f * 4.5 - 1.2, y - 8 + bob + headDrop, 3.4, 3.4); // kafa
+        ctx.fillRect(x + f * 4, y - 9 + bob + headDrop, 1.1, 1.1); // kulaklar
+        ctx.fillRect(x + f * 5.6, y - 9 + bob + headDrop, 1.1, 1.1);
+        ctx.fillStyle = "#503824";
+        ctx.fillRect(x - 4, y - 3, 1.6, 2.6); // bacaklar
+        ctx.fillRect(x + 2.4, y - 3, 1.6, 2.6);
+        ctx.fillStyle = "#caa27a";
+        ctx.fillRect(x + f * 5.4, y - 6.2 + bob + headDrop, 1.6, 1.2); // burun
+        ctx.fillStyle = "#d44";
+        ctx.fillRect(x + f * 4.6, y - 7 + bob + headDrop, 0.9, 0.9); // göz
+        break;
+      }
     }
 
     // av işareti: kırmızı köşeli çerçeve
@@ -1000,6 +1040,14 @@ export class Renderer {
         ctx.lineTo(x + cxs * r * 0.45, y - 4 + cys * r);
         ctx.stroke();
       }
+    }
+
+    // yara göstergesi: mızrak yemiş hayvanın tepesinde kırmızı can barı
+    if (a.hp < a.def.hp) {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(x - 3, y - 11, 6, 1.4);
+      ctx.fillStyle = "#e04040";
+      ctx.fillRect(x - 3, y - 11, (6 * Math.max(0, a.hp)) / a.def.hp, 1.4);
     }
 
     // açlık göstergesi: aç hayvanın tepesinde küçük bar
@@ -1453,12 +1501,57 @@ export class Renderer {
     ctx.fillRect(px + 23.5, py + 22.4, 6, 2);
   }
 
+  // Binaya takılı meşale: kısa sap + titreyen alev
+  private drawAttachedTorch(ctx: CanvasRenderingContext2D, x: number, y: number, time: number): void {
+    ctx.fillStyle = "#6a4a2e";
+    ctx.fillRect(x - 0.8, y, 1.6, 6);
+    const fl = Math.sin(time * 11 + x) * 0.6;
+    ctx.fillStyle = "#f0a030";
+    ctx.beginPath();
+    ctx.ellipse(x, y - 2 + fl * 0.3, 2.2, 3 + fl, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffd23c";
+    ctx.beginPath();
+    ctx.ellipse(x, y - 1.4, 1.1, 1.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  private drawHunterLodge(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 11, py + 29, 10);
+    // koyu ahşap kulübe, girişte post asılı
+    ctx.fillStyle = WALL;
+    ctx.fillRect(px + 3, py + 12, 17, 17);
+    this.outlineRect(ctx, px + 3, py + 12, 17, 17);
+    ctx.fillStyle = "#7a3a2a"; // kızıl-kahve çatı
+    ctx.fillRect(px + 2, py + 8, 19, 5);
+    ctx.fillStyle = "#94503a";
+    ctx.fillRect(px + 2, py + 8, 19, 2);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(px + 3, py + 13, 17, 2);
+    ctx.fillStyle = "#4a2e1a";
+    ctx.fillRect(px + 9, py + 21, 5, 8);
+    // duvarda çapraz mızraklar
+    ctx.strokeStyle = "#d4c49a";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 14.5, py + 19.5); ctx.lineTo(px + 19.5, py + 14.5);
+    ctx.moveTo(px + 14.5, py + 14.5); ctx.lineTo(px + 19.5, py + 19.5);
+    ctx.stroke();
+    // kurutma askısında deri
+    ctx.fillStyle = "#a87c4f";
+    ctx.fillRect(px + 23, py + 20, 6, 7);
+    ctx.strokeStyle = "#6a4a2e";
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(px + 23, py + 20, 6, 7);
+  }
+
   // ---- Cin Ali tarzı çöp adam ----
 
   private drawVillager(ctx: CanvasRenderingContext2D, v: Villager, time: number): void {
     const x = v.x;
     const y = v.y; // ayakların bastığı nokta
-    const swing = v.state === "walking" ? Math.sin(v.walkPhase) * 2.2 : 0;
+    const swing =
+      v.state === "walking" || v.state === "hunting" ? Math.sin(v.walkPhase) * 2.2 : 0;
 
     // bebekler ve çocuklar ayak noktası etrafında küçültülerek çizilir
     const k = v.baby ? 0.6 : v.child ? 0.8 : 1;
@@ -1653,6 +1746,23 @@ export class Renderer {
 
     drawVillagerJobAccessories(ctx, x, y, v.facing, v.assignment, 1);
 
+    // mızraklı köylü: sırtında/elinde mızrak taşır
+    if (v.spears > 0 && !v.baby) {
+      ctx.strokeStyle = "#d4c49a";
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(x - v.facing * 2.2, y - 2.5);
+      ctx.lineTo(x + v.facing * 2.6, y - 12.5);
+      ctx.stroke();
+      ctx.fillStyle = "#9aa0a8"; // taş uç
+      ctx.beginPath();
+      ctx.moveTo(x + v.facing * 2.6, y - 12.5);
+      ctx.lineTo(x + v.facing * 3.6, y - 14.2);
+      ctx.lineTo(x + v.facing * 1.8, y - 13.6);
+      ctx.closePath();
+      ctx.fill();
+    }
+
     // baltalı köylü: elinde küçük balta taşır
     if (v.hasAxe && !v.baby) {
       const hx = x + 2.6 * v.facing;
@@ -1667,6 +1777,15 @@ export class Renderer {
     if (v.state === "eating") {
       ctx.fillStyle = "#d43f3f";
       ctx.fillRect(x + 2.5 * v.facing, y - 10, 1.5, 1.5);
+    }
+
+    // yara göstergesi: yırtıcı saldırısı yemiş köylüde kırmızı can barı
+    if (v.hp < 100) {
+      const w = 6;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(x - w / 2, y - 18, w, 1.6);
+      ctx.fillStyle = "#e04040";
+      ctx.fillRect(x - w / 2, y - 18, (w * Math.max(0, v.hp)) / 100, 1.6);
     }
 
     const noFood = v.getFoodInInventory() === 0 && foodTotal() === 0;

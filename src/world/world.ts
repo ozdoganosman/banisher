@@ -99,10 +99,10 @@ export class World {
           } else if (f > 0.55 && hash2(x, y, seed + 61) > 0.94) {
             // orman içlerinde seyrek mantarlar (yenileri binalardan uzakta biter)
             t = Tile.Mushroom;
-          } else if (f > 0.46 && hash2(x, y, seed + 31) > 0.95) {
-            // orman kenarlarında yemiş çalıları (seyrek)
+          } else if (f > 0.46 && hash2(x, y, seed + 31) > 0.93) {
+            // orman kenarlarında yemiş çalıları
             t = Tile.Bush;
-          } else if (hash2(x, y, seed + 47) > 0.996) {
+          } else if (hash2(x, y, seed + 47) > 0.994) {
             // açık alanda tek tük çalı
             t = Tile.Bush;
           } else if (hash2(x, y, seed + 53) > 0.99) {

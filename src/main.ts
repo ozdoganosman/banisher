@@ -39,6 +39,9 @@ import { Animal, ANIMAL_DEFS, BARN_HERD, WILD_POOL, type AnimalType } from "./si
 import {
   AXE_STONE_COST,
   AXE_WOOD_COST,
+  SPEAR_STONE_COST,
+  SPEAR_WOOD_COST,
+  TORCH_ATTACH_COST,
   Building,
   BUILDING_DEFS,
   BuildingType,
@@ -210,6 +213,11 @@ function spawnWildAnimal(): boolean {
     const y = 4 + Math.floor(Math.random() * (MAP_H - 8));
     if (!world.walkableAt(x, y)) continue;
     const type = WILD_POOL[Math.floor(Math.random() * WILD_POOL.length)];
+    // yırtıcılar yerleşimden uzakta türer (sürpriz katliam olmasın)
+    if (ANIMAL_DEFS[type].predator) {
+      const d = Math.max(Math.abs(x - campCenter.x), Math.abs(y - campCenter.y));
+      if (d < 30) continue;
+    }
     animals.push(new Animal(type, null, x, y));
     return true;
   }
@@ -451,6 +459,24 @@ input.onClick = (wx, wy, sx, sy) => {
         }
       } else if (hit === "orderMinus") {
         selectedBuilding.orders = Math.max(0, selectedBuilding.orders - 1);
+      } else if (hit === "spearPlus") {
+        const qw = (selectedBuilding.spearOrders + 1) * SPEAR_WOOD_COST;
+        const qs = (selectedBuilding.spearOrders + 1) * SPEAR_STONE_COST;
+        if (resources.wood >= qw && resources.stone >= qs) {
+          selectedBuilding.spearOrders++;
+        } else {
+          addMessage(`Yetersiz hammadde! (mızrak: ${SPEAR_WOOD_COST} dal + ${SPEAR_STONE_COST} taş)`);
+        }
+      } else if (hit === "spearMinus") {
+        selectedBuilding.spearOrders = Math.max(0, selectedBuilding.spearOrders - 1);
+      } else if (hit === "torch") {
+        if (resources.wood >= TORCH_ATTACH_COST) {
+          resources.wood -= TORCH_ATTACH_COST;
+          selectedBuilding.hasTorch = true;
+          addMessage(`${selectedBuilding.def.name} binasına meşale takıldı`);
+        } else {
+          addMessage(`Yetersiz dal! (meşale: ${TORCH_ATTACH_COST} dal)`);
+        }
       } else if (hit === "demolish") demolishBuilding(selectedBuilding);
       return;
     }
@@ -946,8 +972,8 @@ function step(dt: number) {
 
   for (const v of villagers) v.update(dt, world, buildings, animals);
 
-  // hayvanlar: dolanma, otlama, açlık
-  for (const a of animals) a.update(dt, world);
+  // hayvanlar: dolanma, otlama, açlık; yırtıcılar insan kovalar
+  for (const a of animals) a.update(dt, world, villagers);
   for (let i = animals.length - 1; i >= 0; i--) {
     const a = animals[i];
     if (!a.dead) continue;
@@ -979,11 +1005,16 @@ function step(dt: number) {
     }
   }
 
-  // açlıktan ölenleri çıkar
+  // ölenleri çıkar (açlık veya yırtıcı saldırısı)
   for (let i = villagers.length - 1; i >= 0; i--) {
     if (villagers[i].dead) {
-      addMessage(`${villagers[i].fullName} açlıktan öldü!`);
-      if (selectedVillager === villagers[i]) selectedVillager = null;
+      const v = villagers[i];
+      addMessage(
+        v.deathCause === "predator"
+          ? `🐺 ${v.fullName} yırtıcı saldırısında can verdi!`
+          : `${v.fullName} açlıktan öldü!`
+      );
+      if (selectedVillager === v) selectedVillager = null;
       villagers.splice(i, 1);
     }
   }

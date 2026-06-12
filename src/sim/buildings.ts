@@ -17,7 +17,8 @@ export const enum BuildingType {
   Fisher = 9, // su kenarına kurulur; balıkçılar kıyıdan balık tutar
   Barn = 10, // çiftlik: tavuk/inek/domuz besler, çiftçiler ürün toplar
   Collective = 11, // Kollektif ambar (sadece gıda depolar)
-  ToolWorkshop = 12, // Alet atölyesi: sipariş üzerine balta üretir
+  ToolWorkshop = 12, // Alet atölyesi: sipariş üzerine balta/mızrak üretir
+  HunterLodge = 13, // Avcı kulübesi: mızraklı avcılar en yakın hayvanları avlar
 }
 
 export interface BuildingDef {
@@ -136,7 +137,15 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildTime: 10,
     size: 2,
     maxWorkers: 1,
-    desc: "Sipariş üzerine balta üretir (3 dal + 3 taş); baltalı işçiler ağaç kesip odun alır",
+    desc: "Sipariş üzerine balta (3 dal + 3 taş) ve mızrak (7 dal + 5 taş) üretir",
+  },
+  [BuildingType.HunterLodge]: {
+    name: "Avcı Kulübesi",
+    cost: 14,
+    buildTime: 9,
+    size: 2,
+    maxWorkers: 3,
+    desc: "3 avcı: mızrakla en yakın hayvanları avlar; et, deri ve yün kazanılır",
   },
 };
 
@@ -144,6 +153,16 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
 export const AXE_WOOD_COST = 3;
 export const AXE_STONE_COST = 3;
 export const AXE_CRAFT_TIME = 10; // saniye
+
+// Mızrak üretim reçetesi (Kan araştırması gerekir)
+export const SPEAR_WOOD_COST = 7; // 2 odun + 5 dal
+export const SPEAR_STONE_COST = 5;
+export const SPEAR_CRAFT_TIME = 8;
+export const MAX_CARRIED_SPEARS = 5; // avcı yanına en çok bu kadar alır
+
+// Binaya meşale takma bedeli (Doğa araştırması gerekir)
+export const TORCH_ATTACH_COST = 5; // dal
+export const TORCH_LIGHT_RADIUS = 88;
 
 // ---- Konut sistemi ----
 
@@ -163,6 +182,7 @@ export const ROLE_NAMES: Partial<Record<BuildingType, string>> = {
   [BuildingType.Barn]: "Çiftçi",
   [BuildingType.ToolWorkshop]: "Alet Ustası",
   [BuildingType.Nursery]: "Bakıcı",
+  [BuildingType.HunterLodge]: "Avcı",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları
@@ -175,7 +195,7 @@ export const LIGHT_RADIUS: Partial<Record<BuildingType, number>> = {
 export function isLit(buildings: Building[], wx: number, wy: number): boolean {
   for (const b of buildings) {
     if (!b.done) continue;
-    const r = LIGHT_RADIUS[b.type];
+    const r = b.hasTorch ? TORCH_LIGHT_RADIUS : LIGHT_RADIUS[b.type];
     if (!r) continue;
     const dx = wx - b.centerX;
     const dy = wy - b.centerY;
@@ -209,6 +229,12 @@ export class Building {
   orders = 0;
   toolStock = 0;
   toolReserved = 0;
+  // Mızrak siparişi/stoğu (Kan araştırması)
+  spearOrders = 0;
+  spearStock = 0;
+  spearReserved = 0;
+  // Binaya meşale takıldı: geceyi aydınlatır (5 dal, Doğa gerekir)
+  hasTorch = false;
   private scanTimer = Math.random() * SCAN_INTERVAL;
 
   constructor(
@@ -250,7 +276,7 @@ export class Building {
     }
     if (this.type === BuildingType.ToolWorkshop) {
       // sipariş yokken bina üzerinde uyarı çıksın
-      this.outOfResources = this.orders <= 0;
+      this.outOfResources = this.orders <= 0 && this.spearOrders <= 0;
       return;
     }
     if (this.type !== BuildingType.Woodcutter && this.type !== BuildingType.Gatherer) return;
@@ -320,8 +346,9 @@ export function isBuildingUnlocked(type: BuildingType): boolean {
   if (type === BuildingType.House || type === BuildingType.Temple || type === BuildingType.Camp) return true;
   if (type === BuildingType.Depot) return hasTech("capital");
   if (type === BuildingType.Collective) return hasTech("collective");
-  if (type === BuildingType.Torch) return hasTech("nature"); // ateş keşfi
   if (type === BuildingType.Nursery) return hasTech("cognitive");
   if (type === BuildingType.ToolWorkshop) return hasTech("toolworkshop");
+  if (type === BuildingType.HunterLodge) return hasTech("kan");
+  // Meşale artık ayrı bina değil: Doğa ile binalara takılır
   return false;
 }

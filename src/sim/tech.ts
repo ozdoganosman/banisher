@@ -12,7 +12,8 @@ export type TechId =
   | "hardobjects"
   | "motorskills"
   | "cognitive"
-  | "toolworkshop";
+  | "toolworkshop"
+  | "kan";
 
 export interface Tech {
   id: TechId;
@@ -34,18 +35,18 @@ export const TECHS: Tech[] = [
     gridY: 0,
   },
   {
-    id: "nature",
-    name: "Doğa",
-    cost: 6,
-    desc: "Ateş keşfedilir: meşale yapılır, gece meşale başında moral artar",
-    gridX: 0,
-    gridY: 2,
-  },
-  {
     id: "motorskills",
     name: "Motor Beceriler",
     cost: 10,
     desc: "Herkes %20 daha hızlı yürür ve çalışır",
+    gridX: 0,
+    gridY: 2,
+  },
+  {
+    id: "nature",
+    name: "Doğa",
+    cost: 6,
+    desc: "Ateş keşfedilir: binalara meşale takılır, gece ateş başında moral artar",
     gridX: 0,
     gridY: 4,
   },
@@ -65,7 +66,7 @@ export const TECHS: Tech[] = [
     desc: "Kollektif binasını açar (sadece gıda depolar)",
     prereq: ["nature"],
     gridX: 1,
-    gridY: 2,
+    gridY: 4,
   },
   {
     id: "cognitive",
@@ -74,7 +75,7 @@ export const TECHS: Tech[] = [
     desc: "Bakımevini açar; orada eğitilen çocuklar %20 daha hızlı çalışır ve yürür",
     prereq: ["motorskills"],
     gridX: 1,
-    gridY: 4,
+    gridY: 2,
   },
   {
     id: "hardobjects",
@@ -92,6 +93,15 @@ export const TECHS: Tech[] = [
     desc: "Yabani mantarlar tanınır ve toplanabilir",
     prereq: ["collective"],
     gridX: 2,
+    gridY: 4,
+  },
+  {
+    id: "kan",
+    name: "Kan",
+    cost: 20,
+    desc: "Avcı kulübesini açar; atölyede mızrak üretilir (5 taş + 7 dal)",
+    prereq: ["toolworkshop"],
+    gridX: 4,
     gridY: 2,
   },
   {

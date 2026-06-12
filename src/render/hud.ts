@@ -1,6 +1,7 @@
 import {
   AXE_STONE_COST,
   AXE_WOOD_COST,
+  TORCH_ATTACH_COST,
   BUILDING_DEFS,
   BuildingType,
   HOUSE_CAPACITY,
@@ -187,6 +188,59 @@ function drawItemIcon(ctx: CanvasRenderingContext2D, item: IconItem, x: number, 
       ctx.fillStyle = "#1a2a36";
       ctx.fillRect(6, 11, 1.6, 1.6);
       break;
+    case "meat":
+      // but eti: kemikli pirzola
+      ctx.fillStyle = "#c0564a";
+      ctx.beginPath();
+      ctx.ellipse(10, 11, 6.5, 5, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e08878";
+      ctx.beginPath();
+      ctx.ellipse(9, 10, 3, 2.2, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      // kemik
+      ctx.strokeStyle = "#ece4d4";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(14, 14); ctx.lineTo(19, 19);
+      ctx.stroke();
+      ctx.fillStyle = "#ece4d4";
+      ctx.beginPath();
+      ctx.arc(19.5, 17.8, 1.6, 0, Math.PI * 2);
+      ctx.arc(17.8, 19.5, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case "leather":
+      // gerilmiş post
+      ctx.fillStyle = "#a87c4f";
+      ctx.beginPath();
+      ctx.moveTo(6, 6); ctx.lineTo(18, 6); ctx.lineTo(20, 12);
+      ctx.lineTo(17, 19); ctx.lineTo(7, 19); ctx.lineTo(4, 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#8a6238";
+      ctx.fillRect(8, 9, 8, 1.4);
+      ctx.fillRect(7, 13, 10, 1.4);
+      ctx.fillStyle = "#c49a6a";
+      ctx.fillRect(6.5, 6.5, 3, 2);
+      break;
+    case "wool":
+      // yün yumağı
+      ctx.fillStyle = "#e8e4da";
+      ctx.beginPath();
+      ctx.arc(12, 12, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#c8c2b4";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(12, 12, 4.5, 0.4, 2.6);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(12, 12, 2.4, 3.4, 5.8);
+      ctx.stroke();
+      ctx.fillStyle = "#f6f3ec";
+      ctx.fillRect(8, 8, 3, 2);
+      break;
     case "knowledge":
       ctx.fillStyle = "#b08fe0";
       ctx.fillRect(4, 5, 16, 15);
@@ -254,6 +308,9 @@ function isItemVisible(item: IconItem): boolean {
   }
   if (item === "fish") {
     return hasTech("nature") || resources.fish > 0;
+  }
+  if (item === "meat" || item === "leather" || item === "wool") {
+    return hasTech("kan") || resources[item] > 0;
   }
   return false;
 }
@@ -325,7 +382,7 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.ToolWorkshop,
   BuildingType.Fisher,
   BuildingType.Barn,
-  BuildingType.Torch,
+  BuildingType.HunterLodge,
   BuildingType.Temple,
   BuildingType.Cafeteria,
   BuildingType.Nursery,
@@ -691,14 +748,20 @@ let bpanel = { x: 12, y: 44, w: 252, h: 120 };
 let bpanelHire: { x: number; y: number; w: number; h: number } | null = null;
 let bpanelFire: { x: number; y: number; w: number; h: number } | null = null;
 let bpanelDemolish: { x: number; y: number; w: number; h: number } | null = null;
-// Alet atölyesi: balta siparişi artır/azalt düğmeleri
+// Alet atölyesi: balta/mızrak siparişi artır/azalt düğmeleri
 let bpanelOrderPlus: { x: number; y: number; w: number; h: number } | null = null;
 let bpanelOrderMinus: { x: number; y: number; w: number; h: number } | null = null;
+let bpanelSpearPlus: { x: number; y: number; w: number; h: number } | null = null;
+let bpanelSpearMinus: { x: number; y: number; w: number; h: number } | null = null;
+// Meşale takma düğmesi (Doğa araştırıldıysa, meşalesiz binalarda)
+let bpanelTorch: { x: number; y: number; w: number; h: number } | null = null;
 
 export function buildingPanelHitTest(
   sx: number,
   sy: number
-): "close" | "hire" | "fire" | "demolish" | "orderPlus" | "orderMinus" | "panel" | null {
+):
+  | "close" | "hire" | "fire" | "demolish" | "orderPlus" | "orderMinus"
+  | "spearPlus" | "spearMinus" | "torch" | "panel" | null {
   const cx = bpanel.x + bpanel.w - 24;
   const cy = bpanel.y + 6;
   if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return "close";
@@ -708,6 +771,9 @@ export function buildingPanelHitTest(
   if (inRect(bpanelFire)) return "fire";
   if (inRect(bpanelOrderPlus)) return "orderPlus";
   if (inRect(bpanelOrderMinus)) return "orderMinus";
+  if (inRect(bpanelSpearPlus)) return "spearPlus";
+  if (inRect(bpanelSpearMinus)) return "spearMinus";
+  if (inRect(bpanelTorch)) return "torch";
   if (inRect(bpanelDemolish)) return "demolish";
   if (sx >= bpanel.x && sx <= bpanel.x + bpanel.w && sy >= bpanel.y && sy <= bpanel.y + bpanel.h) {
     return "panel";
@@ -774,10 +840,19 @@ export function drawBuildingPanel(
     else if (
       b.type === BuildingType.Woodcutter ||
       b.type === BuildingType.Gatherer ||
-      b.type === BuildingType.Temple
+      b.type === BuildingType.Temple ||
+      b.type === BuildingType.HunterLodge
     ) h += 22;
-    else if (b.type === BuildingType.ToolWorkshop) h += 64;
+    else if (b.type === BuildingType.ToolWorkshop) {
+      h += 64;
+      if (hasTech("kan")) h += 40;
+    }
   }
+  // meşale takma düğmesi (Doğa araştırıldıysa, meşalesiz tamamlanmış binalarda)
+  const canTorch =
+    b.done && hasTech("nature") && !b.hasTorch && b.type !== BuildingType.Camp;
+  if (canTorch) h += 30;
+  else if (b.done && b.hasTorch) h += 18;
   if (b.type !== BuildingType.Camp) h += 32; // yık düğmesi satırı
   bpanel = { x, y, w, h };
   bpanelHire = null;
@@ -785,6 +860,9 @@ export function drawBuildingPanel(
   bpanelDemolish = null;
   bpanelOrderPlus = null;
   bpanelOrderMinus = null;
+  bpanelSpearPlus = null;
+  bpanelSpearMinus = null;
+  bpanelTorch = null;
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
   ctx.fillRect(x, y, w, h);
@@ -807,6 +885,26 @@ export function drawBuildingPanel(
     ly += 14;
   }
   ly += 4;
+
+  // meşale tak: bina geceyi aydınlatır
+  if (canTorch) {
+    bpanelTorch = { x: x + 12, y: y + h - 58, w: w - 24, h: 22 };
+    ctx.fillStyle = "rgba(240, 170, 60, 0.15)";
+    ctx.fillRect(bpanelTorch.x, bpanelTorch.y, bpanelTorch.w, bpanelTorch.h);
+    ctx.strokeStyle = "#e0a83c";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bpanelTorch.x + 0.5, bpanelTorch.y + 0.5, bpanelTorch.w - 1, bpanelTorch.h - 1);
+    ctx.fillStyle = "#ffd23c";
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(`🔥 Meşale tak (${TORCH_ATTACH_COST} dal)`, x + w / 2, y + h - 47);
+    ctx.textAlign = "left";
+    ctx.font = "11px monospace";
+  } else if (b.hasTorch) {
+    ctx.fillStyle = "#ffd23c";
+    ctx.font = "11px monospace";
+    ctx.fillText("🔥 Meşaleli: geceyi aydınlatır", x + 12, y + h - 44);
+  }
 
   // yık düğmesi (kamp hariç; yarı odun iadesi)
   if (b.type !== BuildingType.Camp) {
@@ -941,9 +1039,42 @@ export function drawBuildingPanel(
       ctx.textAlign = "left";
     }
     ly += 20;
+    if (hasTech("kan")) {
+      ctx.fillStyle = "#d4c49a";
+      ctx.font = "12px monospace";
+      ctx.fillText(`🗡 Mızrak stoğu: ${b.spearStock}`, x + 12, ly);
+      if (b.spearReserved > 0) {
+        ctx.fillStyle = "#9a9488";
+        ctx.fillText(`(${b.spearReserved} alınıyor)`, x + 150, ly);
+      }
+      ly += 20;
+      ctx.fillStyle = b.spearOrders > 0 ? "#e8e2d0" : "#e0a83c";
+      ctx.fillText(`Sipariş: ${b.spearOrders}`, x + 12, ly);
+      bpanelSpearMinus = { x: x + 140, y: ly - 9, w: 22, h: 18 };
+      bpanelSpearPlus = { x: x + 204, y: ly - 9, w: 22, h: 18 };
+      for (const [r, sym] of [[bpanelSpearMinus, "−"], [bpanelSpearPlus, "+"]] as const) {
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+        ctx.strokeStyle = "#5a5f68";
+        ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+        ctx.fillStyle = "#e8e2d0";
+        ctx.font = "bold 13px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(sym, r.x + r.w / 2, r.y + r.h / 2 + 1);
+        ctx.textAlign = "left";
+      }
+      ly += 20;
+    }
     ctx.font = "11px monospace";
     ctx.fillStyle = "#9a9488";
-    ctx.fillText(`Balta başına ${AXE_WOOD_COST} dal + ${AXE_STONE_COST} taş`, x + 12, ly);
+    const recipe = hasTech("kan")
+      ? `Balta: ${AXE_WOOD_COST} dal+${AXE_STONE_COST} taş • Mızrak: 7 dal+5 taş`
+      : `Balta başına ${AXE_WOOD_COST} dal + ${AXE_STONE_COST} taş`;
+    ctx.fillText(recipe, x + 12, ly);
+  } else if (b.type === BuildingType.HunterLodge) {
+    ctx.font = "12px monospace";
+    ctx.fillStyle = "#e8e2d0";
+    ctx.fillText("Avcılar mızrakla en yakın avı vurur", x + 12, ly + 2);
   } else if (b.type === BuildingType.Temple) {
     ctx.font = "12px monospace";
     if (b.worshipClaimed) {
@@ -1172,7 +1303,7 @@ const TECH_CARD_W = 200;
 const TECH_CARD_H = 116;
 const TECH_COL_W = 220;
 const TECH_ROW_H = 78;
-const TECH_W = 24 + 3 * TECH_COL_W + TECH_CARD_W + 24; // 908
+const TECH_W = 24 + 4 * TECH_COL_W + TECH_CARD_W + 24; // 1128
 const TECH_H = 64 + 4 * TECH_ROW_H + TECH_CARD_H + 20; // 512
 let techRect = { x: 0, y: 0, w: TECH_W, h: TECH_H };
 

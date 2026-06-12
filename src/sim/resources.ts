@@ -3,11 +3,13 @@
 
 export type ItemType =
   | "wood" | "stone"
-  | "berry" | "mushroom" | "fish";
+  | "berry" | "mushroom" | "fish"
+  | "meat" | "leather" | "wool";
 
 export const ITEM_TYPES: ItemType[] = [
   "wood", "stone",
   "berry", "mushroom", "fish",
+  "meat", "leather", "wool",
 ];
 
 export const ITEM_INFO: Record<ItemType, { name: string; color: string }> = {
@@ -16,19 +18,25 @@ export const ITEM_INFO: Record<ItemType, { name: string; color: string }> = {
   berry: { name: "yemiş", color: "#d43f3f" },
   mushroom: { name: "mantar", color: "#d9b06b" },
   fish: { name: "balık", color: "#6fa8c9" },
+  meat: { name: "et", color: "#c0564a" },
+  leather: { name: "deri", color: "#a87c4f" },
+  wool: { name: "yün", color: "#e8e4da" },
 };
 
 // Yenebilirler (tüketim önceliği sırasıyla)
 export const FOOD_TYPES: ItemType[] = [
-  "berry", "mushroom", "fish",
+  "berry", "mushroom", "fish", "meat",
 ];
 
 export const FOOD_NUTRITION: Record<ItemType, number> = {
   berry: 7, // yemiş: bol bulunur ama az doyurur
   mushroom: 5,
   fish: 15,
+  meat: 14, // av eti doyurucudur
   wood: 0,
   stone: 0,
+  leather: 0,
+  wool: 0,
 };
 
 export const resources: Record<ItemType, number> & { cap: number; knowledge: number } = {
