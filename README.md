@@ -116,7 +116,69 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v1.4)
+## Şu anki özellikler (v1.8)
+
+### v1.8: Taş yol, tam ekran araştırma ve arayüz
+
+- **Hırs** (Aidiyet + Sert Cisimler): **taş yol** döşenir (karo başına
+  1 taş); yol üstünde %40 hızlı yürünür ve köylüler güzergâhlarında yolu
+  kendiliğinden tercih eder (A* yol karolarını ucuz sayar)
+- **Tam ekran teknoloji ağacı**: bilgi soldan sağa çağ sütunlarıyla akar
+  (Sezgiler → Temeller → Beceriler → Zanaat → Ustalık → Gelenek);
+  sürükleme/tekerlekle yatay kaydırma, ışıltılı kartlar, akış okları;
+  çoklu ön koşullar madde madde listelenir; bilgi puanı üst bardaki
+  düğmede (Teknoloji: N) ve panel başlığında görünür
+- **Hayvan paneli**: hayvana tıklayınca adı, canı, av verimi ve
+  evcilleşince dönüşeceği tür; 🏹 Saldır ve 🤝 Evcilleştir düğmeleri
+  (toplu seçim hayvanlara işaret koymaz)
+- **İnsanlar paneli (M)** iş panelinden ayrıldı: yaş, cinsiyet, görev,
+  ekipman (🪓/🗡/🧥), moral-tokluk barları, 🤰/🎓 rozetleri
+- **İşaret filtresi kısayolları**: G H J K L (çiplerde tuş kapağı)
+- **Konsol hileleri**: F12 → `hile.yardim()` (kaynak, araştırma, nüfus,
+  yırtıcı, takvim, hız...)
+- Denge: 10 köylüyle başlangıç, kamp stoğu 500, yemiş 8 / mantar 12
+  besin, Mantaroloji 9 bilgi
+
+### v1.7: Evcilleştirme çağı — köpekler ve çiftlik
+
+- **Yeni doğa faunası**: geyik, kuş, yaban domuzu, keçi + yırtıcılar
+  (kurt, ayı); çiftlik hayvanları artık yalnız evcilleştirmeyle gelir
+- **Evcilleştirme**: geyik→inek, kuş→tavuk, keçi→koyun, yaban domuzu→
+  domuz, kurt→köpek; işçi gidip evcilleştirir, hayvan eşleşen çiftliğe
+  yürür; işaretli kurt yemle sakinleşir
+- **Köpek**: avcısıyla gezer, sahibi avlanırken hedefe saldırır, av
+  sahasını 30→45 bloğa genişletir; sahipsizler avcılara otomatik dağılır
+- **Aidiyet** (Merak'tan sonra): kurt evcilleştirmeyi açar;
+  **Çiftlik** (Aidiyet + Toplayıcılık): tür seçilen çiftlik binası
+- **Yırtıcı takvimi**: kurt Kış/1'den, ayı Kış/2'den önce türemez;
+  yabaniler 25-55 sn arayla da haritaya türer
+
+### v1.6: Zanaat, kış tehdidi ve görsel yenileme
+
+- **Odun (kütük)** ayrı eşya: baltayla devrilen ağaç 3 odun + 1 dal
+  verir; **Kırıcı** binası 1 odunu 4 dala böler
+- **Deri İşleme** (Kan'dan sonra): atölyede deriden giysi (3 deri);
+  kışın giysisiz köylü moral kaybeder ve %25 yavaşlar — giysili korunur
+- **Binalar ilkel çağ diline yeniden çizildi**: saz damlar, kütük
+  duvarlar, deri çadırlar, tipi, kazıklı ambar, ateş çukurlu yemekhane
+- **Köylüler tombul piksel insan oldu**: saç rengi, kıyafet, etek,
+  hamile karnı, elde balta/mızrak; profil portresi de yenilendi
+
+### v1.5: Av, yırtıcılar ve tanrı-oyuncu etkileşimi
+
+- **Kan** araştırması: atölyede mızrak (5 dal + 2 odun + 5 taş, sipariş
+  usulü); **Avcı Kulübesi** (3 avcı, 5'er mızrak) en yakın avı kovalar;
+  mızrak yiyen hayvan kaçar, ölen hayvan boyuta göre et/deri/yün verir
+- **Yırtıcılar**: kurt ve ayı insana saldırır; silahlı karşı koyar,
+  silahsız kaçar; köylülerde can/yaralanma; **tehlike kamerası** olaya
+  kilitlenir; **çığlık** (Korku) silahlıları yardıma çağırır
+- **Gerçekçi dövüş**: uçan mızrak projektilleri, saplama/savurma pozları,
+  isabet parlamaları, yırtıcı hamleleri; **📖 Savaş ve Tehlike Defteri**
+  (B) tüm olayları zaman damgasıyla kaydeder
+- **Merak**: köylü oyuncuya yakarır; tıklayıp **mikrofonla konuşunca**
+  şok olur, 2 günlüğüne +40 moral (ses yorumlanmaz, varlığı yeter)
+- **Meşale binalara takılır** (5 dal, Doğa); ışıklı yerde 23:00'e kadar
+  çalışılır, sonra herkes **ateş başında toplanır** (moral)
 
 ### v1.4: Takvim, hamilelik ve yaş evreleri
 
