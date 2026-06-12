@@ -30,8 +30,8 @@ export const FOOD_TYPES: ItemType[] = [
 ];
 
 export const FOOD_NUTRITION: Record<ItemType, number> = {
-  berry: 7, // yemiş: bol bulunur ama az doyurur
-  mushroom: 10, // mantar yemişten daha besleyicidir
+  berry: 8, // yemiş: bol bulunur ama az doyurur (+%20)
+  mushroom: 12, // mantar yemişten daha besleyicidir (+%20)
   fish: 15,
   meat: 14, // av eti doyurucudur
   wood: 0,

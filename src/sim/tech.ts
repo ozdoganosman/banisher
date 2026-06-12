@@ -103,7 +103,7 @@ export const TECHS: Tech[] = [
   {
     id: "mushroomology",
     name: "Mantaroloji",
-    cost: 15,
+    cost: 9,
     desc: "Yabani mantarlar tanınır ve toplanabilir",
     prereq: ["nature"],
     gridX: 1,

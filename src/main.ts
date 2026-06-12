@@ -83,7 +83,7 @@ import { World } from "./world/world";
 
 const MAP_W = 128;
 const MAP_H = 128;
-const VILLAGER_COUNT = 6;
+const VILLAGER_COUNT = 10;
 const FIXED_DT = 1 / 60;
 const DEPOT_CAP_BONUS = 80;
 
