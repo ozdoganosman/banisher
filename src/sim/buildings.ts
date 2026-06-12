@@ -226,6 +226,8 @@ export class Building {
   spearReserved = 0;
   // Binaya meşale takıldı: geceyi aydınlatır (5 dal, Doğa gerekir)
   hasTorch = false;
+  // Tapınak: rahiplerin tuttuğu dua yerleri (üst üste durmasınlar)
+  readonly worshipSpots = new Set<number>();
   private scanTimer = Math.random() * SCAN_INTERVAL;
 
   constructor(

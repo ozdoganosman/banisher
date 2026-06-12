@@ -156,7 +156,7 @@ type Job =
   | { kind: "tend"; animal: Animal }
   | { kind: "hunt"; animal: Animal }
   | { kind: "build"; building: Building }
-  | { kind: "worship"; building: Building }
+  | { kind: "worship"; building: Building; tile: number }
   | { kind: "craft"; building: Building; product: "axe" | "spear" }
   | { kind: "pickup"; building: Building; product: "axe" | "spear"; amount: number }
   | { kind: "spearhunt"; animal: Animal; thrown: number }
@@ -814,7 +814,10 @@ export class Villager {
       case "build": this.job.building.claimed = false; break;
       case "tend": this.job.animal.claimed = false; break;
       case "hunt": this.job.animal.claimed = false; break;
-      case "worship": this.job.building.worshipClaimed = false; break;
+      case "worship":
+        this.job.building.worshipClaimed = false;
+        this.job.building.worshipSpots.delete(this.job.tile);
+        break;
       case "pickup":
         if (this.job.product === "axe") {
           this.job.building.toolReserved = Math.max(0, this.job.building.toolReserved - this.job.amount);
@@ -1140,15 +1143,35 @@ export class Villager {
           candidates.push({
             dist: 0,
             start: () => {
-              const path = findPathAdjacentRect(
-                world, this.tileX, this.tileY, hut.x, hut.y, hut.size
-              );
+              // her rahip tapınak çevresinde ayrı bir dua yeri tutar
+              let spot: { x: number; y: number; i: number } | null = null;
+              let bestD = Infinity;
+              for (let dy = -1; dy <= hut.size; dy++) {
+                for (let dx = -1; dx <= hut.size; dx++) {
+                  const inside =
+                    dx >= 0 && dx < hut.size && dy >= 0 && dy < hut.size;
+                  if (inside) continue;
+                  const tx = hut.x + dx;
+                  const ty = hut.y + dy;
+                  if (!world.walkableAt(tx, ty)) continue;
+                  const i = world.index(tx, ty);
+                  if (hut.worshipSpots.has(i)) continue;
+                  const d = Math.abs(tx - this.tileX) + Math.abs(ty - this.tileY);
+                  if (d < bestD) {
+                    bestD = d;
+                    spot = { x: tx, y: ty, i };
+                  }
+                }
+              }
+              if (!spot) return false;
+              const path = findPath(world, this.tileX, this.tileY, spot.x, spot.y);
               if (!path) return false;
+              hut.worshipSpots.add(spot.i);
               hut.worshipClaimed = true;
-            this.job = { kind: "worship", building: hut };
-            this.takeFoodForWork();
-            this.startPath(path);
-            return true;
+              this.job = { kind: "worship", building: hut, tile: spot.i };
+              this.takeFoodForWork();
+              this.startPath(path);
+              return true;
             },
           });
         }
@@ -1713,7 +1736,10 @@ export class Villager {
   private worship(dt: number): void {
     const job = this.job;
     if (!job || job.kind !== "worship" || job.building.removed) {
-      if (job?.kind === "worship") job.building.worshipClaimed = false;
+      if (job?.kind === "worship") {
+        job.building.worshipClaimed = false;
+        job.building.worshipSpots.delete(job.tile);
+      }
       this.job = null;
       this.toIdle();
       return;
@@ -1727,6 +1753,7 @@ export class Villager {
         `+${KNOWLEDGE_PER_WORSHIP} bilgi`, "#b08fe0"
       );
       job.building.worshipClaimed = false;
+      job.building.worshipSpots.delete(job.tile);
       job.building.worshipTimer = 0;
       this.job = null;
       this.toIdle();
