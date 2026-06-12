@@ -227,6 +227,10 @@ function spawnWildAnimal(): boolean {
     const y = 4 + Math.floor(Math.random() * (MAP_H - 8));
     if (!world.walkableAt(x, y)) continue;
     const type = WILD_POOL[Math.floor(Math.random() * WILD_POOL.length)];
+    // yırtıcılar takvime bağlı gelir: kurt Kış/1'den, ayı Kış/2'den itibaren
+    // (kış = yılın 4. günü; Kış/1 = 7. gün, Kış/2 = 11. gün)
+    if (type === "wolf" && totalDays() < 7) continue;
+    if (type === "bear" && totalDays() < 11) continue;
     // yırtıcılar yerleşimden uzakta türer (sürpriz katliam olmasın)
     if (ANIMAL_DEFS[type].predator) {
       const d = Math.max(Math.abs(x - campCenter.x), Math.abs(y - campCenter.y));
@@ -1170,6 +1174,17 @@ async function startCalming(v: Villager): Promise<void> {
   calmingActive = false;
 }
 
+// Yabaniler yalnız gün dönümünde değil, ara ara da türer
+let wildSpawnTimer = 30;
+
+function tickWildSpawns(dt: number): void {
+  wildSpawnTimer -= dt;
+  if (wildSpawnTimer > 0) return;
+  wildSpawnTimer = 25 + Math.random() * 30;
+  const wildCount = animals.filter((a) => a.wild && a.type !== "dog").length;
+  if (wildCount < WILD_CAP) spawnWildAnimal();
+}
+
 // Mantarlar yalnızca binalardan uzak, el değmemiş yerlerde kendiliğinden biter
 const MUSHROOM_MIN_BUILDING_DIST = 12; // blok
 const MUSHROOM_WILD_CAP = 60;
@@ -1223,6 +1238,8 @@ function step(dt: number) {
 
   schedulePleading(dt);
   updateScreams(dt);
+
+  tickWildSpawns(dt);
 
   // yabani mantar türemesi
   mushroomTimer -= dt;
