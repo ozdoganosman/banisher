@@ -891,10 +891,11 @@ export function drawBuildingPanel(
     }
   }
   // meşale takma düğmesi (Doğa araştırıldıysa, meşalesiz tamamlanmış binalarda)
-  const canTorch =
-    b.done && hasTech("nature") && !b.hasTorch && b.type !== BuildingType.Camp;
+  const torchable = b.done && !b.hasTorch && b.type !== BuildingType.Camp;
+  const canTorch = torchable && hasTech("nature");
+  const torchLocked = torchable && !hasTech("nature");
   if (canTorch) h += 30;
-  else if (b.done && b.hasTorch) h += 18;
+  else if (torchLocked || (b.done && b.hasTorch)) h += 18;
   if (b.type !== BuildingType.Camp) h += 32; // yık düğmesi satırı
   bpanel = { x, y, w, h };
   bpanelHire = null;
@@ -946,6 +947,10 @@ export function drawBuildingPanel(
     ctx.fillStyle = "#ffd23c";
     ctx.font = "11px monospace";
     ctx.fillText("🔥 Meşaleli: geceyi aydınlatır", x + 12, y + h - 44);
+  } else if (torchLocked) {
+    ctx.fillStyle = "#8a8478";
+    ctx.font = "11px monospace";
+    ctx.fillText("🔥 Meşale takmak için önce Doğa araştırılmalı", x + 12, y + h - 44, w - 24);
   }
 
   // yık düğmesi (kamp hariç; yarı odun iadesi)
