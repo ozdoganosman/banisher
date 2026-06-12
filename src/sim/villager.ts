@@ -18,7 +18,7 @@ import {
 } from "./buildings";
 import { babyIdentity, randomIdentity, type Identity } from "./names";
 import { hasTech } from "./tech";
-import { isNight, isSleepTime, totalDays, DAY_LENGTH, dayFrac } from "./time";
+import { isNight, isSleepTime, totalDays, dayFrac, tuning, DAYS_PER_YEAR } from "./time";
 import {
   findPath,
   findPathAdjacent,
@@ -80,8 +80,12 @@ const EAT_TIME = 1.2;
 const STARVE_TIME = 45;
 const FAR_JOB_THRESHOLD = 25; // karolar cinsinden çok uzak iş mesafesi
 
-const GROW_DAYS = 4; // bebek bu kadar günde büyür (bakımevi varsa yarısı)
-const GROW_DAYS_NURSERY = 2;
+// Yaşam evreleri (1 yıl = 4 gün): bebek annesine/bakımevine muhtaçtır,
+// çocuk kendi gezer ama çalışamaz, 18'inde işe başlar
+export const BABY_UNTIL_AGE = 7;
+export const WORK_AGE = 18;
+export const PREGNANCY_DAYS = 4; // karın 4 gün boyunca büyür, 4. günün sabahı doğum
+const PREGNANCY_MORALE = 12; // hamilelik boyunca toplam moral kaybı (doğumda geri gelir)
 
 const SHIRT_COLORS = ["#c0392b", "#2980b9", "#8e44ad", "#d35400", "#16a085"];
 let shirtIndex = 0;
@@ -151,10 +155,15 @@ export class Villager {
   educated = false; // bakımevinde yetişen çocuk: %20 hız bonusu
   hasAxe = false; // atölyeden balta aldı: ağaçları kesip odun çıkarır
   assignment: Assignment = { kind: "laborer" };
-  baby: boolean;
   birthDay: number; // doğduğu gün (toplam gün sayısı)
   grewUp = false; // main bunu görünce "büyüdü" bildirimi gösterir
   home: Building | null = null; // atandığı konut (ev/kamp)
+  // Yaşam döngüsü
+  mother: Villager | null = null; // bebeğin annesi (bakımevi yoksa o bakar)
+  nurseryCovered = false; // bu bebeğe bakımevi bakıyor (main hesaplar)
+  caringBaby: Villager | null = null; // anne bu bebeğe bakıyor: iş yapamaz (main hesaplar)
+  pregnantSince: number | null = null; // hamile kalınan gün (totalDays)
+  private lastStage: number;
   readonly identity: Identity;
   // Kişisel çanta: toplananlar önce buraya, sonra kampa/depoya gider
   readonly inventory: Record<ItemType, number> = Object.fromEntries(
@@ -174,9 +183,49 @@ export class Villager {
     this.y = (tileY + 0.5) * TILE_SIZE;
     this.shirt = SHIRT_COLORS[shirtIndex++ % SHIRT_COLORS.length];
     this.hunger = baby ? 0 : Math.random() * 30;
-    this.baby = baby;
     this.birthDay = totalDays();
     this.identity = baby ? babyIdentity() : randomIdentity();
+    this.lastStage = this.baby ? 0 : this.canWork ? 2 : 1;
+  }
+
+  // Yaş: doğum yaşı + geçen yıllar (1 yıl = 4 gün)
+  get age(): number {
+    return this.identity.age + Math.floor(this.ageDays / DAYS_PER_YEAR);
+  }
+
+  get baby(): boolean {
+    return this.age < BABY_UNTIL_AGE;
+  }
+
+  get child(): boolean {
+    return this.age >= BABY_UNTIL_AGE && this.age < WORK_AGE;
+  }
+
+  get canWork(): boolean {
+    return this.age >= WORK_AGE;
+  }
+
+  get pregnant(): boolean {
+    return this.pregnantSince !== null;
+  }
+
+  // Hamilelik ilerlemesi 0..1 (karın adım adım büyür)
+  get pregnancyProgress(): number {
+    if (this.pregnantSince === null) return 0;
+    return Math.min(1, (totalDays() + dayFrac() - this.pregnantSince) / PREGNANCY_DAYS);
+  }
+
+  // 4. günün sabahı geldi mi? (doğum main tarafından gerçekleştirilir)
+  get readyToGiveBirth(): boolean {
+    return this.pregnantSince !== null &&
+      totalDays() - this.pregnantSince >= PREGNANCY_DAYS && !isSleepTime();
+  }
+
+  // Doğum: hamilelik biter, hamilelik moral kaybı geri gelir ("etki kalkar")
+  giveBirth(): void {
+    this.pregnantSince = null;
+    const lost = this.moraleLog.get("Hamilelik") ?? 0;
+    if (lost < 0) this.changeMorale(-lost, "Hamilelik");
   }
 
   get tileX(): number {
@@ -221,9 +270,20 @@ export class Villager {
 
   // Profil panelinde gösterilen anlık durum
   get statusText(): string {
-    if (this.baby) return `Bebek (${this.ageDays} günlük)`;
+    if (this.baby) {
+      if (this.nurseryCovered) return `Bebek (bakımevinde)`;
+      if (this.mother && !this.mother.dead) return `Bebek (annesine muhtaç)`;
+      return `Bebek`;
+    }
+    if (this.child) return `Çocuk (${this.age} yaşında)`;
+    if (this.caringBaby && !this.caringBaby.dead && this.state !== "sleeping" && this.state !== "eating") {
+      return "Çocuğuna bakıyor";
+    }
     switch (this.state) {
       case "idle":
+        if (this.assignment.kind === "building" && this.assignment.building.type === BuildingType.Nursery) {
+          return "Bebeklere bakıyor";
+        }
         return this.starving ? "Açlıktan bitkin" : "Dinleniyor";
       case "walking":
         if (!this.job) return "Geziniyor";
@@ -346,11 +406,12 @@ export class Villager {
       null;
     if (!target) return false;
     const dist = Math.abs(this.x - target.centerX) + Math.abs(this.y - target.centerY);
-    let speed = this.starving ? WALK_SPEED * 0.5 : WALK_SPEED;
+    let speed = (this.starving ? WALK_SPEED * 0.5 : WALK_SPEED) * tuning.moveSpeed;
     if (this.baby) speed *= 0.55;
+    else if (this.child) speed *= 0.75;
     speed *= this.getWorkSpeedFactor();
     const travelTime = dist / speed;
-    const travelFrac = travelTime / DAY_LENGTH;
+    const travelFrac = travelTime / tuning.dayLength;
     return dayFrac() + travelFrac >= 0.75;
   }
 
@@ -383,22 +444,29 @@ export class Villager {
   }
 
   update(dt: number, world: World, buildings: Building[], animals: Animal[]): void {
-    const hasNursery = buildings.some(
-      (b) => b.type === BuildingType.Nursery && b.done
-    );
-
-    // Bebek büyümesi: bakımevi varsa iki kat hızlı; orada yetişen çocuk
-    // eğitim alır (kalıcı %20 hız bonusu)
-    if (this.baby && this.ageDays >= (hasNursery ? GROW_DAYS_NURSERY : GROW_DAYS)) {
-      this.baby = false;
-      this.grewUp = true;
-      this.identity.age = 16;
-      this.assignment = { kind: "laborer" };
-      if (hasNursery) this.educated = true;
+    // Yaş evresi geçişleri: bebek (0-7) -> çocuk (7-18) -> işçi (18+)
+    const stage = this.baby ? 0 : this.canWork ? 2 : 1;
+    if (stage !== this.lastStage) {
+      if (this.lastStage === 0 && this.nurseryCovered) {
+        // bakımevinde büyüyen bebek eğitim alarak çocuk olur
+        this.educated = true;
+      }
+      if (stage === 2) {
+        this.grewUp = true;
+        this.assignment = { kind: "laborer" };
+      }
+      this.lastStage = stage;
     }
 
-    // açlık her durumda işler; bakımevi bebeklere bakar: acıkmaz, toparlanır
-    if (this.baby && hasNursery) {
+    // Hamilelik: ilerledikçe moral gittikçe daha hızlı düşer (doğumda geri gelir)
+    if (this.pregnant) {
+      const drainRate =
+        (PREGNANCY_MORALE * 2) / (PREGNANCY_DAYS * tuning.dayLength);
+      this.changeMorale(-drainRate * this.pregnancyProgress * dt, "Hamilelik");
+    }
+
+    // açlık her durumda işler; bakımevinin baktığı bebekler acıkmaz, toparlanır
+    if (this.baby && this.nurseryCovered) {
       this.hunger = Math.max(0, this.hunger - 8 * dt);
     } else {
       this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
@@ -606,12 +674,17 @@ export class Villager {
       return;
     }
 
-    // Bebekler çalışmaz: evlerinin (varsa bakımevinin) etrafında oyalanır
-    if (this.baby) {
+    // Bebekler ve çocuklar çalışmaz: bebek bakımevinin (bakılıyorsa) ya da
+    // annesinin/evinin, çocuk evinin etrafında oyalanır
+    if (!this.canWork) {
       const nursery = buildings.find((b) => b.type === BuildingType.Nursery && b.done);
-      const anchor = nursery ?? this.home;
-      const ax = anchor ? Math.floor(anchor.centerX / TILE_SIZE) : this.tileX;
-      const ay = anchor ? Math.floor(anchor.centerY / TILE_SIZE) : this.tileY;
+      const anchor = this.baby && this.nurseryCovered && nursery ? nursery : this.home;
+      let ax = anchor ? Math.floor(anchor.centerX / TILE_SIZE) : this.tileX;
+      let ay = anchor ? Math.floor(anchor.centerY / TILE_SIZE) : this.tileY;
+      if (this.baby && !this.nurseryCovered && this.mother && !this.mother.dead) {
+        ax = this.mother.tileX;
+        ay = this.mother.tileY;
+      }
       for (let attempt = 0; attempt < 8; attempt++) {
         const tx = ax + Math.floor((Math.random() * 2 - 1) * 3);
         const ty = ay + Math.floor((Math.random() * 2 - 1) * 3);
@@ -620,6 +693,27 @@ export class Villager {
         if (path) {
           this.startPath(path);
           return;
+        }
+      }
+      this.timer = 1.5 + Math.random() * 2;
+      return;
+    }
+
+    // Anne bakımı: bakımevi kapasitesi yetmeyen bebeğin annesi iş alamaz,
+    // bebeğinin yanında kalır
+    if (this.caringBaby && !this.caringBaby.dead) {
+      const b = this.caringBaby;
+      const dist = Math.abs(this.x - b.x) + Math.abs(this.y - b.y);
+      if (dist > TILE_SIZE * 2.5) {
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const tx = b.tileX + Math.floor((Math.random() * 2 - 1) * 2);
+          const ty = b.tileY + Math.floor((Math.random() * 2 - 1) * 2);
+          if (!world.walkableAt(tx, ty)) continue;
+          const path = findPath(world, this.tileX, this.tileY, tx, ty);
+          if (path) {
+            this.startPath(path);
+            return;
+          }
         }
       }
       this.timer = 1.5 + Math.random() * 2;
@@ -853,7 +947,10 @@ export class Villager {
       }
     }
 
-    if (a.kind !== "laborer" && minPrimaryDist > FAR_JOB_THRESHOLD) {
+    // Bakıcılar bakımevinden ayrılmaz (kapasiteleri bebeklere bakar)
+    const isCaretaker =
+      a.kind === "building" && a.building.type === BuildingType.Nursery;
+    if (a.kind !== "laborer" && !isCaretaker && minPrimaryDist > FAR_JOB_THRESHOLD) {
       this.pushLaborerCandidates(world, candidates, animals, bagFull, lit, litTile);
     }
 
@@ -1222,8 +1319,9 @@ export class Villager {
     const dx = targetX - this.x;
     const dy = targetY - this.y;
     const dist = Math.hypot(dx, dy);
-    let speed = this.starving ? WALK_SPEED * 0.5 : WALK_SPEED;
+    let speed = (this.starving ? WALK_SPEED * 0.5 : WALK_SPEED) * tuning.moveSpeed;
     if (this.baby) speed *= 0.55; // bebekler tıpış tıpış yürür
+    else if (this.child) speed *= 0.75; // çocuklar da yetişkinden yavaş
     speed *= this.getWorkSpeedFactor(); // 100 moral -> 1.0, 0 moral -> 0.5 (yarı yarıya yavaş)
     const step = speed * dt;
 

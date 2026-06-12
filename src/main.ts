@@ -49,7 +49,7 @@ import {
   ROLE_NAMES,
   isBuildingUnlocked,
 } from "./sim/buildings";
-import { gameTime, season, totalDays, updateTime } from "./sim/time";
+import { gameTime, season, totalDays, tuning, updateTime } from "./sim/time";
 import { addFloater } from "./render/effects";
 import {
   addItem,
@@ -172,7 +172,7 @@ function hire(target: Building | null, near?: { x: number; y: number }): boolean
   const px = near?.x ?? (target ? target.centerX : camera.x);
   const py = near?.y ?? (target ? target.centerY : camera.y);
   for (const v of villagers) {
-    if (v.baby || v.assignment.kind !== "laborer") continue;
+    if (!v.canWork || v.caringBaby || v.assignment.kind !== "laborer") continue;
     const d = Math.hypot(v.x - px, v.y - py);
     if (d < bestDist) {
       bestDist = d;
@@ -749,30 +749,73 @@ function assignHomes(): void {
   }
 }
 
-// Gün dönümü: boş yeri olan her konutta bebek doğma şansı
-function nightlyBirths(): void {
-  const adults = villagers.filter((v) => !v.baby).length;
+// Gün dönümü: boş yeri olan her konutta orada yaşayan bir kadının hamile
+// kalma şansı; bebek 4 günlük hamileliğin ardından 4. günün sabahı doğar
+function nightlyConceptions(): void {
+  const adults = villagers.filter((v) => v.canWork).length;
   if (adults < 2) return; // çoğalmak için en az 2 yetişkin
   for (const b of buildings) {
     if (!isHousing(b) || occupants(b) >= HOUSE_CAPACITY) continue;
     if (Math.random() > BIRTH_CHANCE) continue;
-    // bebeği konutun yanındaki yürünebilir bloğa doğur
+    const candidate = villagers.find(
+      (v) => v.home === b && v.canWork && v.identity.female && !v.pregnant
+    );
+    if (!candidate) continue;
+    candidate.pregnantSince = totalDays();
+    addMessage(`🤰 ${candidate.fullName} hamile kaldı`);
+  }
+}
+
+// Hamileliği dolan kadınlar sabah doğurur; bebek annenin yanına doğar
+function checkBirths(): void {
+  for (const mom of villagers) {
+    if (!mom.readyToGiveBirth) continue;
     let placed = false;
     for (let r = 1; r <= 3 && !placed; r++) {
       for (let dy = -r; dy <= r && !placed; dy++) {
         for (let dx = -r; dx <= r && !placed; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          const x = b.x + 1 + dx;
-          const y = b.y + 1 + dy;
+          const x = mom.tileX + dx;
+          const y = mom.tileY + dy;
           if (!world.walkableAt(x, y)) continue;
           const baby = new Villager(x, y, true);
-          baby.home = b;
+          baby.home = mom.home;
+          baby.mother = mom;
           if (hasTech("humanity")) baby.changeMorale(10, "Tanrı inancı");
           villagers.push(baby);
-          addMessage(`👶 ${baby.fullName} doğdu!`);
-          addFloater(b.centerX, b.y * TILE_SIZE - 6, "+1 bebek", "#ffb0d0");
+          mom.giveBirth();
+          addMessage(`👶 ${baby.fullName} doğdu! (annesi ${mom.fullName})`);
+          addFloater(mom.x, mom.y - 18, "+1 bebek", "#ffb0d0");
           placed = true;
         }
+      }
+    }
+    if (!placed) mom.giveBirth(); // sıkışık durumda bebek annenin olduğu yerde sayılır
+  }
+}
+
+// Bakımevi kapasitesi (bakıcı başına 4 bebek) bebeklere dağıtılır;
+// kapasite dışında kalan bebeğin annesi bakıma ayrılır (çalışamaz)
+function assignChildcare(): void {
+  let capacity = 0;
+  for (const b of buildings) {
+    if (b.type === BuildingType.Nursery && b.done) {
+      capacity += workersOf(b) * 4;
+    }
+  }
+  const babies = villagers
+    .filter((v) => v.baby)
+    .sort((a, b) => a.birthDay - b.birthDay);
+  for (const v of villagers) v.caringBaby = null;
+  for (const baby of babies) {
+    if (capacity > 0) {
+      capacity--;
+      baby.nurseryCovered = true;
+    } else {
+      baby.nurseryCovered = false;
+      const mom = baby.mother;
+      if (mom && !mom.dead && !mom.caringBaby) {
+        mom.caringBaby = baby;
       }
     }
   }
@@ -877,11 +920,11 @@ function step(dt: number) {
     trySpawnWildMushroom();
   }
 
-  // gün dönümü: doğumlar
+  // gün dönümü: hamile kalma şansı
   const days = totalDays();
   if (days !== lastDayCount) {
     lastDayCount = days;
-    nightlyBirths();
+    nightlyConceptions();
     // doğa kendini yeniler: yabani nüfus azaldıysa yenileri türer
     const wildCount = animals.filter((a) => a.wild).length;
     if (wildCount < WILD_CAP) {
@@ -890,11 +933,15 @@ function step(dt: number) {
     }
   }
 
-  // konut atamalarını periyodik tazele
+  // hamileliği dolanlar sabah doğurur
+  checkBirths();
+
+  // konut atamalarını ve bebek bakımını periyodik tazele
   homeTimer -= dt;
   if (homeTimer <= 0) {
     homeTimer = 1;
     assignHomes();
+    assignChildcare();
   }
 
   for (const v of villagers) v.update(dt, world, buildings, animals);
@@ -990,7 +1037,8 @@ declare global {
     __game: unknown;
   }
 }
-window.__game = { world, villagers, buildings, animals, camera, resources, gameTime };
+// tuning: konsoldan canlı ayar (__game.tuning.dayLength / timeScale / moveSpeed)
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning };
 
 let last = performance.now();
 let accumulator = 0;

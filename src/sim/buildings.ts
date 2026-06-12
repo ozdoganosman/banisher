@@ -102,8 +102,8 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     cost: 12,
     buildTime: 8,
     size: 2,
-    maxWorkers: 0,
-    desc: "Bebekler acıkmaz ve iki kat hızlı büyür",
+    maxWorkers: 3,
+    desc: "Bakıcı başına 4 bebeğe bakılır (en çok 3 bakıcı); bakılan bebek acıkmaz, annesi çalışabilir ve çocuk eğitim alır",
   },
   [BuildingType.Fisher]: {
     name: "Balıkçı",
@@ -162,6 +162,7 @@ export const ROLE_NAMES: Partial<Record<BuildingType, string>> = {
   [BuildingType.Fisher]: "Balıkçı",
   [BuildingType.Barn]: "Çiftçi",
   [BuildingType.ToolWorkshop]: "Alet Ustası",
+  [BuildingType.Nursery]: "Bakıcı",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları

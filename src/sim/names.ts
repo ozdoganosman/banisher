@@ -52,13 +52,13 @@ export function randomIdentity(): Identity {
   // İlk köylü her zaman Cin Ali'dir :)
   if (firstIdentity) {
     firstIdentity = false;
-    return { firstName: "Cin Ali", lastName: "", age: 9, female: false };
+    return { firstName: "Cin Ali", lastName: "", age: 19, female: false };
   }
   const female = Math.random() < 0.5;
   return {
     firstName: female ? pick(FEMALE_NAMES) : pick(MALE_NAMES),
     lastName: pick(SURNAMES),
-    age: 16 + Math.floor(Math.random() * 45),
+    age: 18 + Math.floor(Math.random() * 42),
     female,
   };
 }

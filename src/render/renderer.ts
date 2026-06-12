@@ -1460,8 +1460,8 @@ export class Renderer {
     const y = v.y; // ayakların bastığı nokta
     const swing = v.state === "walking" ? Math.sin(v.walkPhase) * 2.2 : 0;
 
-    // bebekler ayak noktası etrafında küçültülerek çizilir
-    const k = v.baby ? 0.6 : 1;
+    // bebekler ve çocuklar ayak noktası etrafında küçültülerek çizilir
+    const k = v.baby ? 0.6 : v.child ? 0.8 : 1;
     if (k !== 1) {
       ctx.save();
       ctx.translate(x, y);
@@ -1547,6 +1547,19 @@ export class Renderer {
       ctx.lineTo(x, y - 6);
       ctx.closePath();
       ctx.fill();
+    }
+
+    // hamile karnı: gün geçtikçe adım adım büyür
+    if (v.pregnant) {
+      const belly = 0.8 + v.pregnancyProgress * 1.6;
+      ctx.fillStyle = v.shirtColor;
+      ctx.beginPath();
+      ctx.arc(x + v.facing * 1.2, y - 6.8, belly, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = LINE;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+      ctx.lineWidth = 1.1;
     }
 
     // kollar

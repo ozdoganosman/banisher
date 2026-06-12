@@ -1,23 +1,33 @@
 // Oyun takvimi, mevsimler ve gün/gece döngüsü.
-// Tarih 0.0.0'dan başlar (gün.ay.yıl); 5 gün = 1 ay, 12 ay = 1 yıl.
-// Mevsimler 3'er aydır: İlkbahar (0-2), Yaz (3-5), Sonbahar (6-8), Kış (9-11).
+// Takvim: 1 gün = 1 mevsim, 4 mevsim (4 gün) = 1 yıl.
+// Tarih 0.0.0'dan başlar (gün.mevsim.yıl).
 
-export const DAY_LENGTH = 150; // bir oyun günü kaç gerçek saniye
-export const MONTH_DAYS = 5;
+// Debug/denge ayarları: window.__game.tuning üzerinden canlı değiştirilebilir.
+// - dayLength: bir oyun gününün gerçek saniye süresi (1x hızda)
+// - timeScale: yalnız takvimi/saati hızlandırır-yavaşlatır (sim hızı sabit kalır)
+// - moveSpeed: köylülerin temel hareket hızı çarpanı
+export const tuning = {
+  dayLength: 300,
+  timeScale: 1,
+  moveSpeed: 1,
+};
+
+export const DAYS_PER_YEAR = 4; // her gün bir mevsimdir
+export const MONTH_DAYS = 1; // geriye uyumluluk (1 ay = 1 gün = 1 mevsim)
 
 export const gameTime = {
-  total: 0, // toplam geçen saniye
-  day: 0,
-  month: 0,
+  total: 0, // toplam geçen takvim-saniyesi
+  day: 0, // yıl içindeki gün (0-3)
+  month: 0, // mevsim indeksi (0-3)
   year: 0,
 };
 
 export function updateTime(dt: number): void {
-  gameTime.total += dt;
-  const days = Math.floor(gameTime.total / DAY_LENGTH);
-  gameTime.day = days % MONTH_DAYS;
-  gameTime.month = Math.floor(days / MONTH_DAYS) % 12;
-  gameTime.year = Math.floor(days / (MONTH_DAYS * 12));
+  gameTime.total += dt * tuning.timeScale;
+  const days = Math.floor(gameTime.total / tuning.dayLength);
+  gameTime.day = days % DAYS_PER_YEAR;
+  gameTime.month = gameTime.day; // 1 gün = 1 mevsim
+  gameTime.year = Math.floor(days / DAYS_PER_YEAR);
 }
 
 export type Season = 0 | 1 | 2 | 3;
@@ -26,7 +36,7 @@ export const SEASON_NAMES = ["İlkbahar", "Yaz", "Sonbahar", "Kış"] as const;
 export const SEASON_COLORS = ["#8fd05e", "#ffd23c", "#e8842c", "#bcd9f0"] as const;
 
 export function season(): Season {
-  return Math.floor(gameTime.month / 3) as Season;
+  return (totalDays() % DAYS_PER_YEAR) as Season;
 }
 
 // Bitki yeniden büyüme çarpanı: baharda hızlı, kışın durur
@@ -38,14 +48,14 @@ export function dateString(): string {
   return `${gameTime.day}.${gameTime.month}.${gameTime.year}`;
 }
 
-// Başlangıçtan beri geçen toplam gün (bebek yaşı vb. için)
+// Başlangıçtan beri geçen toplam gün (yaş hesabı vb. için)
 export function totalDays(): number {
-  return Math.floor(gameTime.total / DAY_LENGTH);
+  return Math.floor(gameTime.total / tuning.dayLength);
 }
 
 // Gün içindeki konum: 0 = sabah, 1 = ertesi sabah
 export function dayFrac(): number {
-  return (gameTime.total % DAY_LENGTH) / DAY_LENGTH;
+  return (gameTime.total % tuning.dayLength) / tuning.dayLength;
 }
 
 // Saat: gün 06:00'da başlar (frac 0), gece ~22:45-04:00 arasıdır

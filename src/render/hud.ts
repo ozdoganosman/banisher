@@ -599,14 +599,18 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.fillText(v.fullName, tx, y + 24, w - 82 - 34);
   ctx.font = "13px monospace";
   ctx.fillStyle = "#e8e2d0";
-  const ageText = v.baby ? `${v.ageDays} günlük` : `Yaş: ${v.identity.age}`;
+  const ageText = `Yaş: ${v.age}`;
   const eduText = v.educated ? " • Eğitimli" : "";
+  const pregText = v.pregnant
+    ? ` • Hamile (${Math.min(4, Math.floor(v.pregnancyProgress * 4) + 1)}/4 gün)`
+    : "";
   ctx.fillText(
-    `${ageText} • ${v.identity.female ? "Kadın" : "Erkek"}${eduText}`,
+    `${ageText} • ${v.identity.female ? "Kadın" : "Erkek"}${eduText}${pregText}`,
     tx, y + 46, w - 82 - 12
   );
   ctx.fillStyle = "#c9a35a";
-  ctx.fillText(`Görev: ${v.baby ? "Bebek" : assignmentLabel(v.assignment)}`, tx, y + 64, w - 82 - 12);
+  const jobLabel = v.baby ? "Bebek" : v.child ? "Çocuk" : assignmentLabel(v.assignment);
+  ctx.fillText(`Görev: ${jobLabel}`, tx, y + 64, w - 82 - 12);
   ctx.fillStyle = "#9ad0ff";
   ctx.fillText(v.statusText, tx, y + 82, w - 82 - 12);
 
@@ -670,7 +674,11 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
   ctx.fillText(
-    v.baby ? "Bebekler büyüyünce çalışmaya başlar." : "Görevler binalardan ve N menüsünden atanır.",
+    v.baby
+      ? "Bebekler 7 yaşında çocuk olur."
+      : v.child
+      ? "Çocuklar 18 yaşında işe başlar."
+      : "Görevler binalardan ve N menüsünden atanır.",
     x + 10, y + breakdownH + 192, w - 20
   );
 }
@@ -1066,13 +1074,21 @@ export function drawPopulationPanel(
 
   // özet: ortalık işçisi havuzu kalan herkes
   const babies = villagers.filter((v) => v.baby).length;
-  const laborers = villagers.filter((v) => !v.baby && v.assignment.kind === "laborer").length;
+  const children = villagers.filter((v) => v.child).length;
+  const caring = villagers.filter((v) => v.caringBaby && !v.caringBaby.dead).length;
+  const laborers = villagers.filter(
+    (v) => v.canWork && !v.caringBaby && v.assignment.kind === "laborer"
+  ).length;
   ctx.font = "12px monospace";
   ctx.fillStyle = "#8fd05e";
   ctx.fillText(`Ortalık işleri: ${laborers}`, x + 12, y + 44);
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
-  ctx.fillText(`•  Nüfus: ${count}  •  Bebek: ${babies}`, x + 160, y + 44);
+  ctx.fillText(
+    `•  Nüfus: ${count}  •  Bebek: ${babies}  •  Çocuk: ${children}` +
+      (caring > 0 ? `  •  Bebeğe bakan anne: ${caring}` : ""),
+    x + 160, y + 44
+  );
 
   // iş satırları
   for (let i = 0; i < rows.length; i++) {
@@ -1083,7 +1099,7 @@ export function drawPopulationPanel(
       ctx.fillRect(x + 4, ry, w - 8, POP_JOB_ROW_H);
     }
     const assigned = b === null
-      ? villagers.filter((v) => !v.baby && v.assignment.kind === "builder").length
+      ? villagers.filter((v) => v.canWork && v.assignment.kind === "builder").length
       : villagers.filter(
           (v) => v.assignment.kind === "building" && v.assignment.building === b
         ).length;
@@ -1137,9 +1153,10 @@ export function drawPopulationPanel(
     ctx.fillText(v.fullName, x + 12, ry + POP_LIST_ROW_H / 2, 170);
     ctx.fillStyle = "#8a8478";
     ctx.font = "11px monospace";
-    ctx.fillText(v.baby ? "👶" : `${v.identity.age}`, x + 192, ry + POP_LIST_ROW_H / 2);
+    ctx.fillText(v.baby ? "👶" : `${v.age}`, x + 192, ry + POP_LIST_ROW_H / 2);
     ctx.fillStyle = "#c9a35a";
-    ctx.fillText(v.baby ? "Bebek" : assignmentLabel(v.assignment), x + 222, ry + POP_LIST_ROW_H / 2, 180);
+    const popJobLabel = v.baby ? "Bebek" : v.child ? "Çocuk" : assignmentLabel(v.assignment);
+    ctx.fillText(popJobLabel, x + 222, ry + POP_LIST_ROW_H / 2, 180);
     ctx.fillStyle = "#c8c2b0";
     ctx.fillText(v.statusText, x + 410, ry + POP_LIST_ROW_H / 2, 150);
     // tokluk mini bar
