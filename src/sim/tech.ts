@@ -14,7 +14,8 @@ export type TechId =
   | "motorskills"
   | "cognitive"
   | "toolworkshop"
-  | "kan";
+  | "kan"
+  | "gathering";
 
 export interface Tech {
   id: TechId;
@@ -103,6 +104,15 @@ export const TECHS: Tech[] = [
     desc: "Yabani mantarlar tanınır ve toplanabilir",
     prereq: ["nature"],
     gridX: 1,
+    gridY: 6,
+  },
+  {
+    id: "gathering",
+    name: "Toplayıcılık",
+    cost: 16,
+    desc: "Toplayıcı kulübesini açar: doğaya yemiş eker ve toplar",
+    prereq: ["mushroomology"],
+    gridX: 2,
     gridY: 6,
   },
   {

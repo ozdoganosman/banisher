@@ -339,6 +339,7 @@ export function isBuildingUnlocked(type: BuildingType): boolean {
   if (type === BuildingType.House || type === BuildingType.Temple || type === BuildingType.Camp) return true;
   if (type === BuildingType.Depot) return hasTech("capital");
   if (type === BuildingType.Nursery) return hasTech("cognitive");
+  if (type === BuildingType.Gatherer) return hasTech("gathering"); // toplayıcılık
   if (type === BuildingType.ToolWorkshop) return hasTech("toolworkshop");
   if (type === BuildingType.HunterLodge) return hasTech("kan");
   // Meşale artık ayrı bina değil: Doğa ile binalara takılır
