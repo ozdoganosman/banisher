@@ -359,6 +359,8 @@ input.onClick = (wx, wy, sx, sy) => {
   // mini harita: tıklanan noktaya kamerayı götür
   const mm = renderer.minimapHit(sx, sy);
   if (mm) {
+    dangerFollow = null;
+    dangerCooldown = 10;
     camera.x = mm.x;
     camera.y = mm.y;
     return;
@@ -900,6 +902,45 @@ function checkStorageFull() {
   wasFamine = famine;
 }
 
+// ---- Tehlike kamerası: yırtıcıyla karşılaşan köylü takip edilir ----
+
+let dangerFollow: Villager | null = null;
+let dangerCooldown = 0; // takip bittikten/iptalden sonra yeniden kilitlenme bekleme süresi
+
+function villagerInDanger(v: Villager): boolean {
+  for (const a of animals) {
+    if (!a.def.predator || a.dead) continue;
+    if (Math.hypot(a.x - v.x, a.y - v.y) < 8 * TILE_SIZE) return true;
+  }
+  return false;
+}
+
+function updateDangerCamera(dt: number): void {
+  dangerCooldown -= dt;
+  if (dangerFollow) {
+    if (dangerFollow.dead || !villagerInDanger(dangerFollow)) {
+      // tehlike geçti: takibi bırak, hemen yeni kilitlenme olmasın
+      dangerFollow = null;
+      dangerCooldown = 6;
+      return;
+    }
+    // kamerayı yumuşakça tehlikedekine çek
+    const k = Math.min(1, dt * 4);
+    camera.x += (dangerFollow.x - camera.x) * k;
+    camera.y += (dangerFollow.y - camera.y) * k;
+    return;
+  }
+  if (dangerCooldown > 0) return;
+  for (const v of villagers) {
+    if (v.dead || v.state === "sleeping") continue;
+    if (villagerInDanger(v)) {
+      dangerFollow = v;
+      addMessage(`⚠ ${v.fullName} tehlikede — kamera takipte!`);
+      break;
+    }
+  }
+}
+
 // ---- Merak: yakarma ve mikrofonla teskin ----
 
 let pleadTimer = 50;
@@ -1038,6 +1079,7 @@ function step(dt: number) {
   }
 
   for (const v of villagers) v.update(dt, world, buildings, animals);
+  updateDangerCamera(dt);
 
   // hayvanlar: dolanma, otlama, açlık; yırtıcılar insan kovalar
   for (const a of animals) a.update(dt, world, villagers);
@@ -1143,7 +1185,14 @@ function frame(now: number) {
   last = now;
 
   // kamera ve mesaj zamanlayıcıları duraklatmadan etkilenmez
+  const camX0 = camera.x;
+  const camY0 = camera.y;
   input.update(elapsed);
+  if (dangerFollow && (camera.x !== camX0 || camera.y !== camY0)) {
+    // oyuncu kamerayı eline aldı: takibi bırak
+    dangerFollow = null;
+    dangerCooldown = 10;
+  }
   updateMessages(elapsed);
 
   // koloni yok olduysa simülasyon durur (oyun sonu perdesi gösterilir)
@@ -1186,6 +1235,23 @@ function frame(now: number) {
     selecting?.mode === "rect" ? selecting : null,
     now / 1000
   );
+  // tehlikedeki köylünün üstünde kırmızı ikaz halkası
+  if (dangerFollow && !dangerFollow.dead) {
+    const sx = (dangerFollow.x - camera.x) * camera.zoom + canvas.width / 2;
+    const sy = (dangerFollow.y - camera.y) * camera.zoom + canvas.height / 2;
+    const pulse = 1 + Math.sin(now / 120) * 0.25;
+    ctx.strokeStyle = "rgba(230, 60, 60, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 1 * camera.zoom, 7 * camera.zoom * pulse, 3.2 * camera.zoom * pulse, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(230, 60, 60, 0.95)";
+    ctx.font = `bold ${Math.max(12, 5 * camera.zoom)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.fillText("⚠", sx, sy - 17 * camera.zoom);
+    ctx.textAlign = "left";
+  }
+
   renderer.drawMinimap(ctx, camera, villagers, buildings, TOOLBAR_HEIGHT);
   drawHud(ctx, villagers.length, selected, paused, gameSpeed);
   if (villagers.length > 0) drawMarkFilters(ctx, markFilter);
