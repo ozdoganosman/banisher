@@ -3,6 +3,59 @@
 2D blok bazlı, Banished benzeri koloni simülasyonu. Köylüler Cin Ali tarzı
 çöp adamlardır; dünya pixel-art bloklardan oluşur ve prosedürel üretilir.
 
+## Oyunun Mantığı (Özet)
+
+Banisher'da prosedürel bir adada 6 köylüyle ve hazır kurulu bir kampla
+başlarsın. Amaç koloniyi hayatta tutup büyütmektir; oyunun çekirdeği şu
+döngülere dayanır:
+
+**Emek ve iş sistemi (Banished tarzı).** "Boşta" sınıfı yoktur: herkes
+varsayılan **ortalık işçisidir** — elle işaretlediğin ağaç, çalı, mantar,
+çakıl ve taşları toplar, depoya taşır. **İnşaatçı** sayısını panelden
+ayarlarsın; üretim işleri ise **bina bazlı istihdamdır** (oduncu kulübesi
+3 oduncu, tapınak 2 rahip, bakımevi 3 bakıcı...). Üretim kulübeleri
+çalışan sayısı kadar çevrelerindeki kaynağı otomatik işaretler.
+
+**El emeği ekonomisi.** Başlangıçta balta yoktur: ağaçlar kesilmez,
+elle **budanır** (ağaç başına 1 dal, budanan ağaç zamanla kendine gelir).
+Alet Atölyesi araştırılıp kurulunca sipariş usulü **balta** üretilir
+(3 dal + 3 taş); baltalı işçi ağacı tamamen devirip 4 dal alır — ama
+devrilen ağaç bir daha çıkmaz. Doğal kaynaklar genel olarak **kalıcıdır**:
+kazılan taş, toplanan çalı geri gelmez. Sürdürülebilir kaynaklar emekle
+yenilenir (oduncunun diktiği fidanlar, toplayıcının ektiği çalılar,
+çiftlik, balıkçılık, avcılık) — tek istisna yabani mantarlardır:
+binalardan uzak, el değmemiş yerlerde kendiliğinden biter.
+
+**Bilgi ve teknoloji.** Rahipler tapınakta tapınarak **bilgi** üretir;
+bilgiyle teknoloji ağacı (T) açılır: Beşer (tanrı inancı, +10 moral),
+Doğa (ateşin keşfi → meşale ve gece çalışması), Sermaye → Depo,
+Sert Cisimler → çakıl toplama, Kollektif → gıda ambarı, Mantaroloji →
+mantar tanıma, Motor Beceriler (+%20 hız), Bilişsel Beceriler →
+bakımevi ve eğitim, Alet Atölyesi → balta üretimi.
+
+**Zaman ve yaşam döngüsü.** Takvimde **1 gün = 1 mevsim, 4 gün = 1 yıl**.
+Gece 00:00-06:00 arası uyku vaktidir: evi olan evinde uyur (moral kazanır),
+evsizler kamp çevresinde yerde yatar (moral kaybeder); gece ancak meşale
+ışığında çalışılır. Boş evi olan hanelerde kadınlar hamile kalır: karın
+4 gün boyunca adım adım büyür, moral gittikçe düşer ve 4. günün sabahı
+doğumla geri gelir. Bebekler (0-7 yaş) bakıma muhtaçtır: bakımevi
+kapasitesi (bakıcı başına 4 bebek) yetmezse **annesi işi bırakıp bebeğe
+bakar**. 7 yaşında çocuk olurlar (bakımevinde büyüyen **eğitimli** olur:
+kalıcı +%20 hız), 18 yaşında işe başlarlar.
+
+**Hayatta kalma.** Açlık sürekli işler; köylüler stoktan yer (yemekhanede
+yemek tokluğu tamamen doldurur), yemek biterse açlıktan ölürler. Moral
+20'den başlar ve iş hızını belirler (0 moral = yarı hız); ev uykusu,
+tanrı inancı ve gece meşale başında ısınmak yükseltir. Depo kapasitesi
+paylaşımlıdır (100, depo binalarıyla artar); dolu ürünü kimse toplamaz.
+Kış haritayı bembeyaz örter ve bitki büyümesini durdurur — balıkçılık
+kışın da çalışan tek üretimdir.
+
+**Debug/denge ayarları:** tarayıcı konsolunda `__game.tuning` ile
+`dayLength` (gün süresi), `timeScale` (takvim akış hızı) ve `moveSpeed`
+(temel hareket hızı) canlı değiştirilebilir; `?seed=12345` ile sabit
+harita üretilir.
+
 ## Çalıştırma
 
 ```bash
@@ -37,10 +90,54 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 İpucu: `?seed=12345` URL parametresi ile sabit harita üretebilirsin.
 
 > **Denge notu**: Doğal kaynaklar kalıcıdır — kesilen ağaç, kazılan taş ve
-> toplanan çalı/mantar/yemiş **yeniden çıkmaz**. Sürdürülebilir kaynaklar:
-> çiftlik ürünleri, balıkçılık ve avcılıktır.
+> toplanan çalı/yemiş **yeniden çıkmaz**. Sürdürülebilir kaynaklar: emekle
+> dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
+> Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v1.2)
+## Şu anki özellikler (v1.4)
+
+### v1.4: Takvim, hamilelik ve yaş evreleri
+
+- **Yeni takvim**: 1 gün = 1 mevsim, 4 gün = 1 yıl; gün süresi uzadı
+  (150 sn → 300 sn) — oynanış hızı aynı kalırken zaman daha yavaş akar
+- **Debug ayarları**: `__game.tuning` üzerinden `dayLength`, `timeScale`
+  (yalnız takvim hızı) ve `moveSpeed` (temel hareket hızı) konsoldan
+  canlı değiştirilebilir
+- **Hamilelik**: boş yeri olan evlerde kadınlar hamile kalır; karın 4 gün
+  adım adım büyür (görsel), moral süreç boyunca gittikçe düşer ve 4. günün
+  sabahı doğumla geri gelir; profilde "Hamile (N/4 gün)" rozeti
+- **Yaş evreleri**: bebek (0-7 yaş) → çocuk (7-18, küçük çizilir,
+  çalışamaz) → 18 yaşında işe başlar; yaş her 4 günde 1 artar
+- **Anne bakımı**: bakımevi kapasitesi yetmeyen bebeğin annesi işi
+  bırakıp bebeğinin yanında kalır ("Çocuğuna bakıyor")
+- **Bakımevi yenilendi**: bakıcı başına 4 bebek, en çok 3 bakıcı;
+  bakılan bebek acıkmaz, annesi çalışabilir, çocuk **eğitimli** büyür
+  (kalıcı +%20 hız)
+
+### v1.3: Yeni teknoloji ağacı, Alet Atölyesi ve balta
+
+- **Beşer**: artık bina açmıyor — tanrı inancı doğar, herkese kalıcı
+  +10 moral (yeni doğanlar dahil)
+- **Doğa**: ateşi keşfettirir — meşale ancak bundan sonra yapılır;
+  geceyi meşale başında geçirmek moral kazandırır
+- **Motor Beceriler** (yeni): herkese +%20 çalışma ve yürüme hızı
+- **Bilişsel ve Problem Çözme Becerileri** (yeni): bakımevini açar
+- **Alet Atölyesi** (yeni; Bilişsel + Sert Cisimler gerekir): sipariş
+  usulü balta üretimi — bina paneline adet yazılır ([+]/[−]), usta her
+  balta için 3 dal + 3 taş harcar, fazlası stoklanır; sipariş yokken
+  bina "!" ile uyarır; baltayı stok-rezervasyon sistemiyle yalnızca
+  alet sayısı kadar işçi gelip alır (boşa gidip dönen olmaz)
+- **Baltalı kesim**: baltalı işçi ağacı tamamen devirir (4 dal, daha
+  hızlı); devrilen ağaç yeniden çıkmaz — budama ekonomisinin üstüne
+  bilinçli bir "tüket ya da sürdür" kararı ekler
+- **Mantarcı binası kaldırıldı**: mantar yalnızca elle toplanır
+  (Mantaroloji gerekir); haritada seyrekleştirildi (135 → ~55) ve
+  binalardan uzak yerlerde kendiliğinden biter
+- **Teknoloji paneli**: 4 sütunlu yeni yerleşim, çoklu ön koşul
+  bağlantıları, büyük okunur kartlar (isim sarma, durum renkleri,
+  "▶ Araştırmak için tıkla" ipucu)
+- **Çoklu panel**: birden fazla menü aynı anda açık kalabilir; paneller
+  sürüklenebilir, ✕ veya Esc ile sırayla kapanır
 
 ### v1.2: Elle toplama, yeni teknoloji ağacı, toplu iptal ve moral dökümü
 
