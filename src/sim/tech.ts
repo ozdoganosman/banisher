@@ -120,7 +120,7 @@ export const TECHS: Tech[] = [
     id: "kan",
     name: "Kan",
     cost: 20,
-    desc: "Avcı kulübesini açar; atölyede mızrak üretilir (5 taş + 7 dal)",
+    desc: "Avcı kulübesini açar; atölyede mızrak üretilir (5 dal + 2 odun + 5 taş)",
     prereq: ["toolworkshop"],
     gridX: 4,
     gridY: 2,

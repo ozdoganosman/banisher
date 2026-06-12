@@ -126,6 +126,22 @@ function drawItemIcon(ctx: CanvasRenderingContext2D, item: IconItem, x: number, 
       ctx.fillRect(19, 5, 2, 2);
       ctx.fillRect(8, 17, 2, 2);
       break;
+    case "log":
+      // üst üste iki kütük: uçlarında halkalı kesitler
+      ctx.fillStyle = "#6b4a2b";
+      ctx.fillRect(4, 8, 14, 5);
+      ctx.fillRect(7, 13.5, 14, 5);
+      ctx.fillStyle = "#8a6a43";
+      ctx.beginPath();
+      ctx.ellipse(18, 10.5, 2.2, 2.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(21, 16, 2.2, 2.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#c9a35a";
+      ctx.beginPath();
+      ctx.ellipse(18, 10.5, 1, 1.2, 0, 0, Math.PI * 2);
+      ctx.ellipse(21, 16, 1, 1.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
     case "stone":
       ctx.fillStyle = "#9aa0a8";
       ctx.fillRect(5, 9, 14, 10);
@@ -301,6 +317,10 @@ function isItemVisible(item: IconItem): boolean {
   }
   if (item === "stone") {
     return hasTech("humanity") || hasTech("hardobjects") || resources.stone > 0;
+  }
+  if (item === "log") {
+    // odun ancak baltayla kesimden gelir
+    return hasTech("toolworkshop") || resources.log > 0;
   }
   if (item === "mushroom") {
     return hasTech("mushroomology") || resources.mushroom > 0;
@@ -1161,7 +1181,7 @@ export function drawBuildingPanel(
     ctx.font = "11px monospace";
     ctx.fillStyle = "#9a9488";
     let recipe = `Balta: ${AXE_WOOD_COST} dal+${AXE_STONE_COST} taş`;
-    if (hasTech("kan")) recipe += " • Mızrak: 7 dal+5 taş";
+    if (hasTech("kan")) recipe += " • Mızrak: 5 dal+2 odun+5 taş";
     if (hasTech("leatherworking")) recipe += " • Giysi: 3 deri";
     ctx.fillText(recipe, x + 12, ly, w - 24);
   } else if (b.type === BuildingType.HunterLodge) {

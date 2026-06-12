@@ -18,6 +18,7 @@ import {
   MAX_CARRIED_SPEARS,
   ROLE_NAMES,
   SPEAR_CRAFT_TIME,
+  SPEAR_LOG_COST,
   SPEAR_STONE_COST,
   SPEAR_WOOD_COST,
   TORCH_LIGHT_RADIUS,
@@ -47,7 +48,8 @@ import {
 const WALK_SPEED = 36; // dünya-piksel / saniye
 const CHOP_TIME = 8; // elle dal toplama: yavaş iş
 const CHOP_TIME_AXE = 5; // baltayla kesim daha hızlı
-const AXE_WOOD_YIELD = 4; // devrilen ağaç birden çok dal verir
+const AXE_LOG_YIELD = 3; // devrilen ağaç kütük (odun) verir
+const AXE_BRANCH_BONUS = 1; // tepesinden bir tutam da dal düşer
 const GATHER_TIME = 8; // elle yemiş/mantar toplama: dal toplamayla aynı yavaşlıkta
 const MINE_TIME = 4;
 const STONE_PER_MINE = 3;
@@ -1065,6 +1067,7 @@ export class Villager {
         const canSpear =
           hut.spearOrders > 0 &&
           resources.wood >= SPEAR_WOOD_COST &&
+          resources.log >= SPEAR_LOG_COST &&
           resources.stone >= SPEAR_STONE_COST;
         const canCloth =
           hut.clothOrders > 0 && resources.leather >= CLOTH_LEATHER_COST;
@@ -1620,7 +1623,8 @@ export class Villager {
         }
         if (this.job.product === "spear") {
           return shop.spearOrders > 0 &&
-            resources.wood >= SPEAR_WOOD_COST && resources.stone >= SPEAR_STONE_COST;
+            resources.wood >= SPEAR_WOOD_COST && resources.log >= SPEAR_LOG_COST &&
+            resources.stone >= SPEAR_STONE_COST;
         }
         return shop.clothOrders > 0 && resources.leather >= CLOTH_LEATHER_COST;
       }
@@ -1901,9 +1905,10 @@ export class Villager {
       const tx = job.tile % world.width;
       const ty = Math.floor(job.tile / world.width);
       if (this.hasAxe) {
-        // ağaç tamamen devrilir (yeniden çıkmaz), bolca odun verir
+        // ağaç tamamen devrilir (yeniden çıkmaz): kütük (odun) + biraz dal
         world.fellTree(tx, ty);
-        this.gainItem("wood", AXE_WOOD_YIELD, c.x, c.y - 10);
+        this.gainItem("log", AXE_LOG_YIELD, c.x, c.y - 10);
+        this.gainItem("wood", AXE_BRANCH_BONUS, c.x, c.y - 3);
       } else {
         world.pruneTree(tx, ty);
         this.gainItem("wood", 1, c.x, c.y - 10);
@@ -1938,10 +1943,15 @@ export class Villager {
       } else {
         const isAxe = job.product === "axe";
         const woodCost = isAxe ? AXE_WOOD_COST : SPEAR_WOOD_COST;
+        const logCost = isAxe ? 0 : SPEAR_LOG_COST;
         const stoneCost = isAxe ? AXE_STONE_COST : SPEAR_STONE_COST;
         const orders = isAxe ? shop.orders : shop.spearOrders;
-        if (orders > 0 && resources.wood >= woodCost && resources.stone >= stoneCost) {
+        if (
+          orders > 0 && resources.wood >= woodCost &&
+          resources.log >= logCost && resources.stone >= stoneCost
+        ) {
           resources.wood -= woodCost;
+          resources.log -= logCost;
           resources.stone -= stoneCost;
           if (isAxe) {
             shop.orders--;

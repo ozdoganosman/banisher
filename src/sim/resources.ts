@@ -2,18 +2,19 @@
 // kampa/depoya teslim edince buraya eklenir. Depo binaları kapasiteyi artırır.
 
 export type ItemType =
-  | "wood" | "stone"
+  | "wood" | "log" | "stone"
   | "berry" | "mushroom" | "fish"
   | "meat" | "leather" | "wool";
 
 export const ITEM_TYPES: ItemType[] = [
-  "wood", "stone",
+  "wood", "log", "stone",
   "berry", "mushroom", "fish",
   "meat", "leather", "wool",
 ];
 
 export const ITEM_INFO: Record<ItemType, { name: string; color: string }> = {
   wood: { name: "dal", color: "#8a6a43" },
+  log: { name: "odun", color: "#6b4a2b" },
   stone: { name: "taş", color: "#9aa0a8" },
   berry: { name: "yemiş", color: "#d43f3f" },
   mushroom: { name: "mantar", color: "#d9b06b" },
@@ -34,6 +35,7 @@ export const FOOD_NUTRITION: Record<ItemType, number> = {
   fish: 15,
   meat: 14, // av eti doyurucudur
   wood: 0,
+  log: 0,
   stone: 0,
   leather: 0,
   wool: 0,

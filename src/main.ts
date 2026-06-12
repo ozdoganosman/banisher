@@ -40,6 +40,7 @@ import {
   AXE_STONE_COST,
   AXE_WOOD_COST,
   CLOTH_LEATHER_COST,
+  SPEAR_LOG_COST,
   SPEAR_STONE_COST,
   SPEAR_WOOD_COST,
   TORCH_ATTACH_COST,
@@ -461,12 +462,17 @@ input.onClick = (wx, wy, sx, sy) => {
       } else if (hit === "orderMinus") {
         selectedBuilding.orders = Math.max(0, selectedBuilding.orders - 1);
       } else if (hit === "spearPlus") {
-        const qw = (selectedBuilding.spearOrders + 1) * SPEAR_WOOD_COST;
-        const qs = (selectedBuilding.spearOrders + 1) * SPEAR_STONE_COST;
-        if (resources.wood >= qw && resources.stone >= qs) {
+        const n = selectedBuilding.spearOrders + 1;
+        if (
+          resources.wood >= n * SPEAR_WOOD_COST &&
+          resources.log >= n * SPEAR_LOG_COST &&
+          resources.stone >= n * SPEAR_STONE_COST
+        ) {
           selectedBuilding.spearOrders++;
         } else {
-          addMessage(`Yetersiz hammadde! (mızrak: ${SPEAR_WOOD_COST} dal + ${SPEAR_STONE_COST} taş)`);
+          addMessage(
+            `Yetersiz hammadde! (mızrak: ${SPEAR_WOOD_COST} dal + ${SPEAR_LOG_COST} odun + ${SPEAR_STONE_COST} taş)`
+          );
         }
       } else if (hit === "spearMinus") {
         selectedBuilding.spearOrders = Math.max(0, selectedBuilding.spearOrders - 1);
@@ -1214,7 +1220,7 @@ const hile = {
     console.log(
       `Banisher hileleri:
   hile.bilgi(50)          bilgi ekle
-  hile.ver("wood", 50)    kaynak ekle: wood stone berry mushroom fish meat leather wool
+  hile.ver("wood", 50)    kaynak ekle: wood log stone berry mushroom fish meat leather wool
   hile.doldur()           temel kaynaklardan bolca ver
   hile.arastir("kan")     tek araştırmayı bedava aç (id listesi: hile.arastirmalar())
   hile.hepsiniArastir()   tüm araştırmaları aç
@@ -1243,7 +1249,7 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
     resources[item] += n;
   },
   doldur(): void {
-    for (const it of ["wood", "stone", "berry", "meat", "leather"] as ItemType[]) {
+    for (const it of ["wood", "log", "stone", "berry", "meat", "leather"] as ItemType[]) {
       resources[it] += 30;
     }
   },

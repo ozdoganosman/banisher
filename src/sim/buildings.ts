@@ -146,7 +146,8 @@ export const AXE_STONE_COST = 3;
 export const AXE_CRAFT_TIME = 10; // saniye
 
 // Mızrak üretim reçetesi (Kan araştırması gerekir)
-export const SPEAR_WOOD_COST = 7; // 2 odun + 5 dal
+export const SPEAR_WOOD_COST = 5; // dal
+export const SPEAR_LOG_COST = 2; // odun (baltayla kesilen ağaçtan)
 export const SPEAR_STONE_COST = 5;
 export const SPEAR_CRAFT_TIME = 8;
 export const MAX_CARRIED_SPEARS = 5; // avcı yanına en çok bu kadar alır
