@@ -1,8 +1,8 @@
 # Banisher
 
 2D blok bazlı, insanlığın gelişim yolculuğunu konu alan kabile/koloni
-simülasyonu. Karakterler Cin Ali tarzı çöp adamlardır; dünya pixel-art
-bloklardan oluşur ve prosedürel üretilir.
+simülasyonu. Karakterler tombul piksel insanlardır (saçları, kıyafetleri
+ve aletleriyle); dünya pixel-art bloklardan oluşur ve prosedürel üretilir.
 
 ## Oyunun Ana Fikri
 
@@ -45,14 +45,16 @@ binalardan uzak, el değmemiş yerlerde kendiliğinden biter.
 **Bilgi ve teknoloji.** Rahipler tapınakta tapınarak **bilgi** üretir;
 bilgiyle teknoloji ağacı (T) açılır. Mevcut araştırmalar insanlığın en
 erken (Paleolitik) basamaklarıdır: Beşer (tanrı inancı, +10 moral),
-Doğa (ateşin keşfi → meşale ve gece çalışması), Sermaye → Depo,
-Sert Cisimler → çakıl toplama, Kollektif → gıda ambarı, Mantaroloji →
-mantar tanıma, Motor Beceriler (+%20 hız), Bilişsel Beceriler →
-bakımevi ve eğitim, Alet Atölyesi → balta üretimi. Sonraki çağlar için
-yol haritasına bak: dil, avcılık teknikleri, pişirme, tarım, çömlek,
-maden ve yazıya doğru ilerlenecek.
+Doğa (ateşin keşfi → binalara meşale takılır, gece ışıkta çalışılır),
+Korku (çığlıkla yardım çağırma), Merak (oyuncuya yakaran köylü
+mikrofonla teskin edilir), Sermaye → Depo, Sert Cisimler → çakıl,
+Mantaroloji → mantar tanıma, Motor Beceriler (+%20 hız), Bilişsel
+Beceriler → bakımevi ve eğitim, Alet Atölyesi → balta, Kan → mızrak
+ve avcı kulübesi. Sonraki çağlar: dil, pişirme, deri işleme, tarım,
+çömlek, maden ve yazıya doğru ilerlenecek.
 
-**Zaman ve yaşam döngüsü.** Takvimde **1 gün = 1 mevsim, 4 gün = 1 yıl**.
+**Zaman ve yaşam döngüsü.** Takvimde **1 gün = 1 mevsim, 4 gün = 1 yıl**;
+tarih "İlkbahar/3" gibi mevsim/yıl olarak akar ve yıl her ilkbaharda artar.
 Gece 00:00-06:00 arası uyku vaktidir: evi olan evinde uyur (moral kazanır),
 evsizler kamp çevresinde yerde yatar (moral kaybeder); gece ancak meşale
 ışığında çalışılır. Boş evi olan hanelerde kadınlar hamile kalır: karın

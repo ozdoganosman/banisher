@@ -571,50 +571,68 @@ export function profileHitTest(sx: number, sy: number): ProfileHit {
 }
 
 function drawPortrait(ctx: CanvasRenderingContext2D, v: Villager, cx: number, cy: number): void {
-  // büyütülmüş çöp adam portresi (ayaklar cy'de)
+  // büyütülmüş tombul piksel portre (ayaklar cy'de)
   const s = 3; // ölçek
-  ctx.lineCap = "round";
+  const LINE = "#26221e";
+  const SKIN = "#e8b88a";
+  // saç rengi: dünya çizimiyle aynı kural (isim hash'i)
+  const name = v.identity.firstName + v.identity.lastName;
+  let hh = 0;
+  for (let i = 0; i < name.length; i++) hh = (hh * 31 + name.charCodeAt(i)) | 0;
+  const HAIR = ["#2e2620", "#4a3322", "#6e4a28", "#8a6034", "#c2913c", "#55504a"];
+  const hair = HAIR[Math.abs(hh) % HAIR.length];
+
   // bacaklar
-  ctx.strokeStyle = "#26221e";
-  ctx.lineWidth = 1.1 * s;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - 5 * s);
-  ctx.lineTo(cx - 1.5 * s, cy);
-  ctx.moveTo(cx, cy - 5 * s);
-  ctx.lineTo(cx + 1.5 * s, cy);
-  ctx.stroke();
+  ctx.fillStyle = "#3a342c";
+  ctx.fillRect(cx - 1.9 * s, cy - 4.6 * s, 1.7 * s, 4.6 * s);
+  ctx.fillRect(cx + 0.2 * s, cy - 4.6 * s, 1.7 * s, 4.6 * s);
   // gövde
-  ctx.strokeStyle = v.shirtColor;
-  ctx.lineWidth = 1.8 * s;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - 5 * s);
-  ctx.lineTo(cx, cy - 9 * s);
-  ctx.stroke();
+  ctx.fillStyle = v.shirtColor;
+  ctx.fillRect(cx - 2.4 * s, cy - 9.6 * s, 4.8 * s, 5.4 * s);
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.fillRect(cx - 2.4 * s, cy - 9.6 * s, 1.1 * s, 5.4 * s);
+  ctx.strokeStyle = LINE;
+  ctx.lineWidth = 0.55 * s;
+  ctx.strokeRect(cx - 2.4 * s, cy - 9.6 * s, 4.8 * s, 5.4 * s);
   if (v.identity.female) {
     ctx.fillStyle = v.shirtColor;
     ctx.beginPath();
-    ctx.moveTo(cx - 2.5 * s, cy - 3.5 * s);
-    ctx.lineTo(cx + 2.5 * s, cy - 3.5 * s);
-    ctx.lineTo(cx, cy - 6 * s);
+    ctx.moveTo(cx - 2.4 * s, cy - 4.2 * s);
+    ctx.lineTo(cx + 2.4 * s, cy - 4.2 * s);
+    ctx.lineTo(cx + 3.1 * s, cy - 2.2 * s);
+    ctx.lineTo(cx - 3.1 * s, cy - 2.2 * s);
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
   }
-  // kollar
-  ctx.strokeStyle = "#26221e";
-  ctx.lineWidth = 1.1 * s;
+  // kollar (yanlarda)
+  ctx.strokeStyle = v.shirtColor;
+  ctx.lineWidth = 1.3 * s;
+  ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(cx, cy - 8.5 * s);
-  ctx.lineTo(cx - 2 * s, cy - 5.5 * s);
-  ctx.moveTo(cx, cy - 8.5 * s);
-  ctx.lineTo(cx + 2 * s, cy - 5.5 * s);
+  ctx.moveTo(cx - 2.7 * s, cy - 8.8 * s);
+  ctx.lineTo(cx - 2.7 * s, cy - 5.6 * s);
+  ctx.moveTo(cx + 2.7 * s, cy - 8.8 * s);
+  ctx.lineTo(cx + 2.7 * s, cy - 5.6 * s);
   ctx.stroke();
-  // kafa
-  ctx.fillStyle = "#e8b88a";
-  ctx.lineWidth = 0.7 * s;
-  ctx.beginPath();
-  ctx.arc(cx, cy - 11 * s, 2 * s, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(cx - 3.3 * s, cy - 6 * s, 1.2 * s, 1.2 * s);
+  ctx.fillRect(cx + 2.1 * s, cy - 6 * s, 1.2 * s, 1.2 * s);
+  // kafa + saç + gözler (portrede önden bakış: iki göz)
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(cx - 2.1 * s, cy - 14 * s, 4.2 * s, 4.2 * s);
+  ctx.fillStyle = hair;
+  ctx.fillRect(cx - 2.3 * s, cy - 14.4 * s, 4.6 * s, 1.5 * s);
+  if (v.identity.female) {
+    ctx.fillRect(cx - 2.6 * s, cy - 13.6 * s, 1 * s, 4.4 * s);
+    ctx.fillRect(cx + 1.6 * s, cy - 13.6 * s, 1 * s, 4.4 * s);
+  }
+  ctx.strokeStyle = LINE;
+  ctx.lineWidth = 0.55 * s;
+  ctx.strokeRect(cx - 2.1 * s, cy - 14 * s, 4.2 * s, 4.2 * s);
+  ctx.fillStyle = LINE;
+  ctx.fillRect(cx - 1.3 * s, cy - 12.4 * s, 0.9 * s, 0.9 * s);
+  ctx.fillRect(cx + 0.4 * s, cy - 12.4 * s, 0.9 * s, 0.9 * s);
 
   drawVillagerJobAccessories(ctx, cx, cy, 1, v.assignment, s);
 }

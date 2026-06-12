@@ -1515,7 +1515,16 @@ export class Renderer {
     ctx.strokeRect(px + 23, py + 20, 6, 7);
   }
 
-  // ---- Cin Ali tarzı çöp adam ----
+  // ---- Köylüler: blok dünyaya uygun tombul piksel insanlar ----
+
+  // Kimliğe göre kalıcı saç rengi
+  private static hairColorOf(v: Villager): string {
+    const name = v.identity.firstName + v.identity.lastName;
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+    const HAIR = ["#2e2620", "#4a3322", "#6e4a28", "#8a6034", "#c2913c", "#55504a"];
+    return HAIR[Math.abs(h) % HAIR.length];
+  }
 
   private drawVillager(ctx: CanvasRenderingContext2D, v: Villager, time: number): void {
     const x = v.x;
@@ -1543,25 +1552,21 @@ export class Renderer {
 
     // uyuyan köylü: yerde yatar, üstünde "z" harfleri süzülür
     if (v.state === "sleeping") {
-      ctx.strokeStyle = v.shirtColor;
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.moveTo(x - 3, y - 1.5);
-      ctx.lineTo(x + 2.5, y - 1.5);
-      ctx.stroke();
+      // yatan gövde + bacaklar
+      ctx.fillStyle = v.shirtColor;
+      ctx.fillRect(x - 3, y - 3, 5, 2.4);
+      ctx.fillStyle = "#3a342c";
+      ctx.fillRect(x + 2, y - 2.6, 2.6, 1.8);
       ctx.strokeStyle = LINE;
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.moveTo(x + 2.5, y - 1.5);
-      ctx.lineTo(x + 4.5, y - 0.5);
-      ctx.stroke();
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(x - 3, y - 3, 7.6, 2.4);
+      // kafa + saç
       ctx.fillStyle = SKIN;
+      ctx.fillRect(x - 6.2, y - 3.6, 3.2, 3.2);
+      ctx.fillStyle = Renderer.hairColorOf(v);
+      ctx.fillRect(x - 6.6, y - 3.9, 1.4, 3.6);
       ctx.strokeStyle = LINE;
-      ctx.lineWidth = 0.7;
-      ctx.beginPath();
-      ctx.arc(x - 4.5, y - 2, 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      ctx.strokeRect(x - 6.2, y - 3.6, 3.2, 3.2);
       // z... z...
       const zt = (v.walkPhase % 2) / 2;
       ctx.globalAlpha = 1 - zt;
@@ -1575,14 +1580,11 @@ export class Renderer {
       return;
     }
 
-    // bacaklar
-    ctx.strokeStyle = LINE;
-    ctx.beginPath();
-    ctx.moveTo(x, y - 5);
-    ctx.lineTo(x + swing, y);
-    ctx.moveTo(x, y - 5);
-    ctx.lineTo(x - swing, y);
-    ctx.stroke();
+    // bacaklar: yürürken öne-arkaya salınan iki kısa pantolon bloğu
+    ctx.fillStyle = "#3a342c";
+    const legSwing = swing * 0.55;
+    ctx.fillRect(x - 1.9 + legSwing, y - 4.6, 1.7, 4.6);
+    ctx.fillRect(x + 0.2 - legSwing, y - 4.6, 1.7, 4.6);
 
     // eşya taşıyorsa sırtında çanta (bakış yönünün tersinde)
     if (v.inventoryTotal > 0 && !v.baby) {
@@ -1593,23 +1595,27 @@ export class Renderer {
       ctx.strokeRect(x - v.facing * 3.5 - 1.5, y - 9, 3, 4);
     }
 
-    // gövde (gömlek rengi)
-    ctx.strokeStyle = v.shirtColor;
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.moveTo(x, y - 5);
-    ctx.lineTo(x, y - 9);
-    ctx.stroke();
+    // gövde: dolgun gömlek bloğu + sol kenarda gölge
+    ctx.fillStyle = v.shirtColor;
+    ctx.fillRect(x - 2.4, y - 9.6, 4.8, 5.4);
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(x - 2.4, y - 9.6, 1.1, 5.4);
+    ctx.strokeStyle = LINE;
+    ctx.lineWidth = 0.55;
+    ctx.strokeRect(x - 2.4, y - 9.6, 4.8, 5.4);
 
-    // kadın köylülerde küçük etek
+    // kadın köylülerde etek: gövdenin altında genişleyen parça
     if (v.identity.female) {
       ctx.fillStyle = v.shirtColor;
       ctx.beginPath();
-      ctx.moveTo(x - 2.5, y - 3.5);
-      ctx.lineTo(x + 2.5, y - 3.5);
-      ctx.lineTo(x, y - 6);
+      ctx.moveTo(x - 2.4, y - 4.2);
+      ctx.lineTo(x + 2.4, y - 4.2);
+      ctx.lineTo(x + 3.1, y - 2.2);
+      ctx.lineTo(x - 3.1, y - 2.2);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = LINE;
+      ctx.stroke();
     }
 
     // hamile karnı: gün geçtikçe adım adım büyür
@@ -1617,17 +1623,18 @@ export class Renderer {
       const belly = 0.8 + v.pregnancyProgress * 1.6;
       ctx.fillStyle = v.shirtColor;
       ctx.beginPath();
-      ctx.arc(x + v.facing * 1.2, y - 6.8, belly, 0, Math.PI * 2);
+      ctx.arc(x + v.facing * 1.6, y - 6.6, belly, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = LINE;
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
       ctx.lineWidth = 0.5;
       ctx.stroke();
       ctx.lineWidth = 1.1;
     }
 
     // kollar
-    ctx.strokeStyle = LINE;
-    ctx.lineWidth = 1.1;
+    ctx.strokeStyle = SKIN;
+    ctx.lineWidth = 1.2;
+    ctx.lineCap = "round";
     if (v.state === "building" || v.state === "mining") {
       // alet sallayan kol: omuzdan dönen tek çizgi + balta/çekiç/kazma
       const a = -1.4 + Math.sin(v.walkPhase) * 0.8; // omuz açısı
@@ -1687,32 +1694,47 @@ export class Renderer {
       ctx.lineWidth = 1.1;
       ctx.fillStyle = "#d4453f";
       ctx.fillRect(x + 12 * v.facing - 1, y + 1.5 + bob, 2, 2);
-    } else if (v.state === "worshipping") {
-      // dua: iki kol yukarı kalkık, hafifçe sallanır
+    } else if (v.state === "worshipping" || v.pleadingTtl > 0) {
+      // dua/yakarış: iki kol göğe kalkık, hafifçe sallanır
       const sway = Math.sin(v.walkPhase) * 0.8;
       ctx.beginPath();
-      ctx.moveTo(x, y - 8.5);
-      ctx.lineTo(x - 2.2 + sway, y - 12);
-      ctx.moveTo(x, y - 8.5);
-      ctx.lineTo(x + 2.2 + sway, y - 12);
+      ctx.moveTo(x - 1.8, y - 9);
+      ctx.lineTo(x - 3 + sway, y - 12.5);
+      ctx.moveTo(x + 1.8, y - 9);
+      ctx.lineTo(x + 3 + sway, y - 12.5);
       ctx.stroke();
     } else {
+      // yanlarda sallanan kollar (gömlek kolu + ten uç)
+      ctx.strokeStyle = v.shirtColor;
+      ctx.lineWidth = 1.3;
       ctx.beginPath();
-      ctx.moveTo(x, y - 8.5);
-      ctx.lineTo(x - swing * 0.8, y - 5.5);
-      ctx.moveTo(x, y - 8.5);
-      ctx.lineTo(x + swing * 0.8, y - 5.5);
+      ctx.moveTo(x - 2.7, y - 8.8);
+      ctx.lineTo(x - 2.7 - swing * 0.5, y - 5.6);
+      ctx.moveTo(x + 2.7, y - 8.8);
+      ctx.lineTo(x + 2.7 + swing * 0.5, y - 5.6);
       ctx.stroke();
+      ctx.fillStyle = SKIN;
+      ctx.fillRect(x - 3.3 - swing * 0.5, y - 6, 1.2, 1.2);
+      ctx.fillRect(x + 2.1 + swing * 0.5, y - 6, 1.2, 1.2);
     }
 
-    // kafa
+    // kafa: köşeli piksel kafa + saç + tek göz (yan bakış)
     ctx.fillStyle = SKIN;
+    ctx.fillRect(x - 2.1, y - 14, 4.2, 4.2);
+    const hair = Renderer.hairColorOf(v);
+    ctx.fillStyle = hair;
+    ctx.fillRect(x - 2.3, y - 14.4, 4.6, 1.5); // tepe
+    ctx.fillRect(v.facing > 0 ? x - 2.3 : x + 1.1, y - 14.4, 1.2, 2.6); // ense
+    if (v.identity.female) {
+      // uzun saç: iki yana iner
+      ctx.fillRect(x - 2.6, y - 13.6, 1, 4.4);
+      ctx.fillRect(x + 1.6, y - 13.6, 1, 4.4);
+    }
     ctx.strokeStyle = LINE;
-    ctx.lineWidth = 0.7;
-    ctx.beginPath();
-    ctx.arc(x, y - 11, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    ctx.lineWidth = 0.55;
+    ctx.strokeRect(x - 2.1, y - 14, 4.2, 4.2);
+    ctx.fillStyle = "#26221e";
+    ctx.fillRect(x + v.facing * 1.1 - 0.45, y - 12.4, 0.9, 0.9); // göz
 
     drawVillagerJobAccessories(ctx, x, y, v.facing, v.assignment, 1);
 
