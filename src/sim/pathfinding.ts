@@ -1,3 +1,4 @@
+import { Tile } from "../world/tiles";
 import type { World } from "../world/world";
 
 export interface PathNode {
@@ -58,8 +59,10 @@ export function findPath(
     return top;
   };
 
+  // yol karoları daha ucuzdur: köylüler taş yolu tercih eder
+  const ROAD_COST = 0.6;
   const heuristic = (x: number, y: number) =>
-    Math.abs(x - tx) + Math.abs(y - ty);
+    (Math.abs(x - tx) + Math.abs(y - ty)) * ROAD_COST;
 
   const start = sy * w + sx;
   const target = ty * w + tx;
@@ -95,7 +98,8 @@ export function findPath(
       const nx = next % w;
       const ny = Math.floor(next / w);
       if (!world.walkableAt(nx, ny) || closed[next]) continue;
-      const g = gScore[cur] + 1;
+      const stepCost = world.get(nx, ny) === Tile.Road ? ROAD_COST : 1;
+      const g = gScore[cur] + stepCost;
       if (g < gScore[next]) {
         gScore[next] = g;
         fScore[next] = g + heuristic(nx, ny);

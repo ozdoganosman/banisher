@@ -18,7 +18,8 @@ export type TechId =
   | "gathering"
   | "leatherworking"
   | "aidiyet"
-  | "ciftlik";
+  | "ciftlik"
+  | "hirs";
 
 export interface Tech {
   id: TechId;
@@ -131,10 +132,19 @@ export const TECHS: Tech[] = [
     id: "ciftlik",
     name: "Çiftlik",
     cost: 22,
-    desc: "Çiftlik kurulur: bir tür seçilir; o türe evrilen yabaniler (geyik->inek, kuş->tavuk, keçi->koyun, yaban domuzu->domuz) evcilleştirilince çiftliğe gelir",
+    desc: "Çiftlik kurulur: tür seçilir; o türe evrilen yabaniler evcilleştirilince çiftliğe gelir",
     prereq: ["aidiyet", "gathering"],
-    gridX: 3,
+    gridX: 4,
     gridY: 6,
+  },
+  {
+    id: "hirs",
+    name: "Hırs",
+    cost: 16,
+    desc: "Taş yol döşenir (karo başına 1 taş); yol üstünde %40 hızlı yürünür",
+    prereq: ["aidiyet", "hardobjects"],
+    gridX: 4,
+    gridY: 4,
   },
   {
     id: "kan",
@@ -151,8 +161,8 @@ export const TECHS: Tech[] = [
     cost: 18,
     desc: "Av postları (deri) atölyede giysiye işlenir; giysili köylü kışın üşümez ve yavaşlamaz",
     prereq: ["kan"],
-    gridX: 4,
-    gridY: 4,
+    gridX: 5,
+    gridY: 2,
   },
   {
     id: "toolworkshop",
@@ -161,7 +171,7 @@ export const TECHS: Tech[] = [
     desc: "Alet atölyesini açar: baltayla ağaç kesilip odun alınır",
     prereq: ["cognitive", "hardobjects"],
     gridX: 3,
-    gridY: 2,
+    gridY: 1,
   },
 ];
 

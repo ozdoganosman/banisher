@@ -1765,6 +1765,7 @@ export class Villager {
     if (this.baby) speed *= 0.55; // bebekler tıpış tıpış yürür
     else if (this.child) speed *= 0.75; // çocuklar da yetişkinden yavaş
     speed *= this.getWorkSpeedFactor(); // 100 moral -> 1.0, 0 moral -> 0.5 (yarı yarıya yavaş)
+    if (world.get(this.tileX, this.tileY) === Tile.Road) speed *= 1.4; // taş yol
     const step = speed * dt;
 
     if (dx !== 0) this.facing = dx > 0 ? 1 : -1;

@@ -403,6 +403,7 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.Gatherer,
   BuildingType.ToolWorkshop,
   BuildingType.Splitter,
+  BuildingType.Road,
   BuildingType.Fisher,
   BuildingType.Barn,
   BuildingType.HunterLodge,
@@ -1638,13 +1639,13 @@ export function drawJournalPanel(ctx: CanvasRenderingContext2D): void {
 }
 
 const TECH_CARD_W = 210;
-const TECH_CARD_H = 118;
-const TECH_COL_W = 250;
-const TECH_ROW_H = 80;
+const TECH_CARD_H = 130;
+const TECH_COL_W = 260;
+const TECH_ROW_H = 86;
 const TECH_TOP = 34; // üst barın altından başlar (tam ekran)
-const TECH_MAX_COL = 4; // en sağdaki sütun (gridX)
+const TECH_MAX_COL = 5; // en sağdaki sütun (gridX)
 // Sütun başlıkları: bilgi soldan sağa çağ çağ akar
-const TECH_COL_NAMES = ["Sezgiler", "Temeller", "Beceriler", "Zanaat", "Ustalık"];
+const TECH_COL_NAMES = ["Sezgiler", "Temeller", "Beceriler", "Zanaat", "Ustalık", "Gelenek"];
 let techRect = { x: 0, y: 0, w: 0, h: 0 };
 let techScrollX = 0; // yatay kaydırma (sürükle / tekerlek)
 let techViewW = 1280;
@@ -1744,9 +1745,9 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = "#d8c8f0";
   ctx.font = "bold 17px monospace";
   ctx.fillText("Teknoloji Ağacı", x + 16, y + 18);
-  ctx.font = "13px monospace";
-  ctx.fillStyle = "#b08fe0";
-  ctx.fillText(`Bilgi: ${resources.knowledge}`, x + 200, y + 18);
+  ctx.font = "bold 15px monospace";
+  ctx.fillStyle = "#d8c0ff";
+  ctx.fillText(`📖 Bilgi: ${resources.knowledge}`, x + 200, y + 18);
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
   ctx.fillText("(rahipler tapınakta üretir)  •  ◀ ▶ sürükleyerek/tekerlekle kaydır", x + 300, y + 18);
@@ -1839,23 +1840,37 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
       cy2 += 15;
     }
 
-    // Maliyet / Durum
+    // Maliyet / Durum (çoklu ön koşullar madde madde listelenir)
     ctx.font = "12px monospace";
     cy2 += 4;
     if (owned) {
       ctx.fillStyle = "#8fd05e";
       ctx.fillText("✓ Araştırıldı", pos.x + 10, cy2);
+      cy2 += 11;
     } else if (locked) {
-      ctx.fillStyle = "#b06a5c";
       const missing = (tech.prereq ?? [])
         .filter((p) => !hasTech(p))
         .map((p) => TECHS.find((t) => t.id === p)?.name ?? p);
-      ctx.fillText(`Kilitli — önce ${missing.join(" + ")}`, pos.x + 10, cy2, cardW - 20);
+      ctx.fillStyle = "#b06a5c";
+      if (missing.length === 1) {
+        ctx.fillText(`Kilitli — önce ${missing[0]}`, pos.x + 10, cy2, cardW - 20);
+        cy2 += 11;
+      } else {
+        ctx.fillText("Kilitli — gerekenler:", pos.x + 10, cy2);
+        cy2 += 13;
+        ctx.font = "11px monospace";
+        for (const mname of missing) {
+          ctx.fillText(`• ${mname}`, pos.x + 16, cy2, cardW - 28);
+          cy2 += 12;
+        }
+        ctx.font = "12px monospace";
+        cy2 -= 1;
+      }
     } else {
       ctx.fillStyle = affordable ? "#e0b864" : "#b06a5c";
       ctx.fillText(`Maliyet: ${tech.cost} bilgi`, pos.x + 10, cy2);
+      cy2 += 11;
     }
-    cy2 += 11;
 
     // Ayraç çizgisi
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
@@ -2024,9 +2039,9 @@ export function drawHud(
     cx += bw + 10;
   }
 
-  // teknoloji düğmesi (mor kitap)
+  // teknoloji düğmesi (mor kitap): mevcut bilgi puanını da gösterir
   {
-    const label = `Teknoloji ▾`;
+    const label = `Teknoloji: ${resources.knowledge} ▾`;
     ctx.font = "15px monospace";
     const bw = 20 + ctx.measureText(label).width + 10;
     techButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };

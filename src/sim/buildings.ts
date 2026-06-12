@@ -19,6 +19,7 @@ export const enum BuildingType {
   ToolWorkshop = 12, // Alet atölyesi: sipariş üzerine balta/mızrak üretir
   HunterLodge = 13, // Avcı kulübesi: mızraklı avcılar en yakın hayvanları avlar
   Splitter = 14, // Kırıcı: odunu dala böler (1 odun -> 4 dal)
+  Road = 15, // taş yol: yerleştirilince bina değil karo olur (1 taş)
 }
 
 export interface BuildingDef {
@@ -138,6 +139,14 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     size: 2,
     maxWorkers: 3,
     desc: "3 avcı: mızrakla en yakın hayvanları avlar; et, deri ve yün kazanılır",
+  },
+  [BuildingType.Road]: {
+    name: "Taş Yol",
+    cost: 0, // dal yerine 1 taş harcar (yerleştirmede özel işlenir)
+    buildTime: 0,
+    size: 1,
+    maxWorkers: 0,
+    desc: "Karo başına 1 taş; üstünde %40 hızlı yürünür, köylüler yolu tercih eder",
   },
   [BuildingType.Splitter]: {
     name: "Kırıcı",
@@ -376,6 +385,7 @@ export function isBuildingUnlocked(type: BuildingType): boolean {
   if (type === BuildingType.HunterLodge) return hasTech("kan");
   if (type === BuildingType.Splitter) return hasTech("toolworkshop"); // odun keşfi
   if (type === BuildingType.Barn) return hasTech("ciftlik");
+  if (type === BuildingType.Road) return hasTech("hirs");
   // Meşale artık ayrı bina değil: Doğa ile binalara takılır
   return false;
 }

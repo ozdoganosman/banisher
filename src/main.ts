@@ -548,6 +548,23 @@ input.onClick = (wx, wy, sx, sy) => {
     ? Math.min(Math.max(Math.floor(wy / TILE_SIZE), 0), MAP_H - selSize)
     : Math.floor(wy / TILE_SIZE);
 
+  if (selected === BuildingType.Road) {
+    // taş yol: bina değil karo döşenir (1 taş)
+    const t = world.get(tx, ty);
+    const paveable = t === Tile.Grass || t === Tile.Dirt || t === Tile.Sand;
+    if (!paveable || world.blocked.has(world.index(tx, ty))) {
+      addMessage("Yol buraya döşenemez!");
+      return;
+    }
+    if (resources.stone < 1) {
+      addMessage("Yetersiz taş! (yol: 1 taş/karo)");
+      return;
+    }
+    resources.stone -= 1;
+    world.set(tx, ty, Tile.Road);
+    return;
+  }
+
   if (selected !== null) {
     // bina yerleştirme
     const def = BUILDING_DEFS[selected];

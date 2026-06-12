@@ -153,6 +153,7 @@ export class Renderer {
       case Tile.Sand: colors = SAND_BY_SEASON[s]; break;
       case Tile.Dirt: colors = DIRT_BY_SEASON[s]; break;
       case Tile.Stone: colors = STONE_BY_SEASON[s]; break;
+      case Tile.Road: colors = ["#9a9690", "#928e88", "#a29e98"]; break; // döşeli taş
       default: colors = GRASS_BY_SEASON[s]; break; // çimen ve üstündekiler
     }
     const sub = 4;
@@ -183,6 +184,17 @@ export class Renderer {
     }
 
     this.paintRelief(px, py, x, y);
+
+    if (t === Tile.Road) {
+      // taş plaka derzleri
+      this.tctx.fillStyle = "rgba(60, 58, 54, 0.45)";
+      this.tctx.fillRect(px, py + 7, 16, 1);
+      this.tctx.fillRect(px + (hash2(x, y, 91) > 0.5 ? 5 : 10), py, 1, 8);
+      this.tctx.fillRect(px + (hash2(x, y, 92) > 0.5 ? 11 : 4), py + 8, 1, 8);
+      this.tctx.fillStyle = "rgba(255,255,255,0.12)";
+      this.tctx.fillRect(px + 2, py + 2, 3, 1);
+      this.tctx.fillRect(px + 9, py + 10, 3, 1);
+    }
 
     if (t === Tile.Tree) this.paintTree(px, py, x, y);
     else if (t === Tile.PrunedTree) this.paintPrunedTree(px, py);
@@ -228,6 +240,7 @@ export class Renderer {
       case Tile.Sapling: color = "#6cbf4e"; break;
       case Tile.Pebbles: color = "#8e9296"; break;
       case Tile.Bush: color = BUSH_BY_SEASON[s][1]; break;
+      case Tile.Road: color = "#9a9690"; break;
       default: color = GRASS_BY_SEASON[s][0]; break;
     }
     this.mctx.fillStyle = color;
