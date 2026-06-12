@@ -7,7 +7,8 @@ export type TechId =
   | "humanity"
   | "nature"
   | "capital"
-  | "collective"
+  | "korku"
+  | "merak"
   | "mushroomology"
   | "hardobjects"
   | "motorskills"
@@ -60,12 +61,21 @@ export const TECHS: Tech[] = [
     gridY: 0,
   },
   {
-    id: "collective",
-    name: "Kollektif",
+    id: "korku",
+    name: "Korku",
     cost: 12,
-    desc: "Kollektif binasını açar (sadece gıda depolar)",
+    desc: "Tehlikede çığlık atılır: sesi duyan silahlı köylüler yardıma koşar",
     prereq: ["nature"],
     gridX: 1,
+    gridY: 4,
+  },
+  {
+    id: "merak",
+    name: "Merak",
+    cost: 16,
+    desc: "İnsanlar ara ara sana yakarır; tıklayıp mikrofonla konuş: şok olur, 2 gün boyunca morali çok yükselir",
+    prereq: ["korku"],
+    gridX: 2,
     gridY: 4,
   },
   {
@@ -91,9 +101,9 @@ export const TECHS: Tech[] = [
     name: "Mantaroloji",
     cost: 15,
     desc: "Yabani mantarlar tanınır ve toplanabilir",
-    prereq: ["collective"],
-    gridX: 2,
-    gridY: 4,
+    prereq: ["nature"],
+    gridX: 1,
+    gridY: 6,
   },
   {
     id: "kan",

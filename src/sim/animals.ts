@@ -179,8 +179,9 @@ export class Animal {
           const dx = prey.x - this.x;
           const dy = prey.y - this.y;
           const d = Math.hypot(dx, dy) || 1;
-          const nx = this.x + (dx / d) * this.def.speed * 1.3 * dt;
-          const ny = this.y + (dy / d) * this.def.speed * 1.3 * dt;
+          // yırtıcı koşusu insandan hızlıdır: kaçan ancak ışığa/kalabalığa sığınır
+          const nx = this.x + (dx / d) * this.def.speed * 2.4 * dt;
+          const ny = this.y + (dy / d) * this.def.speed * 2.4 * dt;
           if (world.walkableAt(Math.floor(nx / TILE_SIZE), Math.floor(ny / TILE_SIZE))) {
             this.x = nx;
             this.y = ny;

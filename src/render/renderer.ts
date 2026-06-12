@@ -825,7 +825,6 @@ export class Renderer {
     switch (b.type) {
       case BuildingType.House: this.drawHouse(ctx, px, py); break;
       case BuildingType.Depot: this.drawDepot(ctx, px, py); break;
-      case BuildingType.Collective: this.drawCollective(ctx, px, py); break;
       case BuildingType.Woodcutter: this.drawWoodcutter(ctx, px, py); break;
       case BuildingType.Gatherer: this.drawGatherer(ctx, px, py); break;
       case BuildingType.Camp: this.drawCamp(ctx, px, py); break;
@@ -1399,35 +1398,6 @@ export class Renderer {
     ctx.strokeRect(px + 23.5, py + 23.5, 4, 4);
   }
 
-  private drawCollective(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 16, py + 29, 15);
-    // gıda ambarı: kollektif
-    ctx.fillStyle = "#6b8e4e"; // doğa temalı yeşilimsi duvar rengi
-    ctx.fillRect(px + 2, py + 11, 28, 18);
-    this.outlineRect(ctx, px + 2, py + 11, 28, 18);
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(px + 1, py + 6, 30, 6); // düz çatı bandı
-    ctx.fillStyle = "#7d5835";
-    ctx.fillRect(px + 1, py + 6, 30, 2); // çatı ışığı
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 2, py + 12, 28, 2); // saçak gölgesi
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(px + 12, py + 18, 8, 11); // kapı
-    
-    // yandaki gıda çuvalları/sepetleri (meyve/mantar)
-    ctx.fillStyle = "#b87c53"; // çuval rengi 1
-    ctx.fillRect(px + 4, py + 22, 6, 6);
-    ctx.fillStyle = "#d43f3f"; // kırmızı elmalar
-    ctx.fillRect(px + 5, py + 21, 2, 2);
-    ctx.fillRect(px + 7, py + 21, 2, 2);
-    
-    ctx.fillStyle = "#b87c53"; // çuval rengi 2
-    ctx.fillRect(px + 22, py + 22, 6, 6);
-    ctx.fillStyle = "#e0a83c"; // sarı meyveler/balıklar
-    ctx.fillRect(px + 23, py + 21, 2, 2);
-    ctx.fillRect(px + 25, py + 21, 2, 2);
-  }
-
   private drawWoodcutter(ctx: CanvasRenderingContext2D, px: number, py: number): void {
     this.baseShadow(ctx, px + 11, py + 29, 10);
     this.baseShadow(ctx, px + 26, py + 27, 5, 1.5); // kütük yığını
@@ -1761,6 +1731,22 @@ export class Renderer {
       ctx.lineTo(x + v.facing * 1.8, y - 13.6);
       ctx.closePath();
       ctx.fill();
+    }
+
+    // yakaran köylü: başının üstünde el işareti; şokta yıldırım
+    if (v.pleadingTtl > 0) {
+      const bob = Math.sin(time * 5) * 1.2;
+      ctx.font = "bold 5px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ffe296";
+      ctx.fillText("✋", x, y - 19 + bob);
+      ctx.textAlign = "left";
+    } else if (v.shockTtl > 0) {
+      ctx.font = "bold 6px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ffd23c";
+      ctx.fillText("⚡", x + Math.sin(time * 30) * 0.8, y - 19);
+      ctx.textAlign = "left";
     }
 
     // baltalı köylü: elinde küçük balta taşır

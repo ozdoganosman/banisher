@@ -45,7 +45,8 @@ export function regrowFactor(): number {
 }
 
 export function dateString(): string {
-  return `${gameTime.day}.${gameTime.month}.${gameTime.year}`;
+  // mevsim/yıl: her ilkbaharda yıl bir artar (yıl = 4 gün)
+  return `${SEASON_NAMES[season()]}/${gameTime.year}`;
 }
 
 // Başlangıçtan beri geçen toplam gün (yaş hesabı vb. için)

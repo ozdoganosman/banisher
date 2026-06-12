@@ -63,7 +63,7 @@ import {
   resources,
   type ItemType,
 } from "./sim/resources";
-import { Villager } from "./sim/villager";
+import { screams, updateScreams, Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
 import { TILE_SIZE } from "./world/tiles";
 import { World } from "./world/world";
@@ -73,7 +73,6 @@ const MAP_H = 128;
 const VILLAGER_COUNT = 6;
 const FIXED_DT = 1 / 60;
 const DEPOT_CAP_BONUS = 80;
-const COLLECTIVE_CAP_BONUS = 60;
 
 // İşaretli görev sayaçlarını hesapla
 function getTaskCounts(): TaskCounts {
@@ -261,8 +260,6 @@ function demolishBuilding(b: Building): void {
   b.removed = true;
   if (b.type === BuildingType.Depot && b.done) {
     resources.cap = Math.max(100, resources.cap - DEPOT_CAP_BONUS);
-  } else if (b.type === BuildingType.Collective && b.done) {
-    resources.cap = Math.max(100, resources.cap - COLLECTIVE_CAP_BONUS);
   }
   // çiftlik yıkılırsa hayvanları da gider
   for (let i = animals.length - 1; i >= 0; i--) {
@@ -437,6 +434,7 @@ input.onClick = (wx, wy, sx, sy) => {
     const hit = profileHitTest(sx, sy);
     if (hit) {
       if (hit.kind === "close") selectedVillager = null;
+      else if (hit.kind === "calm") void startCalming(selectedVillager);
       return;
     }
   }
@@ -902,6 +900,72 @@ function checkStorageFull() {
   wasFamine = famine;
 }
 
+// ---- Merak: yakarma ve mikrofonla teskin ----
+
+let pleadTimer = 50;
+let calmingActive = false;
+
+function schedulePleading(dt: number): void {
+  if (!hasTech("merak")) return;
+  pleadTimer -= dt;
+  if (pleadTimer > 0) return;
+  pleadTimer = 40 + Math.random() * 50;
+  const candidates = villagers.filter(
+    (v) => v.canWork && v.pleadingTtl <= 0 && v.shockTtl <= 0 && v.state !== "sleeping"
+  );
+  if (candidates.length === 0) return;
+  const v = candidates[Math.floor(Math.random() * candidates.length)];
+  v.pleadingTtl = 25;
+  addMessage(`✋ ${v.fullName} sana yakarıyor — üzerine tıklayıp konuş!`);
+}
+
+// Mikrofonu aç, ses etkinliği yeterliyse köylüyü teskin et.
+// Dili anlaması gerekmez: yalnızca SESİN varlığı (hacim ve süre) sayılır.
+async function startCalming(v: Villager): Promise<void> {
+  if (calmingActive || v.pleadingTtl <= 0) return;
+  calmingActive = true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    addMessage("🎤 Mikrofon açık — ona seslen...");
+    const actx = new AudioContext();
+    const src = actx.createMediaStreamSource(stream);
+    const an = actx.createAnalyser();
+    an.fftSize = 512;
+    src.connect(an);
+    const data = new Uint8Array(an.fftSize);
+    let voiced = 0;
+    let elapsed = 0;
+    await new Promise<void>((resolve) => {
+      const iv = window.setInterval(() => {
+        an.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+          const d = (data[i] - 128) / 128;
+          sum += d * d;
+        }
+        const rms = Math.sqrt(sum / data.length);
+        if (rms > 0.035) voiced += 0.1;
+        elapsed += 0.1;
+        const done = voiced >= 1.2;
+        const giveUp = elapsed >= 7 || v.pleadingTtl <= 0;
+        if (done || giveUp) {
+          window.clearInterval(iv);
+          stream.getTracks().forEach((t) => t.stop());
+          void actx.close();
+          if (done) v.calm();
+          else addMessage("Sesini duyamadı...");
+          resolve();
+        }
+      }, 100);
+    });
+  } catch {
+    // mikrofon yok/izin verilmedi: tanrının sessiz dokunuşu yine de işler
+    addMessage("(Mikrofon yok — sessiz bir dokunuş da yetti)");
+    v.calm();
+  }
+  calmingActive = false;
+}
+
 // Mantarlar yalnızca binalardan uzak, el değmemiş yerlerde kendiliğinden biter
 const MUSHROOM_MIN_BUILDING_DIST = 12; // blok
 const MUSHROOM_WILD_CAP = 60;
@@ -938,6 +1002,9 @@ function step(dt: number) {
   updateEffects(dt);
   checkStorageFull();
   checkMilestones();
+
+  schedulePleading(dt);
+  updateScreams(dt);
 
   // yabani mantar türemesi
   mushroomTimer -= dt;
@@ -1041,9 +1108,6 @@ function step(dt: number) {
       } else if (b.type === BuildingType.Depot) {
         resources.cap += DEPOT_CAP_BONUS;
         addMessage(`Depo tamamlandı: kapasite +${DEPOT_CAP_BONUS}`);
-      } else if (b.type === BuildingType.Collective) {
-        resources.cap += COLLECTIVE_CAP_BONUS;
-        addMessage(`Kollektif tamamlandı: kapasite +${COLLECTIVE_CAP_BONUS}`);
       } else {
         addMessage(`${def.name} tamamlandı`);
       }
@@ -1069,7 +1133,7 @@ declare global {
   }
 }
 // tuning: konsoldan canlı ayar (__game.tuning.dayLength / timeScale / moveSpeed)
-window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning };
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams };
 
 let last = performance.now();
 let accumulator = 0;

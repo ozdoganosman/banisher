@@ -18,7 +18,6 @@ import {
   resources,
   totalStored,
   type ItemType,
-  FOOD_TYPES,
 } from "../sim/resources";
 import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
@@ -376,7 +375,6 @@ function drawInventoryBar(ctx: CanvasRenderingContext2D): void {
 export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.House,
   BuildingType.Depot,
-  BuildingType.Collective,
   BuildingType.Woodcutter,
   BuildingType.Gatherer,
   BuildingType.ToolWorkshop,
@@ -547,14 +545,23 @@ function profileCloseRect() {
 }
 // Moral dökümü satırlarına göre panel uzar; hit-test son çizilen yüksekliği kullanır
 let profileDrawnH = PROFILE.h;
+// "Konuş ve teskin et" düğmesi (yalnız yakaran köylüde çizilir)
+let profileCalmRect: { x: number; y: number; w: number; h: number } | null = null;
 
-export type ProfileHit = { kind: "close" } | { kind: "panel" } | null;
+export type ProfileHit = { kind: "close" } | { kind: "calm" } | { kind: "panel" } | null;
 
 // Panel açıkken tıklama paneli mi hedefliyor?
 export function profileHitTest(sx: number, sy: number): ProfileHit {
   const c = profileCloseRect();
   if (sx >= c.x && sx <= c.x + c.w && sy >= c.y && sy <= c.y + c.h) {
     return { kind: "close" };
+  }
+  if (
+    profileCalmRect &&
+    sx >= profileCalmRect.x && sx <= profileCalmRect.x + profileCalmRect.w &&
+    sy >= profileCalmRect.y && sy <= profileCalmRect.y + profileCalmRect.h
+  ) {
+    return { kind: "calm" };
   }
   const p = profilePos();
   if (sx >= p.x && sx <= p.x + PROFILE.w && sy >= p.y && sy <= p.y + profileDrawnH) {
@@ -621,8 +628,10 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
     .filter(([, d]) => Math.abs(d) >= 0.05)
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   const breakdownH = moraleEntries.length > 0 ? moraleEntries.length * 14 + 6 : 0;
-  const h = PROFILE.h + breakdownH;
+  const calmH = v.pleadingTtl > 0 ? 34 : 0;
+  const h = PROFILE.h + breakdownH + calmH;
   profileDrawnH = h;
+  profileCalmRect = null;
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
   ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = "#5a5f68";
@@ -738,6 +747,22 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
       : "Görevler binalardan ve N menüsünden atanır.",
     x + 10, y + breakdownH + 192, w - 20
   );
+
+  // Merak: yakaran köylüyü mikrofonla teskin etme düğmesi
+  if (v.pleadingTtl > 0) {
+    profileCalmRect = { x: x + 10, y: y + h - 30, w: w - 20, h: 24 };
+    const r = profileCalmRect;
+    ctx.fillStyle = "rgba(255, 210, 60, 0.18)";
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = "#ffd23c";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    ctx.fillStyle = "#ffe296";
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("🎤 Konuş ve teskin et", x + w / 2, r.y + 12);
+    ctx.textAlign = "left";
+  }
 }
 
 // ---- Bina detay paneli ----
@@ -833,8 +858,7 @@ export function drawBuildingPanel(
     if (isHousing(b)) h += 20;
     if (b.def.maxWorkers > 0) h += 26;
     if (isDepositPoint(b)) {
-      const itemsList = b.type === BuildingType.Collective ? FOOD_TYPES : ITEM_TYPES;
-      const itemCount = itemsList.filter(isItemVisible).length;
+      const itemCount = ITEM_TYPES.filter(isItemVisible).length;
       h += 34 + itemCount * 17 + 6;
     }
     else if (
@@ -987,8 +1011,7 @@ export function drawBuildingPanel(
     }
     ly += 20;
 
-    const itemsList = b.type === BuildingType.Collective ? FOOD_TYPES : ITEM_TYPES;
-    const visibleItems = itemsList.filter(isItemVisible);
+    const visibleItems = ITEM_TYPES.filter(isItemVisible);
     ctx.font = "12px monospace";
     for (const item of visibleItems) {
       ctx.fillStyle = ITEM_INFO[item].color;
@@ -1304,7 +1327,7 @@ const TECH_CARD_H = 116;
 const TECH_COL_W = 220;
 const TECH_ROW_H = 78;
 const TECH_W = 24 + 4 * TECH_COL_W + TECH_CARD_W + 24; // 1128
-const TECH_H = 64 + 4 * TECH_ROW_H + TECH_CARD_H + 20; // 512
+const TECH_H = 64 + 6 * TECH_ROW_H + TECH_CARD_H + 20; // 668
 let techRect = { x: 0, y: 0, w: TECH_W, h: TECH_H };
 
 export type TechHit =

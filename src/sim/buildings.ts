@@ -16,7 +16,6 @@ export const enum BuildingType {
   Nursery = 8, // bebekler burada bakılır: hızlı büyür, acıkmaz
   Fisher = 9, // su kenarına kurulur; balıkçılar kıyıdan balık tutar
   Barn = 10, // çiftlik: tavuk/inek/domuz besler, çiftçiler ürün toplar
-  Collective = 11, // Kollektif ambar (sadece gıda depolar)
   ToolWorkshop = 12, // Alet atölyesi: sipariş üzerine balta/mızrak üretir
   HunterLodge = 13, // Avcı kulübesi: mızraklı avcılar en yakın hayvanları avlar
 }
@@ -123,14 +122,6 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     maxWorkers: 2,
     desc: "Tavuk, inek ve domuz besler; çiftçiler yumurta, süt ve et toplar",
   },
-  [BuildingType.Collective]: {
-    name: "Kollektif",
-    cost: 10,
-    buildTime: 8,
-    size: 2,
-    maxWorkers: 0,
-    desc: "Gıda kapasitesi +60 (sadece gıda depolar)",
-  },
   [BuildingType.ToolWorkshop]: {
     name: "Alet Atölyesi",
     cost: 16,
@@ -210,7 +201,7 @@ export const KNOWLEDGE_PER_WORSHIP = 1;
 
 // Köylülerin topladıklarını teslim edebileceği bina mı?
 export function isDepositPoint(b: Building): boolean {
-  return b.done && (b.type === BuildingType.Depot || b.type === BuildingType.Camp || b.type === BuildingType.Collective);
+  return b.done && (b.type === BuildingType.Depot || b.type === BuildingType.Camp);
 }
 
 export const AUTO_MARK_RADIUS = 6; // blok: kulübenin çalışma alanı
@@ -345,7 +336,6 @@ export function isBuildingUnlocked(type: BuildingType): boolean {
   // ileride çağlara uygun araştırmalara bağlanacak
   if (type === BuildingType.House || type === BuildingType.Temple || type === BuildingType.Camp) return true;
   if (type === BuildingType.Depot) return hasTech("capital");
-  if (type === BuildingType.Collective) return hasTech("collective");
   if (type === BuildingType.Nursery) return hasTech("cognitive");
   if (type === BuildingType.ToolWorkshop) return hasTech("toolworkshop");
   if (type === BuildingType.HunterLodge) return hasTech("kan");

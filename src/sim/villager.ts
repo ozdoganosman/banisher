@@ -102,6 +102,18 @@ const PREGNANCY_MORALE = 12; // hamilelik boyunca toplam moral kaybı (doğumda 
 const SHIRT_COLORS = ["#c0392b", "#2980b9", "#8e44ad", "#d35400", "#16a085"];
 let shirtIndex = 0;
 
+// Korku araştırması: tehlikedeki köylü çığlık atar, duyan silahlılar koşar
+export const screams: { x: number; y: number; animal: Animal; ttl: number }[] = [];
+const SCREAM_RANGE = 16 * TILE_SIZE;
+const SCREAM_TTL = 6;
+
+export function updateScreams(dt: number): void {
+  for (let i = screams.length - 1; i >= 0; i--) {
+    screams[i].ttl -= dt;
+    if (screams[i].ttl <= 0 || screams[i].animal.dead) screams.splice(i, 1);
+  }
+}
+
 // Banished tarzı iş bazlı görevler: herkes varsayılan ortalık işçisidir,
 // inşaatçılık sayıyla, üretim işleri bina bazlı istihdamla yönetilir
 export type Assignment =
@@ -172,9 +184,13 @@ export class Villager {
   hasAxe = false; // atölyeden balta aldı: ağaçları kesip odun çıkarır
   spears = 0; // taşınan mızrak (en çok 5); avcılar atölyeden alır
   fleeTimer = 0; // yırtıcıdan kaçış
+  pleadingTtl = 0; // Merak: oyuncuya yakarıyor (tıklanıp teskin edilebilir)
+  shockTtl = 0; // teskin edildi: kısa süre şokta donar
+  private divineBuff: { untilDay: number; amount: number } | null = null;
   private fleeDirX = 0;
   private fleeDirY = 0;
   private threatTimer = Math.random() * 0.4; // yırtıcı kontrol ritmi
+  private screamCooldown = 0;
   private throwTimer = 0;
   assignment: Assignment = { kind: "laborer" };
   birthDay: number; // doğduğu gün (toplam gün sayısı)
@@ -247,11 +263,31 @@ export class Villager {
     return this.spears > 0 || this.hasAxe;
   }
 
+  // Korku: çığlık at — yakındaki silahlılar yardıma gelir
+  private scream(animal: Animal): void {
+    if (!hasTech("korku") || this.screamCooldown > 0) return;
+    this.screamCooldown = 5;
+    screams.push({ x: this.x, y: this.y, animal, ttl: SCREAM_TTL });
+    addFloater(this.x, this.y - 20, "Çığlık! ❗", "#ff8855");
+  }
+
+  // Merak: oyuncu mikrofonla konuştu — şok + 2 günlük büyük moral
+  calm(): void {
+    if (this.pleadingTtl <= 0) return;
+    this.pleadingTtl = 0;
+    this.shockTtl = 3;
+    const before = this.morale;
+    this.changeMorale(40, "Tanrının sesi");
+    this.divineBuff = { untilDay: totalDays() + 2, amount: this.morale - before };
+    addFloater(this.x, this.y - 18, "⚡ Tanrı konuştu!", "#ffd23c");
+  }
+
   // Yırtıcı saldırısı: hasar al; silahsızsa kaç, can biterse öl
-  takeDamage(amount: number, from: { x: number; y: number }, world: World): void {
+  takeDamage(amount: number, from: Animal, world: World): void {
     if (this.dead) return;
     this.hp -= amount;
     addFloater(this.x, this.y - 16, `-${amount}`, "#ff5544");
+    this.scream(from);
     if (!this.armed || this.baby || this.child) {
       const dx = this.x - from.x;
       const dy = this.y - from.y;
@@ -316,6 +352,8 @@ export class Villager {
 
   // Profil panelinde gösterilen anlık durum
   get statusText(): string {
+    if (this.shockTtl > 0) return "Şokta — Tanrı onunla konuştu!";
+    if (this.pleadingTtl > 0) return "Sana yakarıyor ✋ (tıkla ve konuş)";
     if (this.baby) {
       if (this.nurseryCovered) return `Bebek (bakımevinde)`;
       if (this.mother && !this.mother.dead) return `Bebek (annesine muhtaç)`;
@@ -546,6 +584,29 @@ export class Villager {
       return;
     }
 
+    // Tanrının sesi: 2 gün sonra etkisi söner
+    if (this.divineBuff && totalDays() >= this.divineBuff.untilDay) {
+      this.changeMorale(-this.divineBuff.amount, "Tanrının sesi");
+      this.divineBuff = null;
+    }
+    if (this.screamCooldown > 0) this.screamCooldown -= dt;
+
+    // Yakarma/şok: olduğu yerde durur (uyku saati gelirse kesilir)
+    if ((this.pleadingTtl > 0 || this.shockTtl > 0) && !isSleepTime()) {
+      if (this.shockTtl > 0) this.shockTtl -= dt;
+      else this.pleadingTtl -= dt;
+      this.walkPhase += dt * 1.6; // eller havada yalvarış salınımı
+      this.state = "idle";
+      this.path = [];
+      this.timer = 0.4;
+      this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
+      return;
+    }
+    if (isSleepTime()) {
+      this.pleadingTtl = 0;
+      this.shockTtl = 0;
+    }
+
     // yakındaki yırtıcı: silahlıysa karşı koy, değilse kaç
     this.threatTimer -= dt;
     if (this.threatTimer <= 0 && this.state !== "sleeping" && !this.dead) {
@@ -569,6 +630,7 @@ export class Villager {
             this.throwTimer = 0.4;
           }
         } else {
+          this.scream(threat);
           const dx = this.x - threat.x;
           const dy = this.y - threat.y;
           const d = Math.hypot(dx, dy) || 1;
@@ -577,6 +639,20 @@ export class Villager {
           this.fleeTimer = 2;
           this.releaseJob(world);
           this.toIdle();
+        }
+      } else if (this.armed && this.canWork && this.job?.kind !== "spearhunt") {
+        // çığlık duyan silahlılar yardıma koşar (Korku)
+        for (const sc of screams) {
+          if (sc.animal.dead) continue;
+          const d = Math.hypot(sc.x - this.x, sc.y - this.y);
+          if (d <= SCREAM_RANGE) {
+            this.releaseJob(world);
+            this.job = { kind: "spearhunt", animal: sc.animal, thrown: 0 };
+            this.state = "hunting";
+            this.throwTimer = 0.4;
+            addFloater(this.x, this.y - 16, "Yardıma!", "#ffb060");
+            break;
+          }
         }
       }
     }
@@ -1345,15 +1421,8 @@ export class Villager {
       let canUse = false;
       for (const item of ITEM_TYPES) {
         if (this.inventory[item] > 0) {
-          if (b.type === BuildingType.Collective) {
-            if (FOOD_TYPES.includes(item)) {
-              canUse = true;
-              break;
-            }
-          } else {
-            canUse = true;
-            break;
-          }
+          canUse = true;
+          break;
         }
       }
       if (!canUse) continue;
@@ -1676,10 +1745,6 @@ export class Villager {
     let foodKeep = 0;
     const foodKeepRef = { value: foodKeep };
     for (const item of ITEM_TYPES) {
-      // Kollektif binaları sadece gıda depolayabilir
-      if (job.building.type === BuildingType.Collective && !FOOD_TYPES.includes(item)) {
-        continue;
-      }
       const depositAmount = this.getDepositableAmount(item, foodKeepRef);
       if (depositAmount <= 0) continue;
       const added = addItem(item, depositAmount);
@@ -1835,8 +1900,9 @@ export class Villager {
     }
 
     if (dist > range) {
-      // kovala (düz koşu; hayvan hareketli olduğundan yol hesabı yapılmaz)
-      const speed = WALK_SPEED * 1.15 * tuning.moveSpeed * this.getWorkSpeedFactor();
+      // kovala (düz koşu; adrenalin moral cezasını kısmen bastırır)
+      const speed =
+        WALK_SPEED * 1.45 * tuning.moveSpeed * Math.max(0.8, this.getWorkSpeedFactor());
       const nx = this.x + (dx / dist) * speed * dt;
       const ny = this.y + (dy / dist) * speed * dt;
       if (world.walkableAt(Math.floor(nx / TILE_SIZE), Math.floor(ny / TILE_SIZE))) {
