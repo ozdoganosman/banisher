@@ -19,7 +19,7 @@ import {
   totalStored,
   type ItemType,
 } from "../sim/resources";
-import { ANIMAL_DEFS } from "../sim/animals";
+import { ANIMAL_DEFS, TAME_TARGET, type Animal } from "../sim/animals";
 import { journal } from "../sim/journal";
 import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
@@ -537,7 +537,7 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
 // ---- Sürüklenebilir paneller ----
 // Her panel başlangıç konumuna göre bir ofset taşır; sürükleyince değişir.
 
-export type PanelId = "profile" | "building" | "tech" | "pop" | "people" | "journal";
+export type PanelId = "profile" | "building" | "tech" | "pop" | "people" | "journal" | "animal";
 
 const panelOffsets: Record<PanelId, { x: number; y: number }> = {
   profile: { x: 0, y: 0 },
@@ -546,6 +546,7 @@ const panelOffsets: Record<PanelId, { x: number; y: number }> = {
   pop: { x: 0, y: 0 },
   people: { x: 0, y: 0 },
   journal: { x: 0, y: 0 },
+  animal: { x: 0, y: 0 },
 };
 
 // Panelin son çizilen (ofset dahil) dikdörtgeni
@@ -563,6 +564,7 @@ export function panelRectOf(id: PanelId): { x: number; y: number; w: number; h: 
     case "pop": return popRect;
     case "people": return peopleRect;
     case "journal": return journalRect;
+    case "animal": return apanelRect;
   }
 }
 
@@ -834,6 +836,131 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
     ctx.textAlign = "center";
     ctx.fillText("🎤 Konuş ve teskin et", x + w / 2, r.y + 12);
     ctx.textAlign = "left";
+  }
+}
+
+// ---- Hayvan paneli: ad, durum ve saldır/evcilleştir düğmeleri ----
+
+let apanelRect = { x: 284, y: 44, w: 230, h: 150 };
+let apanelAttack: { x: number; y: number; w: number; h: number } | null = null;
+let apanelTame: { x: number; y: number; w: number; h: number } | null = null;
+
+export type AnimalHit = "close" | "attack" | "tame" | "panel" | null;
+
+export function animalPanelHitTest(sx: number, sy: number): AnimalHit {
+  const cx = apanelRect.x + apanelRect.w - 24;
+  const cy = apanelRect.y + 6;
+  if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return "close";
+  const inRect = (r: { x: number; y: number; w: number; h: number } | null) =>
+    r && sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h;
+  if (inRect(apanelAttack)) return "attack";
+  if (inRect(apanelTame)) return "tame";
+  if (
+    sx >= apanelRect.x && sx <= apanelRect.x + apanelRect.w &&
+    sy >= apanelRect.y && sy <= apanelRect.y + apanelRect.h
+  ) {
+    return "panel";
+  }
+  return null;
+}
+
+export function drawAnimalPanel(
+  ctx: CanvasRenderingContext2D,
+  a: Animal,
+  canTame: boolean
+): void {
+  const w = 230;
+  const x = 284 + panelOffsets.animal.x;
+  const y = 44 + panelOffsets.animal.y;
+  const def = a.def;
+  const isDog = a.type === "dog";
+  const showAttack = a.wild && !isDog;
+  let h = 96;
+  if (showAttack) h += 28;
+  if (canTame) h += 28;
+  if (isDog || a.barn) h += 18;
+  apanelRect = { x, y, w, h };
+  apanelAttack = null;
+  apanelTame = null;
+
+  ctx.fillStyle = "rgba(10, 12, 16, 0.88)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#5a5f68";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  drawCloseButton(ctx, x + w - 24, y + 6);
+
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffe296";
+  ctx.font = "bold 14px monospace";
+  const tag = isDog ? " (evcil)" : a.barn ? " (çiftlik)" : def.predator ? " (yırtıcı!)" : " (yabani)";
+  ctx.fillText(`${def.name}${tag}`, x + 12, y + 18);
+
+  // can barı
+  ctx.font = "11px monospace";
+  ctx.fillStyle = "#9a9488";
+  ctx.fillText("Can", x + 12, y + 40);
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(x + 50, y + 34, w - 64, 10);
+  ctx.fillStyle = "#e04040";
+  ctx.fillRect(x + 51, y + 35, (w - 66) * Math.max(0, a.hp / def.hp), 8);
+
+  // verim bilgisi
+  ctx.fillStyle = "#b8b2a4";
+  const yieldParts = [`${def.huntYield} et`];
+  if (def.leatherYield > 0) yieldParts.push(`${def.leatherYield} deri`);
+  if (def.woolYield > 0) yieldParts.push(`${def.woolYield} yün`);
+  ctx.fillText(`Av verimi: ${yieldParts.join(", ")}`, x + 12, y + 56);
+  const target = TAME_TARGET[a.type];
+  if (target) {
+    ctx.fillStyle = "#8fd05e";
+    ctx.fillText(`Evcilleşince: ${ANIMAL_DEFS[target].name}`, x + 12, y + 72);
+  } else {
+    ctx.fillStyle = "#6a6458";
+    ctx.fillText(isDog ? "Sahibiyle gezer, ava yardım eder" : "Evcilleştirilemez", x + 12, y + 72);
+  }
+
+  let by = y + 88;
+  if (isDog && a.owner) {
+    ctx.fillStyle = "#c9d4dc";
+    ctx.fillText(`Sahibi: ${a.owner.fullName}`, x + 12, by - 4);
+    by += 18;
+  } else if (a.barn) {
+    ctx.fillStyle = "#c9d4dc";
+    ctx.fillText("Bir çiftliğe bağlı", x + 12, by - 4);
+    by += 18;
+  }
+
+  const button = (label: string, color: string, border: string) => {
+    const r = { x: x + 12, y: by, w: w - 24, h: 22 };
+    ctx.fillStyle = color;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    ctx.fillStyle = "#e8e2d0";
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(label, x + w / 2, by + 11);
+    ctx.textAlign = "left";
+    by += 28;
+    return r;
+  };
+
+  if (showAttack) {
+    apanelAttack = button(
+      a.hunted ? "✕ Av işaretini kaldır" : "🏹 Saldır (avla)",
+      a.hunted ? "rgba(255,255,255,0.08)" : "rgba(212, 69, 63, 0.2)",
+      a.hunted ? "#5a5f68" : "#d4453f"
+    );
+  }
+  if (canTame) {
+    apanelTame = button(
+      a.tameMark ? "✕ Evcilleştirmeyi bırak" : "🤝 Evcilleştir",
+      a.tameMark ? "rgba(255,255,255,0.08)" : "rgba(143, 208, 94, 0.18)",
+      a.tameMark ? "#5a5f68" : "#8fd05e"
+    );
   }
 }
 

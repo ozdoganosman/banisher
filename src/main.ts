@@ -24,6 +24,8 @@ import {
   isOverPeoplePanel,
   drawJournalPanel,
   journalPanelHitTest,
+  drawAnimalPanel,
+  animalPanelHitTest,
   journalButtonHitTest,
   journalScrollBy,
   isOverJournalPanel,
@@ -141,6 +143,7 @@ const animalRespawns: { barn: Building; type: AnimalType; t: number }[] = [];
 let selected: BuildingType | null = null;
 let selectedVillager: Villager | null = null;
 let selectedBuilding: Building | null = null;
+let selectedAnimal: Animal | null = null;
 let showPopulation = false;
 let showPeople = false;
 let showJournal = false;
@@ -242,12 +245,25 @@ function spawnWildAnimal(): boolean {
   return false;
 }
 
-// Tıklanan noktadaki yabani hayvan (av işareti için)
-function wildAnimalAt(wx: number, wy: number): Animal | null {
+// Bu hayvan şu an evcilleştirilebilir mi? (araştırma + uygun çiftlik)
+function canTameAnimal(a: Animal): boolean {
+  const target = TAME_TARGET[a.type];
+  if (!target || !a.wild || a.type === "dog") return false;
+  if (a.type === "wolf") return hasTech("aidiyet");
+  return (
+    hasTech("ciftlik") &&
+    buildings.some(
+      (b) => b.type === BuildingType.Barn && b.done && b.farmType === target
+    )
+  );
+}
+
+// Tıklanan noktadaki hayvan (panel açmak için; her tür seçilebilir)
+function animalAt(wx: number, wy: number): Animal | null {
   let best: Animal | null = null;
   let bestDist = 8;
   for (const a of animals) {
-    if (!a.wild || a.dead || a.type === "dog") continue;
+    if (a.dead) continue;
     const d = Math.hypot(wx - a.x, wy - (a.y - 3));
     if (d < bestDist) {
       bestDist = d;
@@ -484,6 +500,29 @@ input.onClick = (wx, wy, sx, sy) => {
     }
   }
 
+  // hayvan paneli açıkken
+  if (selectedAnimal) {
+    const hit = animalPanelHitTest(sx, sy);
+    if (hit) {
+      const a = selectedAnimal;
+      if (hit === "close") selectedAnimal = null;
+      else if (hit === "attack") {
+        a.hunted = !a.hunted;
+        if (a.hunted) a.tameMark = false;
+        else a.claimed = false;
+      } else if (hit === "tame") {
+        a.tameMark = !a.tameMark;
+        if (a.tameMark) {
+          a.hunted = false;
+          addMessage(`${a.def.name} evcilleştirme için işaretlendi`);
+        } else {
+          a.claimed = false;
+        }
+      }
+      return;
+    }
+  }
+
   // bina paneli açıkken
   if (selectedBuilding) {
     const hit = buildingPanelHitTest(sx, sy);
@@ -601,31 +640,10 @@ input.onClick = (wx, wy, sx, sy) => {
       selectedVillager = v;
       return;
     }
-    const wa = wildAnimalAt(wx, wy);
+    const wa = animalAt(wx, wy);
     if (wa) {
-      // tıklama döngüsü: av işareti -> evcilleştir (uygunsa) -> hiçbiri
-      const target = TAME_TARGET[wa.type];
-      const canTame =
-        !!target &&
-        (wa.type === "wolf"
-          ? hasTech("aidiyet")
-          : hasTech("ciftlik") &&
-            buildings.some(
-              (b) => b.type === BuildingType.Barn && b.done && b.farmType === target
-            ));
-      if (!wa.hunted && !wa.tameMark) {
-        wa.hunted = true;
-      } else if (wa.hunted) {
-        wa.hunted = false;
-        wa.claimed = false;
-        if (canTame) {
-          wa.tameMark = true;
-          addMessage(`${wa.def.name} evcilleştirme için işaretlendi`);
-        }
-      } else {
-        wa.tameMark = false;
-        wa.claimed = false;
-      }
+      // hayvan paneli açılır: ad + saldır/evcilleştir düğmeleri
+      selectedAnimal = wa;
       return;
     }
     const b = buildingAt(tx, ty);
@@ -662,6 +680,7 @@ function closeTopmost(): boolean {
   if (showJournal) { showJournal = false; return true; }
   if (showPeople) { showPeople = false; return true; }
   if (showPopulation) { showPopulation = false; return true; }
+  if (selectedAnimal) { selectedAnimal = null; return true; }
   if (selectedVillager) { selectedVillager = null; return true; }
   if (selectedBuilding) { selectedBuilding = null; return true; }
   return false;
@@ -686,6 +705,7 @@ input.onLeftDragStart = (wx, wy, sx, sy) => {
     [showJournal, "journal"],
     [showPeople, "people"],
     [showPopulation, "pop"],
+    [!!selectedAnimal, "animal"],
     [!!selectedVillager, "profile"],
     [!!selectedBuilding, "building"],
   ];
@@ -1526,6 +1546,20 @@ function frame(now: number) {
     selecting?.mode === "rect" ? selecting : null,
     now / 1000
   );
+  // seçili hayvan: beyaz halka (ölürse panel kapanır)
+  if (selectedAnimal) {
+    if (selectedAnimal.dead) selectedAnimal = null;
+    else {
+      const sx2 = (selectedAnimal.x - camera.x) * camera.zoom + canvas.width / 2;
+      const sy2 = (selectedAnimal.y - camera.y) * camera.zoom + canvas.height / 2;
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(sx2, sy2 + 1 * camera.zoom, 5.5 * camera.zoom, 2.6 * camera.zoom, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
   // tehlikedeki köylünün üstünde kırmızı ikaz halkası
   if (dangerFollow && !dangerFollow.dead) {
     const sx = (dangerFollow.x - camera.x) * camera.zoom + canvas.width / 2;
@@ -1575,6 +1609,7 @@ function frame(now: number) {
     if (showPopulation) drawPopulationPanel(ctx, villagers, buildings);
     if (showPeople) drawPeoplePanel(ctx, villagers);
     if (showJournal) drawJournalPanel(ctx);
+    if (selectedAnimal) drawAnimalPanel(ctx, selectedAnimal, canTameAnimal(selectedAnimal));
     if (showTech) drawTechPanel(ctx);
   }
 
