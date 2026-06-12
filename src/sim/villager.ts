@@ -8,6 +8,8 @@ import {
   AXE_CRAFT_TIME,
   AXE_STONE_COST,
   AXE_WOOD_COST,
+  CLOTH_CRAFT_TIME,
+  CLOTH_LEATHER_COST,
   BuildingType,
   isDepositPoint,
   isLit,
@@ -23,7 +25,7 @@ import {
 } from "./buildings";
 import { babyIdentity, randomIdentity, type Identity } from "./names";
 import { hasTech } from "./tech";
-import { isNight, isSleepTime, totalDays, dayFrac, tuning, DAYS_PER_YEAR } from "./time";
+import { isNight, isSleepTime, season, totalDays, dayFrac, tuning, DAYS_PER_YEAR } from "./time";
 import {
   findPath,
   findPathAdjacent,
@@ -59,6 +61,7 @@ const MELEE_RANGE = 12; // baltayla yakın dövüş (dünya-piksel)
 const MELEE_DAMAGE = 3;
 const HUNT_GIVEUP_RANGE = 15 * TILE_SIZE; // av bu kadar uzaklaşırsa vazgeç
 const EVENING_FRAC = 17 / 24; // 23:00 — iş biter, ateş başına toplanılır
+const COLD_MORALE_RATE = 0.045; // kışın giysisiz dışarıda olmanın moral bedeli (sn başına)
 const FISH_PER_CATCH = 2;
 const TEND_TIME = 2.5;
 const PLANT_TIME = 2;
@@ -157,8 +160,8 @@ type Job =
   | { kind: "hunt"; animal: Animal }
   | { kind: "build"; building: Building }
   | { kind: "worship"; building: Building; tile: number }
-  | { kind: "craft"; building: Building; product: "axe" | "spear" }
-  | { kind: "pickup"; building: Building; product: "axe" | "spear"; amount: number }
+  | { kind: "craft"; building: Building; product: "axe" | "spear" | "cloth" }
+  | { kind: "pickup"; building: Building; product: "axe" | "spear" | "cloth"; amount: number }
   | { kind: "spearhunt"; animal: Animal; thrown: number }
   | { kind: "sleep"; building: Building | null }
   | { kind: "eat"; building: Building }
@@ -182,6 +185,7 @@ export class Villager {
   hp = 100; // yırtıcı saldırılarıyla azalır, zamanla iyileşir
   educated = false; // bakımevinde yetişen çocuk: %20 hız bonusu
   hasAxe = false; // atölyeden balta aldı: ağaçları kesip odun çıkarır
+  hasClothes = false; // deri giysi: kışın üşümez ve yavaşlamaz
   spears = 0; // taşınan mızrak (en çok 5); avcılar atölyeden alır
   fleeTimer = 0; // yırtıcıdan kaçış
   pleadingTtl = 0; // Merak: oyuncuya yakarıyor (tıklanıp teskin edilebilir)
@@ -383,7 +387,11 @@ export class Villager {
           case "worship": return "Tapınağa gidiyor";
           case "craft": return "Atölyeye gidiyor";
           case "pickup":
-            return this.job.product === "axe" ? "Balta almaya gidiyor" : "Mızrak almaya gidiyor";
+            return this.job.product === "axe"
+              ? "Balta almaya gidiyor"
+              : this.job.product === "spear"
+              ? "Mızrak almaya gidiyor"
+              : "Giysi almaya gidiyor";
           case "spearhunt": return "Ava gidiyor";
           case "sleep":
             return this.job.building && this.job.building === this.home
@@ -397,6 +405,8 @@ export class Villager {
       case "crafting":
         return this.job?.kind === "craft" && this.job.product === "spear"
           ? "Mızrak yapıyor"
+          : this.job?.kind === "craft" && this.job.product === "cloth"
+          ? "Giysi dikiyor"
           : "Balta yapıyor";
       case "hunting":
         return this.job?.kind === "spearhunt" && this.job.animal.def.predator
@@ -487,6 +497,7 @@ export class Villager {
     let f = 0.5 + this.morale / 200;
     if (hasTech("motorskills")) f *= 1.2; // herkese %20 hız
     if (this.educated) f *= 1.2; // bakımevi eğitimi: ek %20
+    if (season() === 3 && !this.hasClothes) f *= 0.75; // kışın giysisiz: %25 yavaş
     return f;
   }
 
@@ -694,6 +705,14 @@ export class Villager {
       this.toIdle();
     }
 
+    // Kış: giysisi olmayan dışarıda üşür, morali erir (deri giysi korur)
+    if (
+      season() === 3 && !this.hasClothes && !this.baby &&
+      this.state !== "sleeping"
+    ) {
+      this.changeMorale(-COLD_MORALE_RATE * dt, "Soğuk (giysisiz)");
+    }
+
     // Gece ateş başında olmak içi ısıtır: yavaşça moral kazandırır
     if (isNight() && this.state !== "sleeping" && !this.baby) {
       for (const b of buildings) {
@@ -821,8 +840,10 @@ export class Villager {
       case "pickup":
         if (this.job.product === "axe") {
           this.job.building.toolReserved = Math.max(0, this.job.building.toolReserved - this.job.amount);
-        } else {
+        } else if (this.job.product === "spear") {
           this.job.building.spearReserved = Math.max(0, this.job.building.spearReserved - this.job.amount);
+        } else {
+          this.job.building.clothReserved = Math.max(0, this.job.building.clothReserved - this.job.amount);
         }
         break;
       case "spearhunt":
@@ -1045,8 +1066,14 @@ export class Villager {
           hut.spearOrders > 0 &&
           resources.wood >= SPEAR_WOOD_COST &&
           resources.stone >= SPEAR_STONE_COST;
-        if ((canAxe || canSpear) && lit(hut.centerX, hut.centerY)) {
-          const product: "axe" | "spear" = canAxe ? "axe" : "spear";
+        const canCloth =
+          hut.clothOrders > 0 && resources.leather >= CLOTH_LEATHER_COST;
+        if ((canAxe || canSpear || canCloth) && lit(hut.centerX, hut.centerY)) {
+          const product: "axe" | "spear" | "cloth" = canAxe
+            ? "axe"
+            : canSpear
+            ? "spear"
+            : "cloth";
           candidates.push({
             dist: 0,
             start: () => {
@@ -1190,24 +1217,30 @@ export class Villager {
       a.kind === "building" &&
       a.building.type === BuildingType.HunterLodge &&
       this.spears < MAX_CARRIED_SPEARS;
-    if (wantsAxe || wantsSpears) {
+    const wantsClothes = !this.hasClothes;
+    if (wantsAxe || wantsSpears || wantsClothes) {
       let bestShop: Building | null = null;
       let bestShopD = Infinity;
+      let bestKind: "axe" | "spear" | "cloth" = "axe";
       for (const b of buildings) {
         if (b.type !== BuildingType.ToolWorkshop || !b.done || b.removed) continue;
-        const avail = wantsSpears
-          ? b.spearStock - b.spearReserved
-          : b.toolStock - b.toolReserved;
-        if (avail <= 0) continue;
+        // öncelik: avcıysa mızrak, ağaç işçisiyse balta, sonra giysi
+        let kind: "axe" | "spear" | "cloth" | null = null;
+        if (wantsSpears && b.spearStock - b.spearReserved > 0) kind = "spear";
+        else if (wantsAxe && b.toolStock - b.toolReserved > 0) kind = "axe";
+        else if (wantsClothes && b.clothStock - b.clothReserved > 0) kind = "cloth";
+        if (!kind) continue;
         if (!lit(b.centerX, b.centerY)) continue;
         const d = Math.abs(b.x + 1 - this.tileX) + Math.abs(b.y + 1 - this.tileY);
         if (d < bestShopD) {
           bestShopD = d;
           bestShop = b;
+          bestKind = kind;
         }
       }
       if (bestShop) {
         const shop = bestShop;
+        const kind = bestKind;
         candidates.push({
           dist: bestShopD,
           start: () => {
@@ -1215,7 +1248,7 @@ export class Villager {
               world, this.tileX, this.tileY, shop.x, shop.y, shop.size
             );
             if (!path) return false;
-            if (wantsSpears) {
+            if (kind === "spear") {
               const amount = Math.min(
                 MAX_CARRIED_SPEARS - this.spears,
                 shop.spearStock - shop.spearReserved
@@ -1223,6 +1256,10 @@ export class Villager {
               if (amount <= 0) return false;
               shop.spearReserved += amount;
               this.job = { kind: "pickup", building: shop, product: "spear", amount };
+            } else if (kind === "cloth") {
+              if (shop.clothStock - shop.clothReserved <= 0) return false;
+              shop.clothReserved++;
+              this.job = { kind: "pickup", building: shop, product: "cloth", amount: 1 };
             } else {
               if (shop.toolStock - shop.toolReserved <= 0) return false;
               shop.toolReserved++;
@@ -1575,19 +1612,25 @@ export class Villager {
           (!night || isLit(buildings, this.job.building.centerX, this.job.building.centerY));
       case "craft": {
         const shop = this.job.building;
-        const isAxe = this.job.product === "axe";
-        const orders = isAxe ? shop.orders : shop.spearOrders;
-        const wc = isAxe ? AXE_WOOD_COST : SPEAR_WOOD_COST;
-        const sc = isAxe ? AXE_STONE_COST : SPEAR_STONE_COST;
-        return !shop.removed && orders > 0 &&
-          resources.wood >= wc && resources.stone >= sc &&
-          (!night || isLit(buildings, shop.centerX, shop.centerY));
+        const lit2 = !night || isLit(buildings, shop.centerX, shop.centerY);
+        if (shop.removed || !lit2) return false;
+        if (this.job.product === "axe") {
+          return shop.orders > 0 &&
+            resources.wood >= AXE_WOOD_COST && resources.stone >= AXE_STONE_COST;
+        }
+        if (this.job.product === "spear") {
+          return shop.spearOrders > 0 &&
+            resources.wood >= SPEAR_WOOD_COST && resources.stone >= SPEAR_STONE_COST;
+        }
+        return shop.clothOrders > 0 && resources.leather >= CLOTH_LEATHER_COST;
       }
       case "pickup":
         return !this.job.building.removed &&
           (this.job.product === "axe"
             ? this.job.building.toolStock > 0
-            : this.job.building.spearStock > 0);
+            : this.job.product === "spear"
+            ? this.job.building.spearStock > 0
+            : this.job.building.clothStock > 0);
       case "spearhunt":
         return !this.job.animal.dead;
       case "sleep":
@@ -1691,7 +1734,11 @@ export class Villager {
       case "craft":
         this.state = "crafting";
         this.timer =
-          (this.job.product === "axe" ? AXE_CRAFT_TIME : SPEAR_CRAFT_TIME) / speedFactor;
+          (this.job.product === "axe"
+            ? AXE_CRAFT_TIME
+            : this.job.product === "spear"
+            ? SPEAR_CRAFT_TIME
+            : CLOTH_CRAFT_TIME) / speedFactor;
         this.faceTowards(this.job.building.centerX);
         break;
       case "pickup": {
@@ -1703,13 +1750,20 @@ export class Villager {
             this.hasAxe = true;
             addFloater(this.x, this.y - 14, "Balta aldı", "#c9d4dc");
           }
-        } else {
+        } else if (this.job.product === "spear") {
           shop.spearReserved = Math.max(0, shop.spearReserved - this.job.amount);
           const take = Math.min(this.job.amount, shop.spearStock, MAX_CARRIED_SPEARS - this.spears);
           if (take > 0) {
             shop.spearStock -= take;
             this.spears += take;
             addFloater(this.x, this.y - 14, `+${take} mızrak`, "#d4c49a");
+          }
+        } else {
+          shop.clothReserved = Math.max(0, shop.clothReserved - this.job.amount);
+          if (shop.clothStock > 0 && !this.hasClothes) {
+            shop.clothStock--;
+            this.hasClothes = true;
+            addFloater(this.x, this.y - 14, "Giysi giydi", "#a87c4f");
           }
         }
         this.job = null;
@@ -1872,23 +1926,36 @@ export class Villager {
     this.hitParticles(dt, shop.centerX, shop.centerY - 6, "#c9d4dc");
     this.timer -= dt;
     if (this.timer <= 0) {
-      const isAxe = job.product === "axe";
-      const woodCost = isAxe ? AXE_WOOD_COST : SPEAR_WOOD_COST;
-      const stoneCost = isAxe ? AXE_STONE_COST : SPEAR_STONE_COST;
-      const orders = isAxe ? shop.orders : shop.spearOrders;
-      if (orders > 0 && resources.wood >= woodCost && resources.stone >= stoneCost) {
-        resources.wood -= woodCost;
-        resources.stone -= stoneCost;
-        if (isAxe) {
-          shop.orders--;
-          shop.toolStock++;
-          addFloater(shop.centerX, shop.y * TILE_SIZE - 6, "+1 balta", "#c9d4dc");
-        } else {
-          shop.spearOrders--;
-          shop.spearStock++;
-          addFloater(shop.centerX, shop.y * TILE_SIZE - 6, "+1 mızrak", "#d4c49a");
+      let made = false;
+      if (job.product === "cloth") {
+        if (shop.clothOrders > 0 && resources.leather >= CLOTH_LEATHER_COST) {
+          resources.leather -= CLOTH_LEATHER_COST;
+          shop.clothOrders--;
+          shop.clothStock++;
+          addFloater(shop.centerX, shop.y * TILE_SIZE - 6, "+1 giysi", "#a87c4f");
+          made = true;
         }
       } else {
+        const isAxe = job.product === "axe";
+        const woodCost = isAxe ? AXE_WOOD_COST : SPEAR_WOOD_COST;
+        const stoneCost = isAxe ? AXE_STONE_COST : SPEAR_STONE_COST;
+        const orders = isAxe ? shop.orders : shop.spearOrders;
+        if (orders > 0 && resources.wood >= woodCost && resources.stone >= stoneCost) {
+          resources.wood -= woodCost;
+          resources.stone -= stoneCost;
+          if (isAxe) {
+            shop.orders--;
+            shop.toolStock++;
+            addFloater(shop.centerX, shop.y * TILE_SIZE - 6, "+1 balta", "#c9d4dc");
+          } else {
+            shop.spearOrders--;
+            shop.spearStock++;
+            addFloater(shop.centerX, shop.y * TILE_SIZE - 6, "+1 mızrak", "#d4c49a");
+          }
+          made = true;
+        }
+      }
+      if (!made) {
         addFloater(shop.centerX, shop.y * TILE_SIZE - 6, "Hammadde yok!", "#ff6655");
       }
       this.job = null;

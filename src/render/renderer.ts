@@ -1604,6 +1604,15 @@ export class Renderer {
     ctx.lineWidth = 0.55;
     ctx.strokeRect(x - 2.4, y - 9.6, 4.8, 5.4);
 
+    // deri giysi: gömleğin üstüne yelek + kürk yaka (kışın koruma)
+    if (v.hasClothes) {
+      ctx.fillStyle = "#a87c4f";
+      ctx.fillRect(x - 2.4, y - 9.6, 1.5, 5.4);
+      ctx.fillRect(x + 0.9, y - 9.6, 1.5, 5.4);
+      ctx.fillStyle = "#e8e0d0"; // kürk yaka
+      ctx.fillRect(x - 2.4, y - 9.9, 4.8, 1);
+    }
+
     // kadın köylülerde etek: gövdenin altında genişleyen parça
     if (v.identity.female) {
       ctx.fillStyle = v.shirtColor;

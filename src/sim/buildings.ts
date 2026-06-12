@@ -128,7 +128,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildTime: 10,
     size: 2,
     maxWorkers: 1,
-    desc: "Sipariş üzerine balta (3 dal + 3 taş) ve mızrak (7 dal + 5 taş) üretir",
+    desc: "Sipariş üzerine balta, mızrak ve giysi üretir (alet/giyim tezgâhı)",
   },
   [BuildingType.HunterLodge]: {
     name: "Avcı Kulübesi",
@@ -150,6 +150,10 @@ export const SPEAR_WOOD_COST = 7; // 2 odun + 5 dal
 export const SPEAR_STONE_COST = 5;
 export const SPEAR_CRAFT_TIME = 8;
 export const MAX_CARRIED_SPEARS = 5; // avcı yanına en çok bu kadar alır
+
+// Giysi reçetesi (Deri İşleme araştırması gerekir)
+export const CLOTH_LEATHER_COST = 3; // post/deri
+export const CLOTH_CRAFT_TIME = 8;
 
 // Binaya meşale takma bedeli (Doğa araştırması gerekir)
 export const TORCH_ATTACH_COST = 5; // dal
@@ -224,6 +228,10 @@ export class Building {
   spearOrders = 0;
   spearStock = 0;
   spearReserved = 0;
+  // Giysi siparişi/stoğu (Deri İşleme araştırması)
+  clothOrders = 0;
+  clothStock = 0;
+  clothReserved = 0;
   // Binaya meşale takıldı: geceyi aydınlatır (5 dal, Doğa gerekir)
   hasTorch = false;
   // Tapınak: rahiplerin tuttuğu dua yerleri (üst üste durmasınlar)
@@ -269,7 +277,8 @@ export class Building {
     }
     if (this.type === BuildingType.ToolWorkshop) {
       // sipariş yokken bina üzerinde uyarı çıksın
-      this.outOfResources = this.orders <= 0 && this.spearOrders <= 0;
+      this.outOfResources =
+        this.orders <= 0 && this.spearOrders <= 0 && this.clothOrders <= 0;
       return;
     }
     if (this.type !== BuildingType.Woodcutter && this.type !== BuildingType.Gatherer) return;

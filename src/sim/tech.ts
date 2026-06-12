@@ -15,7 +15,8 @@ export type TechId =
   | "cognitive"
   | "toolworkshop"
   | "kan"
-  | "gathering";
+  | "gathering"
+  | "leatherworking";
 
 export interface Tech {
   id: TechId;
@@ -123,6 +124,15 @@ export const TECHS: Tech[] = [
     prereq: ["toolworkshop"],
     gridX: 4,
     gridY: 2,
+  },
+  {
+    id: "leatherworking",
+    name: "Deri İşleme",
+    cost: 18,
+    desc: "Av postları (deri) atölyede giysiye işlenir; giysili köylü kışın üşümez ve yavaşlamaz",
+    prereq: ["kan"],
+    gridX: 4,
+    gridY: 4,
   },
   {
     id: "toolworkshop",

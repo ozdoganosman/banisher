@@ -39,6 +39,7 @@ import { Animal, ANIMAL_DEFS, BARN_HERD, WILD_POOL, type AnimalType } from "./si
 import {
   AXE_STONE_COST,
   AXE_WOOD_COST,
+  CLOTH_LEATHER_COST,
   SPEAR_STONE_COST,
   SPEAR_WOOD_COST,
   TORCH_ATTACH_COST,
@@ -469,6 +470,15 @@ input.onClick = (wx, wy, sx, sy) => {
         }
       } else if (hit === "spearMinus") {
         selectedBuilding.spearOrders = Math.max(0, selectedBuilding.spearOrders - 1);
+      } else if (hit === "clothPlus") {
+        const ql = (selectedBuilding.clothOrders + 1) * CLOTH_LEATHER_COST;
+        if (resources.leather >= ql) {
+          selectedBuilding.clothOrders++;
+        } else {
+          addMessage(`Yetersiz deri! (giysi: ${CLOTH_LEATHER_COST} deri)`);
+        }
+      } else if (hit === "clothMinus") {
+        selectedBuilding.clothOrders = Math.max(0, selectedBuilding.clothOrders - 1);
       } else if (hit === "torch") {
         if (resources.wood >= TORCH_ATTACH_COST) {
           resources.wood -= TORCH_ATTACH_COST;

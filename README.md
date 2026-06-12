@@ -343,7 +343,8 @@ genişleyecek. Her çağ yeni araştırmalar, binalar ve davranışlar getirir.
 - [ ] **Dil**: işbirliği — yakın çalışan köylüler birbirini hızlandırır
 - [ ] **Mızrak** (Alet Atölyesi'nde üretilir): büyük av güvenli ve verimli
 - [ ] **Ateşte pişirme**: ocak binası — pişmiş yemek daha doyurucu
-- [ ] **Deri işleme**: posttan giysi — kışın dışarıda çalışma/moral koruması
+- [x] **Deri işleme**: avdan düşen deri atölyede giysiye işlenir — giysili
+      köylü kışın üşümez (moral) ve yavaşlamaz
 - [ ] **Mağara resmi**: ilk sanat — kalıcı moral kaynağı binası
 
 ### 🌾 Neolitik — Tarım Devrimi
