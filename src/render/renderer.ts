@@ -11,7 +11,7 @@ import {
 } from "../sim/buildings";
 import { isFull, ITEM_INFO, ITEM_TYPES, foodTotal } from "../sim/resources";
 import { darkness, season } from "../sim/time";
-import { floaters, particles, FLOATER_TTL } from "./effects";
+import { floaters, particles, spearShots, FLOATER_TTL } from "./effects";
 import { hash2 } from "../world/noise";
 import { Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
@@ -672,6 +672,27 @@ export class Renderer {
     }
 
     // parçacıklar (talaş, taş kırıntısı) ve uçan kazanç yazıları
+    // uçan mızraklar
+    for (const sp of spearShots) {
+      ctx.save();
+      ctx.translate(sp.x, sp.y);
+      ctx.rotate(sp.angle);
+      ctx.strokeStyle = "#d4c49a";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.lineTo(3, 0);
+      ctx.stroke();
+      ctx.fillStyle = "#9aa0a8";
+      ctx.beginPath();
+      ctx.moveTo(3, 0);
+      ctx.lineTo(5.2, -0.9);
+      ctx.lineTo(5.2, 0.9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
     for (const p of particles) {
       ctx.globalAlpha = Math.min(1, p.ttl * 2.5);
       ctx.fillStyle = p.color;
@@ -864,7 +885,9 @@ export class Renderer {
   // ---- Çiftlik hayvanları ----
 
   private drawAnimal(ctx: CanvasRenderingContext2D, a: Animal): void {
-    const x = a.x;
+    // ısırık hamlesi: gövde ava doğru atılır
+    const lunge = a.lungeT > 0 ? (a.lungeT / 0.22) * 3.5 : 0;
+    const x = a.x + a.facing * lunge;
     const y = a.y;
     const bob = Math.sin(a.walkPhase) * 0.6;
     const f = a.facing;
@@ -1011,6 +1034,14 @@ export class Renderer {
         ctx.fillRect(x + f * 4.6, y - 7 + bob + headDrop, 0.9, 0.9); // göz
         break;
       }
+    }
+
+    // isabet parlaması: vurulan hayvan bir an bembeyaz yanar
+    if (a.hitFlash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${Math.min(0.85, a.hitFlash * 5)})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 4.5, 5.5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // av işareti: kırmızı köşeli çerçeve
@@ -1802,6 +1833,18 @@ export class Renderer {
       ctx.lineWidth = 1.1;
       ctx.fillStyle = "#d4453f";
       ctx.fillRect(x + 12 * v.facing - 1, y + 1.5 + bob, 2, 2);
+    } else if (v.state === "hunting") {
+      // dövüş: mızrak/balta ileri savrulur (attackAnim atış anında tepe yapar)
+      const punch = v.attackAnim > 0 ? (v.attackAnim / 0.3) * 2.5 : Math.sin(v.walkPhase) * 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x + v.facing * 1.8, y - 9);
+      ctx.lineTo(x + v.facing * (4 + punch), y - 8.2);
+      ctx.stroke();
+      // arka kol dengede
+      ctx.beginPath();
+      ctx.moveTo(x - v.facing * 1.8, y - 9);
+      ctx.lineTo(x - v.facing * 3, y - 6.4);
+      ctx.stroke();
     } else if (v.state === "worshipping" || v.pleadingTtl > 0) {
       // dua/yakarış: iki kol göğe kalkık, hafifçe sallanır
       const sway = Math.sin(v.walkPhase) * 0.8;
@@ -1846,21 +1889,37 @@ export class Renderer {
 
     drawVillagerJobAccessories(ctx, x, y, v.facing, v.assignment, 1);
 
-    // mızraklı köylü: sırtında/elinde mızrak taşır
+    // mızraklı köylü: dövüşte elde yatay, normalde sırtta taşınır
     if (v.spears > 0 && !v.baby) {
       ctx.strokeStyle = "#d4c49a";
       ctx.lineWidth = 0.9;
-      ctx.beginPath();
-      ctx.moveTo(x - v.facing * 2.2, y - 2.5);
-      ctx.lineTo(x + v.facing * 2.6, y - 12.5);
-      ctx.stroke();
-      ctx.fillStyle = "#9aa0a8"; // taş uç
-      ctx.beginPath();
-      ctx.moveTo(x + v.facing * 2.6, y - 12.5);
-      ctx.lineTo(x + v.facing * 3.6, y - 14.2);
-      ctx.lineTo(x + v.facing * 1.8, y - 13.6);
-      ctx.closePath();
-      ctx.fill();
+      if (v.state === "hunting") {
+        const punch = v.attackAnim > 0 ? (v.attackAnim / 0.3) * 2.5 : Math.sin(v.walkPhase) * 0.8;
+        const hx = x + v.facing * (4 + punch);
+        ctx.beginPath();
+        ctx.moveTo(hx - v.facing * 6, y - 8.6);
+        ctx.lineTo(hx + v.facing * 2.4, y - 8.2);
+        ctx.stroke();
+        ctx.fillStyle = "#9aa0a8";
+        ctx.beginPath();
+        ctx.moveTo(hx + v.facing * 2.4, y - 8.2);
+        ctx.lineTo(hx + v.facing * 4.4, y - 9);
+        ctx.lineTo(hx + v.facing * 2.6, y - 7.2);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(x - v.facing * 2.2, y - 2.5);
+        ctx.lineTo(x + v.facing * 2.6, y - 12.5);
+        ctx.stroke();
+        ctx.fillStyle = "#9aa0a8"; // taş uç
+        ctx.beginPath();
+        ctx.moveTo(x + v.facing * 2.6, y - 12.5);
+        ctx.lineTo(x + v.facing * 3.6, y - 14.2);
+        ctx.lineTo(x + v.facing * 1.8, y - 13.6);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
 
     // yakaran köylü: başının üstünde el işareti; şokta yıldırım
@@ -1893,6 +1952,12 @@ export class Renderer {
     if (v.state === "eating") {
       ctx.fillStyle = "#d43f3f";
       ctx.fillRect(x + 2.5 * v.facing, y - 10, 1.5, 1.5);
+    }
+
+    // ısırık parlaması: hasar anında kırmızı yanıp söner
+    if (v.hitFlash > 0) {
+      ctx.fillStyle = `rgba(255,60,40,${Math.min(0.6, v.hitFlash * 3)})`;
+      ctx.fillRect(x - 2.6, y - 14.4, 5.2, 14.4);
     }
 
     // yara göstergesi: yırtıcı saldırısı yemiş köylüde kırmızı can barı

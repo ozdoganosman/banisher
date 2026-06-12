@@ -1,4 +1,4 @@
-import { addFloater, burst } from "../render/effects";
+import { addFloater, burst, throwSpearFx } from "../render/effects";
 import { foodItemOf, Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
 import type { Animal } from "./animals";
@@ -27,6 +27,7 @@ import {
   TORCH_LIGHT_RADIUS,
   WORSHIP_TIME,
 } from "./buildings";
+import { addJournal } from "./journal";
 import { babyIdentity, randomIdentity, type Identity } from "./names";
 import { hasTech } from "./tech";
 import { isNight, isSleepTime, season, totalDays, dayFrac, tuning, DAYS_PER_YEAR } from "./time";
@@ -191,6 +192,8 @@ export class Villager {
   dead = false;
   deathCause: "hunger" | "predator" = "hunger";
   hp = 100; // yırtıcı saldırılarıyla azalır, zamanla iyileşir
+  hitFlash = 0; // ısırık yendiği anda kırmızı parlar
+  attackAnim = 0; // fırlatma/saplama animasyon sayacı (renderer okur)
   educated = false; // bakımevinde yetişen çocuk: %20 hız bonusu
   hasAxe = false; // atölyeden balta aldı: ağaçları kesip odun çıkarır
   hasClothes = false; // deri giysi: kışın üşümez ve yavaşlamaz
@@ -281,6 +284,7 @@ export class Villager {
     this.screamCooldown = 5;
     screams.push({ x: this.x, y: this.y, animal, ttl: SCREAM_TTL });
     addFloater(this.x, this.y - 20, "Çığlık! ❗", "#ff8855");
+    addJournal(`❗ ${this.fullName} çığlık attı — yardım çağırıyor!`);
   }
 
   // Merak: oyuncu mikrofonla konuştu — şok + 2 günlük büyük moral
@@ -298,6 +302,7 @@ export class Villager {
   takeDamage(amount: number, from: Animal, world: World): void {
     if (this.dead) return;
     this.hp -= amount;
+    this.hitFlash = 0.22;
     addFloater(this.x, this.y - 16, `-${amount}`, "#ff5544");
     this.scream(from);
     if (!this.armed || this.baby || this.child) {
@@ -581,6 +586,8 @@ export class Villager {
 
     // yaralar zamanla iyileşir
     if (this.hp < 100 && !this.starving) this.hp = Math.min(100, this.hp + 1.5 * dt);
+    if (this.hitFlash > 0) this.hitFlash -= dt;
+    if (this.attackAnim > 0) this.attackAnim -= dt;
 
     // yırtıcıdan kaçış: her şeyi bırak, düz uzaklaş
     if (this.fleeTimer > 0) {
@@ -2103,12 +2110,20 @@ export class Villager {
     this.throwTimer -= dt;
     if (this.throwTimer > 0) return;
     this.throwTimer = SPEAR_THROW_TIME / this.getWorkSpeedFactor();
+    this.attackAnim = 0.3; // kol savurma pozu
     if (useSpear) {
       this.spears--;
       job.thrown++;
-      burst(a.x, a.y - 4, "#d4c49a", 5);
+      // mızrak uçuşu: varış anında saplanma efekti (hasar hemen işlenir)
+      const tx = a.x;
+      const ty = a.y - 4;
+      throwSpearFx(this.x + this.facing * 3, this.y - 9, tx, ty, () => {
+        burst(tx, ty, "#d4c49a", 4);
+        burst(tx, ty, "#d44040", 3);
+      });
     } else {
       burst(a.x, a.y - 4, "#c9d4dc", 4);
+      burst(a.x, a.y - 3, "#d44040", 3);
     }
     a.takeHit(useSpear ? SPEAR_DAMAGE : MELEE_DAMAGE, this.x, this.y);
     if (a.hp <= 0) {
@@ -2116,6 +2131,11 @@ export class Villager {
       a.dead = true;
       a.slaughtered = true;
       a.claimed = false;
+      if (a.def.predator) {
+        addJournal(`⚔ ${this.fullName} saldırgan ${a.def.name.toLowerCase()} hayvanını öldürdü!`);
+      } else {
+        addJournal(`🏹 ${this.fullName} bir ${a.def.name.toLowerCase()} avladı`);
+      }
       this.gainItem("meat", a.def.huntYield, a.x, a.y - 10);
       if (a.def.leatherYield > 0) this.gainItem("leather", a.def.leatherYield, a.x, a.y - 4);
       if (a.def.woolYield > 0) this.gainItem("wool", a.def.woolYield, a.x, a.y + 2);

@@ -1,6 +1,8 @@
 // Çiftlik hayvanları: çiftliğin etrafında dolanır, acıkınca çimende otlar,
 // ürünleri çiftçiler toplar. Aç hayvan üretmez; uzun süre aç kalan telef olur.
 
+import { burst } from "../render/effects";
+import { addJournal } from "./journal";
 import { Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
 import type { Building } from "./buildings";
@@ -77,10 +79,13 @@ export class Animal {
   claimed = false; // bir köylü bu hayvana yöneldi
   produceTimer: number;
   hp: number; // mızrak/balta darbeleriyle azalır
+  hitFlash = 0; // isabet anında beyaz parlar
+  lungeT = 0; // yırtıcı ısırık hamlesi (öne atılma)
   fleeTimer = 0; // mızrak yiyen hayvan kaçar
   private fleeDirX = 0;
   private fleeDirY = 0;
   private attackTimer = 0; // yırtıcı saldırı ritmi
+  private aggroLogged = false; // saldırı deftere bir kez yazılır
   // yabaniler doğdukları noktanın çevresinde dolanır
   private anchorX: number;
   private anchorY: number;
@@ -112,6 +117,7 @@ export class Animal {
   // Mızrak isabeti: hasar al ve saldırgandan kaçmaya başla
   takeHit(damage: number, fromX: number, fromY: number): void {
     this.hp -= damage;
+    this.hitFlash = 0.18;
     const dx = this.x - fromX;
     const dy = this.y - fromY;
     const d = Math.hypot(dx, dy) || 1;
@@ -133,6 +139,8 @@ export class Animal {
   }
 
   update(dt: number, world: World, villagers?: Villager[]): void {
+    if (this.hitFlash > 0) this.hitFlash -= dt;
+    if (this.lungeT > 0) this.lungeT -= dt;
     // mızrak yiyen hayvan kaçar (yırtıcılar bile geri çekilir)
     if (this.fleeTimer > 0) {
       this.fleeTimer -= dt;
@@ -168,10 +176,17 @@ export class Animal {
       this.attackTimer -= dt;
       if (prey && preyD <= PREDATOR_CHASE_GIVEUP) {
         this.grazing = false;
+        if (!this.aggroLogged) {
+          this.aggroLogged = true;
+          addJournal(`🐺 ${this.def.name} ${prey.fullName} adlı köylüye saldırıyor!`);
+        }
         if (preyD <= PREDATOR_ATTACK_RANGE) {
           // ısır
           if (this.attackTimer <= 0) {
             this.attackTimer = PREDATOR_ATTACK_INTERVAL;
+            this.lungeT = 0.22; // öne atıl
+            this.facing = prey.x >= this.x ? 1 : -1;
+            burst(prey.x, prey.y - 6, "#d44040", 6); // pençe izi
             prey.takeDamage(this.def.attackDamage ?? 10, this, world);
           }
         } else {
@@ -191,6 +206,7 @@ export class Animal {
         }
         return;
       }
+      if (!prey) this.aggroLogged = false;
     }
 
     // açlık ve telef

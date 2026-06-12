@@ -42,7 +42,50 @@ export function burst(x: number, y: number, color: string, n: number): void {
   if (particles.length > 200) particles.splice(0, particles.length - 200);
 }
 
+// Uçan mızraklar: avcıdan hedefe süzülür, varınca saplanma efekti bırakır
+export interface SpearShot {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  angle: number;
+  ttl: number;
+  onHit?: () => void;
+}
+
+export const spearShots: SpearShot[] = [];
+
+export function throwSpearFx(
+  fromX: number, fromY: number,
+  toX: number, toY: number,
+  onHit?: () => void
+): void {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const dist = Math.hypot(dx, dy) || 1;
+  const SPEED = 260; // dünya-piksel/sn
+  spearShots.push({
+    x: fromX,
+    y: fromY,
+    vx: (dx / dist) * SPEED,
+    vy: (dy / dist) * SPEED,
+    angle: Math.atan2(dy, dx),
+    ttl: dist / SPEED,
+    onHit,
+  });
+}
+
 export function updateEffects(dt: number): void {
+  for (let i = spearShots.length - 1; i >= 0; i--) {
+    const sp = spearShots[i];
+    sp.ttl -= dt;
+    sp.x += sp.vx * dt;
+    sp.y += sp.vy * dt;
+    if (sp.ttl <= 0) {
+      sp.onHit?.();
+      spearShots.splice(i, 1);
+    }
+  }
   for (let i = floaters.length - 1; i >= 0; i--) {
     const f = floaters[i];
     f.ttl -= dt;

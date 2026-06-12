@@ -19,6 +19,7 @@ import {
   totalStored,
   type ItemType,
 } from "../sim/resources";
+import { journal } from "../sim/journal";
 import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
   darkness,
@@ -534,7 +535,7 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
 // ---- Sürüklenebilir paneller ----
 // Her panel başlangıç konumuna göre bir ofset taşır; sürükleyince değişir.
 
-export type PanelId = "profile" | "building" | "tech" | "pop" | "people";
+export type PanelId = "profile" | "building" | "tech" | "pop" | "people" | "journal";
 
 const panelOffsets: Record<PanelId, { x: number; y: number }> = {
   profile: { x: 0, y: 0 },
@@ -542,6 +543,7 @@ const panelOffsets: Record<PanelId, { x: number; y: number }> = {
   tech: { x: 0, y: 0 },
   pop: { x: 0, y: 0 },
   people: { x: 0, y: 0 },
+  journal: { x: 0, y: 0 },
 };
 
 // Panelin son çizilen (ofset dahil) dikdörtgeni
@@ -558,6 +560,7 @@ export function panelRectOf(id: PanelId): { x: number; y: number; w: number; h: 
     case "tech": return techRect;
     case "pop": return popRect;
     case "people": return peopleRect;
+    case "journal": return journalRect;
   }
 }
 
@@ -1511,6 +1514,90 @@ export function drawPeoplePanel(ctx: CanvasRenderingContext2D, villagers: Villag
   }
 }
 
+// ---- Savaş ve Tehlike Defteri ----
+
+const JOURNAL_W = 470;
+const JOURNAL_ROW_H = 30;
+const JOURNAL_MAX_ROWS = 12;
+let journalScroll = 0;
+let journalRect = { x: 0, y: 0, w: JOURNAL_W, h: 0 };
+
+export function journalScrollBy(n: number): void {
+  journalScroll = Math.max(0, Math.min(Math.max(0, journal.length - JOURNAL_MAX_ROWS), journalScroll + n));
+}
+
+export function isOverJournalPanel(sx: number, sy: number): boolean {
+  return sx >= journalRect.x && sx <= journalRect.x + journalRect.w &&
+    sy >= journalRect.y && sy <= journalRect.y + journalRect.h;
+}
+
+export function journalPanelHitTest(sx: number, sy: number): "close" | "panel" | null {
+  const cx = journalRect.x + journalRect.w - 26;
+  const cy = journalRect.y + 8;
+  if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return "close";
+  if (isOverJournalPanel(sx, sy)) return "panel";
+  return null;
+}
+
+export function drawJournalPanel(ctx: CanvasRenderingContext2D): void {
+  const count = journal.length;
+  journalScroll = Math.max(0, Math.min(Math.max(0, count - JOURNAL_MAX_ROWS), journalScroll));
+  const visible = Math.min(count, JOURNAL_MAX_ROWS);
+
+  const w = JOURNAL_W;
+  const x = ctx.canvas.width - w - 12 + panelOffsets.journal.x;
+  const y = 54 + panelOffsets.journal.y;
+  const listY = y + 40;
+  const h = 40 + Math.max(1, visible) * JOURNAL_ROW_H + 12;
+  journalRect = { x, y, w, h };
+
+  // deri kaplı defter görünümü
+  ctx.fillStyle = "rgba(28, 20, 12, 0.94)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#8a6a43";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 4.5, y + 4.5, w - 9, h - 9);
+  drawCloseButton(ctx, x + w - 26, y + 8);
+
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#e8c87a";
+  ctx.font = "bold 15px monospace";
+  ctx.fillText("📖 Savaş ve Tehlike Defteri", x + 12, y + 20);
+  if (count > JOURNAL_MAX_ROWS) {
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "11px monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(`▲▼ (${journalScroll + 1}-${journalScroll + visible}/${count})`, x + w - 36, y + 20);
+    ctx.textAlign = "left";
+  }
+
+  if (count === 0) {
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "12px monospace";
+    ctx.fillText("Henüz kayda değer bir olay yaşanmadı.", x + 14, listY + 14);
+    return;
+  }
+
+  for (let row = 0; row < visible; row++) {
+    const e = journal[journalScroll + row];
+    const ry = listY + row * JOURNAL_ROW_H;
+    if (row % 2 === 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      ctx.fillRect(x + 6, ry, w - 12, JOURNAL_ROW_H);
+    }
+    ctx.fillStyle = "#8a8478";
+    ctx.font = "10px monospace";
+    ctx.fillText(e.stamp, x + 14, ry + 9);
+    ctx.fillStyle = "#e0d8c4";
+    ctx.font = "12px monospace";
+    ctx.fillText(e.text, x + 14, ry + 21, w - 28);
+  }
+}
+
 const TECH_CARD_W = 200;
 const TECH_CARD_H = 116;
 const TECH_COL_W = 220;
@@ -1709,6 +1796,12 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
 
 let popButtonRect = { x: 0, y: 0, w: 0, h: 0 };
 let peopleButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+let journalButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+
+export function journalButtonHitTest(sx: number, sy: number): boolean {
+  return sx >= journalButtonRect.x && sx <= journalButtonRect.x + journalButtonRect.w &&
+    sy >= journalButtonRect.y && sy <= journalButtonRect.y + journalButtonRect.h;
+}
 let techButtonRect = { x: 0, y: 0, w: 0, h: 0 };
 
 export function peopleButtonHitTest(sx: number, sy: number): boolean {
@@ -1804,6 +1897,22 @@ export function drawHud(
     ctx.lineWidth = 1;
     ctx.strokeRect(peopleButtonRect.x + 0.5, peopleButtonRect.y + 0.5, peopleButtonRect.w - 1, peopleButtonRect.h - 1);
     ctx.fillStyle = "#e8e2d0";
+    ctx.fillText(label, cx + 6, 18);
+    cx += bw + 10;
+  }
+
+  // defter düğmesi (savaş/tehlike kayıtları)
+  {
+    const label = `Defter ▾`;
+    ctx.font = "15px monospace";
+    const bw = ctx.measureText(label).width + 16;
+    journalButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
+    ctx.fillStyle = "rgba(138, 106, 67, 0.2)";
+    ctx.fillRect(journalButtonRect.x, journalButtonRect.y, journalButtonRect.w, journalButtonRect.h);
+    ctx.strokeStyle = "#8a6a43";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(journalButtonRect.x + 0.5, journalButtonRect.y + 0.5, journalButtonRect.w - 1, journalButtonRect.h - 1);
+    ctx.fillStyle = "#e8c87a";
     ctx.fillText(label, cx + 6, 18);
     cx += bw + 10;
   }
@@ -1937,7 +2046,7 @@ export function drawHud(
   // yardım metni yalnızca sığıyorsa
   ctx.textAlign = "right";
   ctx.font = "12px monospace";
-  const help = "N: işler • M: insanlar • T: teknoloji • Space: durdur • X: hız";
+  const help = "N: işler • M: insanlar • B: defter • T: teknoloji • Space: durdur • X: hız";
   if (w - 100 - ctx.measureText(help).width > cx + 16) {
     ctx.fillStyle = "#9a9488";
     ctx.fillText(help, w - 100, 18);

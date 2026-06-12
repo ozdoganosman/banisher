@@ -22,6 +22,11 @@ import {
   peopleButtonHitTest,
   drawPeoplePanel,
   isOverPeoplePanel,
+  drawJournalPanel,
+  journalPanelHitTest,
+  journalButtonHitTest,
+  journalScrollBy,
+  isOverJournalPanel,
   type MarkFilter,
   profileHitTest,
   speedButtonHitTest,
@@ -69,6 +74,7 @@ import {
   resources,
   type ItemType,
 } from "./sim/resources";
+import { addJournal } from "./sim/journal";
 import { screams, updateScreams, Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
 import { TILE_SIZE } from "./world/tiles";
@@ -136,6 +142,7 @@ let selectedVillager: Villager | null = null;
 let selectedBuilding: Building | null = null;
 let showPopulation = false;
 let showPeople = false;
+let showJournal = false;
 let showTech = false;
 let markFilter: MarkFilter = "all";
 // sol tuş sürükleme: alan seçimi veya mini harita gezdirme
@@ -389,6 +396,10 @@ input.onClick = (wx, wy, sx, sy) => {
     showPeople = !showPeople;
     return;
   }
+  if (journalButtonHitTest(sx, sy)) {
+    showJournal = !showJournal;
+    return;
+  }
   if (techButtonHitTest(sx, sy)) {
     showTech = !showTech;
     return;
@@ -428,6 +439,15 @@ input.onClick = (wx, wy, sx, sy) => {
       if (hit.kind === "close") showPopulation = false;
       else if (hit.kind === "hire") hire(hit.building);
       else if (hit.kind === "fire") fire(hit.building);
+      return;
+    }
+  }
+
+  // defter paneli
+  if (showJournal) {
+    const hit = journalPanelHitTest(sx, sy);
+    if (hit) {
+      if (hit === "close") showJournal = false;
       return;
     }
   }
@@ -592,6 +612,7 @@ input.onClick = (wx, wy, sx, sy) => {
 function closeTopmost(): boolean {
   if (selected !== null) { selected = null; return true; }
   if (showTech) { showTech = false; return true; }
+  if (showJournal) { showJournal = false; return true; }
   if (showPeople) { showPeople = false; return true; }
   if (showPopulation) { showPopulation = false; return true; }
   if (selectedVillager) { selectedVillager = null; return true; }
@@ -615,6 +636,7 @@ input.onLeftDragStart = (wx, wy, sx, sy) => {
     sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h;
   const panelOrder: [boolean, PanelId][] = [
     [showTech, "tech"],
+    [showJournal, "journal"],
     [showPeople, "people"],
     [showPopulation, "pop"],
     [!!selectedVillager, "profile"],
@@ -745,6 +767,10 @@ function markSelection(sel: { x0: number; y0: number; x1: number; y1: number }):
 
 // Nüfus menüsü açıkken üzerindeyken tekerlek menüyü kaydırır
 input.wheelInterceptor = (sx, sy, deltaY) => {
+  if (showJournal && isOverJournalPanel(sx, sy)) {
+    journalScrollBy(deltaY > 0 ? 1 : -1);
+    return true;
+  }
   if (showPeople && isOverPeoplePanel(sx, sy)) {
     peopleScrollBy(deltaY > 0 ? 1 : -1, villagers.length);
     return true;
@@ -767,6 +793,8 @@ window.addEventListener("keydown", (e) => {
     showPopulation = !showPopulation;
   } else if (e.code === "KeyM") {
     showPeople = !showPeople;
+  } else if (e.code === "KeyB") {
+    showJournal = !showJournal;
   } else if (e.code === "KeyT") {
     showTech = !showTech;
   } else if (e.code === "KeyF") {
@@ -984,6 +1012,7 @@ function updateDangerCamera(dt: number): void {
     if (villagerInDanger(v)) {
       dangerFollow = v;
       addMessage(`⚠ ${v.fullName} tehlikede — kamera takipte!`);
+      addJournal(`⚠ ${v.fullName} bir yırtıcıyla karşı karşıya!`);
       break;
     }
   }
@@ -1180,11 +1209,12 @@ function step(dt: number) {
   for (let i = villagers.length - 1; i >= 0; i--) {
     if (villagers[i].dead) {
       const v = villagers[i];
-      addMessage(
+      const deathText =
         v.deathCause === "predator"
-          ? `🐺 ${v.fullName} yırtıcı saldırısında can verdi!`
-          : `${v.fullName} açlıktan öldü!`
-      );
+          ? `💀 ${v.fullName} yırtıcı saldırısında can verdi!`
+          : `💀 ${v.fullName} açlıktan öldü!`;
+      addMessage(deathText);
+      addJournal(deathText);
       if (selectedVillager === v) selectedVillager = null;
       villagers.splice(i, 1);
     }
@@ -1445,6 +1475,7 @@ function frame(now: number) {
     if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers);
     if (showPopulation) drawPopulationPanel(ctx, villagers, buildings);
     if (showPeople) drawPeoplePanel(ctx, villagers);
+    if (showJournal) drawJournalPanel(ctx);
     if (showTech) drawTechPanel(ctx);
   }
 
