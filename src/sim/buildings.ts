@@ -121,7 +121,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildTime: 11,
     size: 2,
     maxWorkers: 2,
-    desc: "Tavuk, inek ve domuz besler; çiftçiler yumurta, süt ve et toplar",
+    desc: "Bir tür seçilir (inek/tavuk/koyun/domuz); evcilleştirilen yabaniler bu çiftliğe gelir",
   },
   [BuildingType.ToolWorkshop]: {
     name: "Alet Atölyesi",
@@ -250,6 +250,8 @@ export class Building {
   clothReserved = 0;
   // Binaya meşale takıldı: geceyi aydınlatır (5 dal, Doğa gerekir)
   hasTorch = false;
+  // Çiftlik: beslediği tür (kurulduktan sonra panelden seçilir)
+  farmType: import("./animals").AnimalType | null = null;
   // Tapınak: rahiplerin tuttuğu dua yerleri (üst üste durmasınlar)
   readonly worshipSpots = new Set<number>();
   private scanTimer = Math.random() * SCAN_INTERVAL;
@@ -373,6 +375,7 @@ export function isBuildingUnlocked(type: BuildingType): boolean {
   if (type === BuildingType.ToolWorkshop) return hasTech("toolworkshop");
   if (type === BuildingType.HunterLodge) return hasTech("kan");
   if (type === BuildingType.Splitter) return hasTech("toolworkshop"); // odun keşfi
+  if (type === BuildingType.Barn) return hasTech("ciftlik");
   // Meşale artık ayrı bina değil: Doğa ile binalara takılır
   return false;
 }

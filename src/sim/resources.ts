@@ -45,7 +45,7 @@ export const resources: Record<ItemType, number> & { cap: number; knowledge: num
   ...(Object.fromEntries(ITEM_TYPES.map((t) => [t, 0])) as Record<ItemType, number>),
   wood: 20,
   berry: 20,
-  cap: 100,
+  cap: 500, // temel çadır (kamp) stoğu
   knowledge: 0, // tapınaklarda üretilir; depo kapasitesine tabi değildir
 };
 

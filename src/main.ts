@@ -33,6 +33,7 @@ import {
   drawTechPanel,
   techButtonHitTest,
   techPanelHitTest,
+  techScrollBy,
   TOOLBAR_HEIGHT,
   TOOLBAR_TYPES,
   toolbarHitTest,
@@ -44,7 +45,7 @@ import {
   type PanelId,
 } from "./render/hud";
 import { buyTech, grantTech, hasTech, TECHS, type TechId } from "./sim/tech";
-import { Animal, ANIMAL_DEFS, BARN_HERD, WILD_POOL, type AnimalType } from "./sim/animals";
+import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, type AnimalType } from "./sim/animals";
 import {
   AXE_STONE_COST,
   AXE_WOOD_COST,
@@ -242,7 +243,7 @@ function wildAnimalAt(wx: number, wy: number): Animal | null {
   let best: Animal | null = null;
   let bestDist = 8;
   for (const a of animals) {
-    if (!a.wild || a.dead) continue;
+    if (!a.wild || a.dead || a.type === "dog") continue;
     const d = Math.hypot(wx - a.x, wy - (a.y - 3));
     if (d < bestDist) {
       bestDist = d;
@@ -273,7 +274,7 @@ function demolishBuilding(b: Building): void {
   if (b.type === BuildingType.Camp) return;
   b.removed = true;
   if (b.type === BuildingType.Depot && b.done) {
-    resources.cap = Math.max(100, resources.cap - DEPOT_CAP_BONUS);
+    resources.cap = Math.max(500, resources.cap - DEPOT_CAP_BONUS);
   }
   // çiftlik yıkılırsa hayvanları da gider
   for (let i = animals.length - 1; i >= 0; i--) {
@@ -521,6 +522,10 @@ input.onClick = (wx, wy, sx, sy) => {
         }
       } else if (hit === "clothMinus") {
         selectedBuilding.clothOrders = Math.max(0, selectedBuilding.clothOrders - 1);
+      } else if (hit === "farmCow" || hit === "farmChicken" || hit === "farmSheep" || hit === "farmPig") {
+        const map = { farmCow: "cow", farmChicken: "chicken", farmSheep: "sheep", farmPig: "pig" } as const;
+        selectedBuilding.farmType = map[hit];
+        addMessage(`Çiftlik türü seçildi: ${ANIMAL_DEFS[map[hit]].name}`);
       } else if (hit === "torch") {
         if (resources.wood >= TORCH_ATTACH_COST) {
           resources.wood -= TORCH_ATTACH_COST;
@@ -577,8 +582,29 @@ input.onClick = (wx, wy, sx, sy) => {
     }
     const wa = wildAnimalAt(wx, wy);
     if (wa) {
-      wa.hunted = !wa.hunted;
-      if (!wa.hunted) wa.claimed = false;
+      // tıklama döngüsü: av işareti -> evcilleştir (uygunsa) -> hiçbiri
+      const target = TAME_TARGET[wa.type];
+      const canTame =
+        !!target &&
+        (wa.type === "wolf"
+          ? hasTech("aidiyet")
+          : hasTech("ciftlik") &&
+            buildings.some(
+              (b) => b.type === BuildingType.Barn && b.done && b.farmType === target
+            ));
+      if (!wa.hunted && !wa.tameMark) {
+        wa.hunted = true;
+      } else if (wa.hunted) {
+        wa.hunted = false;
+        wa.claimed = false;
+        if (canTame) {
+          wa.tameMark = true;
+          addMessage(`${wa.def.name} evcilleştirme için işaretlendi`);
+        }
+      } else {
+        wa.tameMark = false;
+        wa.claimed = false;
+      }
       return;
     }
     const b = buildingAt(tx, ty);
@@ -663,7 +689,12 @@ input.onLeftDragMove = (wx, wy, sx, sy) => {
     return;
   }
   if (selecting.mode === "panel") {
-    dragPanelBy(selecting.id, sx - selecting.lx, sy - selecting.ly, canvas.width, canvas.height);
+    if (selecting.id === "tech") {
+      // tam ekran teknoloji ağacı: sürüklemek yatay kaydırır
+      techScrollBy(-(sx - selecting.lx));
+    } else {
+      dragPanelBy(selecting.id, sx - selecting.lx, sy - selecting.ly, canvas.width, canvas.height);
+    }
     selecting.lx = sx;
     selecting.ly = sy;
     return;
@@ -767,6 +798,10 @@ function markSelection(sel: { x0: number; y0: number; x1: number; y1: number }):
 
 // Nüfus menüsü açıkken üzerindeyken tekerlek menüyü kaydırır
 input.wheelInterceptor = (sx, sy, deltaY) => {
+  if (showTech) {
+    techScrollBy(deltaY * 0.9);
+    return true;
+  }
   if (showJournal && isOverJournalPanel(sx, sy)) {
     journalScrollBy(deltaY > 0 ? 1 : -1);
     return true;
@@ -893,6 +928,40 @@ function checkBirths(): void {
       }
     }
     if (!placed) mom.giveBirth(); // sıkışık durumda bebek annenin olduğu yerde sayılır
+  }
+}
+
+// Sahipsiz köpekler bir avcıya bağlanır (avcı başına dengeli dağıtım)
+function assignDogs(): void {
+  const hunters = villagers.filter(
+    (v) =>
+      v.canWork &&
+      v.assignment.kind === "building" &&
+      v.assignment.building.type === BuildingType.HunterLodge
+  );
+  for (const a of animals) {
+    if (a.type !== "dog" || a.dead) continue;
+    const ownerValid =
+      a.owner && !a.owner.dead &&
+      a.owner.assignment.kind === "building" &&
+      a.owner.assignment.building.type === BuildingType.HunterLodge;
+    if (ownerValid) continue;
+    a.owner = null;
+    if (hunters.length === 0) continue;
+    // en az köpeği olan avcıya ver
+    let best: Villager | null = null;
+    let bestCount = Infinity;
+    for (const h of hunters) {
+      const c = animals.filter((d) => d.type === "dog" && !d.dead && d.owner === h).length;
+      if (c < bestCount) {
+        bestCount = c;
+        best = h;
+      }
+    }
+    if (best) {
+      a.owner = best;
+      addMessage(`🐕 Köpek ${best.fullName} ile geziyor`);
+    }
   }
 }
 
@@ -1167,6 +1236,7 @@ function step(dt: number) {
     homeTimer = 1;
     assignHomes();
     assignChildcare();
+    assignDogs();
   }
 
   for (const v of villagers) v.update(dt, world, buildings, animals);
@@ -1246,11 +1316,6 @@ function step(dt: number) {
         addMessage(`Depo tamamlandı: kapasite +${DEPOT_CAP_BONUS}`);
       } else {
         addMessage(`${def.name} tamamlandı`);
-      }
-      // çiftlik tamamlanınca sürü gelir
-      if (b.type === BuildingType.Barn) {
-        for (const type of BARN_HERD) spawnAnimal(b, type);
-        addMessage("Çiftlik hayvanları geldi: tavuk, inek, domuz, koyun, keçi!");
       }
       // üretim binası tamamlanınca havuzdan 1 işçi otomatik istihdam edilir
       if (b.def.maxWorkers > 0 && hire(b)) {

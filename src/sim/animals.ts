@@ -10,9 +10,10 @@ import type { ItemType } from "./resources";
 import type { Villager } from "./villager";
 
 export type AnimalType =
-  | "chicken" | "cow" | "pig" | "sheep" | "goat" // çiftlik
-  | "rabbit" | "deer" | "boar" // yabani (avlanabilir)
-  | "wolf" | "bear"; // yırtıcı: insanları görünce saldırır
+  | "chicken" | "cow" | "pig" | "sheep" // çiftlik (evcilleştirmeyle gelir)
+  | "deer" | "bird" | "boar" | "goat" // yabani (avlanabilir/evcilleştirilebilir)
+  | "wolf" | "bear" // yırtıcı: insanları görünce saldırır
+  | "dog"; // evcilleşmiş kurt: avcıyla gezer, ava yardım eder
 
 export interface AnimalDef {
   name: string;
@@ -38,21 +39,28 @@ export const ANIMAL_DEFS: Record<AnimalType, AnimalDef> = {
   pig: { name: "Domuz", product: "meat", yieldAmount: 4, interval: 70, speed: 11, hp: 4, huntYield: 4, leatherYield: 1, woolYield: 0, slaughter: true },
   sheep: { name: "Koyun", product: "wool", yieldAmount: 2, interval: 50, speed: 10, hp: 4, huntYield: 2, leatherYield: 1, woolYield: 2 },
   goat: { name: "Keçi", product: "meat", yieldAmount: 1, interval: 40, speed: 12, hp: 4, huntYield: 2, leatherYield: 1, woolYield: 1 },
-  rabbit: { name: "Tavşan", product: "meat", yieldAmount: 1, interval: NEVER, speed: 24, hp: 2, huntYield: 1, leatherYield: 0, woolYield: 0 },
   deer: { name: "Geyik", product: "meat", yieldAmount: 4, interval: NEVER, speed: 20, hp: 6, huntYield: 4, leatherYield: 2, woolYield: 0 },
+  bird: { name: "Kuş", product: "meat", yieldAmount: 1, interval: NEVER, speed: 26, hp: 1, huntYield: 1, leatherYield: 0, woolYield: 0 },
   boar: { name: "Yaban Domuzu", product: "meat", yieldAmount: 3, interval: NEVER, speed: 13, hp: 5, huntYield: 3, leatherYield: 1, woolYield: 0 },
   wolf: { name: "Kurt", product: "meat", yieldAmount: 1, interval: NEVER, speed: 22, hp: 4, huntYield: 1, leatherYield: 1, woolYield: 0, predator: true, attackDamage: 12 },
   bear: { name: "Ayı", product: "meat", yieldAmount: 5, interval: NEVER, speed: 16, hp: 9, huntYield: 5, leatherYield: 3, woolYield: 0, predator: true, attackDamage: 22 },
+  dog: { name: "Köpek", product: "meat", yieldAmount: 0, interval: NEVER, speed: 26, hp: 5, huntYield: 1, leatherYield: 1, woolYield: 0 },
 };
 
-// Çiftlik tamamlanınca gelen sürü
-export const BARN_HERD: AnimalType[] = ["chicken", "chicken", "cow", "pig", "sheep", "goat"];
+// Evcilleştirme haritası: yabani tür -> evcil karşılığı
+// (geyik->inek, kuş->tavuk, keçi->koyun, yaban domuzu->domuz, kurt->köpek)
+export const TAME_TARGET: Partial<Record<AnimalType, AnimalType>> = {
+  deer: "cow",
+  bird: "chicken",
+  goat: "sheep",
+  boar: "pig",
+  wolf: "dog",
+};
 
-// Yabani doğum havuzu (ağırlıklı): normal hayvanlar da doğada rastgele türer;
-// yırtıcılar seyrek ama gerçek bir tehdittir
+// Yabani doğum havuzu (ağırlıklı): yırtıcılar seyrek ama gerçek bir tehdittir
 export const WILD_POOL: AnimalType[] = [
-  "rabbit", "rabbit", "rabbit", "deer", "deer", "boar",
-  "chicken", "chicken", "cow", "pig", "sheep", "sheep", "goat",
+  "deer", "deer", "deer", "bird", "bird", "bird",
+  "boar", "boar", "goat", "goat",
   "wolf", "bear",
 ];
 
@@ -76,6 +84,9 @@ export class Animal {
   dead = false;
   slaughtered = false; // çiftçi kesti / avlandı (telef değil)
   hunted = false; // oyuncu av için işaretledi (yalnızca yabaniler)
+  tameMark = false; // oyuncu evcilleştirme için işaretledi
+  owner: Villager | null = null; // köpek: birlikte gezdiği avcı
+  private dogBiteTimer = 0;
   claimed = false; // bir köylü bu hayvana yöneldi
   produceTimer: number;
   hp: number; // mızrak/balta darbeleriyle azalır
@@ -95,8 +106,8 @@ export class Animal {
   private idleTimer = Math.random() * 2;
 
   constructor(
-    readonly type: AnimalType,
-    readonly barn: Building | null,
+    public type: AnimalType,
+    public barn: Building | null,
     tileX: number,
     tileY: number
   ) {
@@ -161,8 +172,63 @@ export class Animal {
       return;
     }
 
+    // köpek: sahibini izler, sahibi avlanırken hedefe saldırır
+    if (this.type === "dog" && !this.dead) {
+      if (this.owner && this.owner.dead) this.owner = null;
+      this.dogBiteTimer -= dt;
+      const prey = this.owner?.currentHuntTarget ?? null;
+      if (prey && !prey.dead) {
+        const dx = prey.x - this.x;
+        const dy = prey.y - this.y;
+        const d = Math.hypot(dx, dy) || 1;
+        if (d <= 11) {
+          // ısır: ava yardım (yırtıcılara karşı da)
+          if (this.dogBiteTimer <= 0) {
+            this.dogBiteTimer = 1.2;
+            this.lungeT = 0.2;
+            this.facing = dx >= 0 ? 1 : -1;
+            burst(prey.x, prey.y - 3, "#d44040", 3);
+            prey.takeHit(1, this.x, this.y);
+          }
+        } else {
+          const nx = this.x + (dx / d) * this.def.speed * 1.6 * dt;
+          const ny = this.y + (dy / d) * this.def.speed * 1.6 * dt;
+          if (world.walkableAt(Math.floor(nx / TILE_SIZE), Math.floor(ny / TILE_SIZE))) {
+            this.x = nx;
+            this.y = ny;
+            this.facing = dx > 0 ? 1 : -1;
+            this.walkPhase += dt * 11;
+          }
+        }
+        return;
+      }
+      if (this.owner) {
+        // sahibinin yanında dolan (2 blok mesafe)
+        const dx = this.owner.x + 10 - this.x;
+        const dy = this.owner.y + 4 - this.y;
+        const d = Math.hypot(dx, dy);
+        if (d > 2.2 * TILE_SIZE) {
+          const nx = this.x + (dx / d) * this.def.speed * 1.4 * dt;
+          const ny = this.y + (dy / d) * this.def.speed * 1.4 * dt;
+          if (world.walkableAt(Math.floor(nx / TILE_SIZE), Math.floor(ny / TILE_SIZE))) {
+            this.x = nx;
+            this.y = ny;
+            this.facing = dx > 0 ? 1 : -1;
+            this.walkPhase += dt * 9;
+          }
+          return;
+        }
+        this.walkPhase = 0;
+        // açlığını normal akışla gidersin (otlamaz ama market eti yemez; basit: acıkmaz)
+        this.hunger = Math.min(this.hunger, 50);
+        return;
+      }
+      // sahipsiz köpek: doğduğu yerin etrafında dolanır (alttaki genel akış)
+    }
+
     // yırtıcı: görüş alanındaki en yakın insana saldırır
-    if (this.def.predator && villagers && !this.dead) {
+    // (evcilleştirme işaretlisi yemle sakinleştirilmiştir: saldırmaz)
+    if (this.def.predator && !this.tameMark && villagers && !this.dead) {
       let prey: Villager | null = null;
       let preyD = PREDATOR_AGGRO_RANGE;
       for (const v of villagers) {

@@ -1,7 +1,7 @@
 import { addFloater, burst, throwSpearFx } from "../render/effects";
 import { foodItemOf, Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
-import type { Animal } from "./animals";
+import { ANIMAL_DEFS, TAME_TARGET, type Animal } from "./animals";
 import type { Building } from "./buildings";
 import {
   AUTO_MARK_RADIUS,
@@ -72,6 +72,7 @@ const EVENING_FRAC = 17 / 24; // 23:00 — iş biter, ateş başına toplanılı
 const COLD_MORALE_RATE = 0.045; // kışın giysisiz dışarıda olmanın moral bedeli (sn başına)
 const FISH_PER_CATCH = 2;
 const TEND_TIME = 2.5;
+const TAME_TIME = 6; // evcilleştirme: sabırlı yaklaşma
 const PLANT_TIME = 2;
 const FOOD_TARGET = 14; // toplayıcının alanında hedef çalı/mantar/yemiş
 
@@ -166,6 +167,7 @@ type Job =
   | { kind: "plant"; tile: number; target: Tile }
   | { kind: "tend"; animal: Animal }
   | { kind: "hunt"; animal: Animal }
+  | { kind: "tame"; animal: Animal; barn: Building | null }
   | { kind: "build"; building: Building }
   | { kind: "worship"; building: Building; tile: number }
   | { kind: "craft"; building: Building; product: "axe" | "spear" | "cloth" }
@@ -276,6 +278,11 @@ export class Villager {
 
   get armed(): boolean {
     return this.spears > 0 || this.hasAxe;
+  }
+
+  // Köpekler sahiplerinin av hedefini okur (yardıma koşmak için)
+  get currentHuntTarget(): Animal | null {
+    return this.job?.kind === "spearhunt" ? this.job.animal : null;
   }
 
   // Korku: çığlık at — yakındaki silahlılar yardıma gelir
@@ -396,6 +403,7 @@ export class Villager {
           case "plant": return "Ekime gidiyor";
           case "tend": return "Hayvana gidiyor";
           case "hunt": return "Ava gidiyor";
+          case "tame": return "Evcilleştirmeye gidiyor";
           case "build": return "Şantiyeye gidiyor";
           case "worship": return "Tapınağa gidiyor";
           case "craft": return "Atölyeye gidiyor";
@@ -562,7 +570,10 @@ export class Villager {
     return false;
   }
 
+  private lastBuildings: Building[] | null = null;
+
   update(dt: number, world: World, buildings: Building[], animals: Animal[]): void {
+    this.lastBuildings = buildings;
     // Yaş evresi geçişleri: bebek (0-7) -> çocuk (7-18) -> işçi (18+)
     const stage = this.baby ? 0 : this.canWork ? 2 : 1;
     if (stage !== this.lastStage) {
@@ -642,7 +653,7 @@ export class Villager {
       let threat: Animal | null = null;
       let threatD = 5 * TILE_SIZE;
       for (const a of animals) {
-        if (!a.def.predator || a.dead) continue;
+        if (!a.def.predator || a.dead || a.tameMark) continue;
         const d = Math.hypot(a.x - this.x, a.y - this.y);
         if (d < threatD) {
           threatD = d;
@@ -850,6 +861,7 @@ export class Villager {
       case "build": this.job.building.claimed = false; break;
       case "tend": this.job.animal.claimed = false; break;
       case "hunt": this.job.animal.claimed = false; break;
+      case "tame": this.job.animal.claimed = false; break;
       case "worship":
         this.job.building.worshipClaimed = false;
         this.job.building.worshipSpots.delete(this.job.tile);
@@ -1129,14 +1141,20 @@ export class Villager {
         }
       } else if (hut.type === BuildingType.HunterLodge) {
         // Avcı: mızrağı varsa kulübe çevresindeki en yakın yabani hayvana gider
+        // (köpeği olan avcının av sahası genişler)
         if (this.spears > 0 && !isFull("meat") && !bagFull) {
+          const hasDog = animals.some(
+            (d) => d.type === "dog" && !d.dead && d.owner === this
+          );
+          const range = (hasDog ? 45 : 30) * TILE_SIZE;
           let prey: Animal | null = null;
           let preyD = Infinity;
           for (const an of animals) {
             if (!an.wild || an.dead || an.fleeTimer > 0) continue;
+            if (an.type === "dog" || an.tameMark) continue; // köpekler ve evcilleştirilecekler avlanmaz
             const lodgeD =
               Math.abs(an.x - hut.centerX) + Math.abs(an.y - hut.centerY);
-            if (lodgeD > 30 * TILE_SIZE) continue; // kulübenin av sahası
+            if (lodgeD > range) continue; // kulübenin av sahası
             if (!lit(an.x, an.y)) continue;
             const d = Math.abs(an.x - this.x) + Math.abs(an.y - this.y);
             if (d < preyD) {
@@ -1403,6 +1421,42 @@ export class Villager {
       }
     }
 
+    // evcilleştirme: işaretli hayvana sabırla yaklaş
+    {
+      let bestT: Animal | null = null;
+      let bestTD = Infinity;
+      for (const an of animals) {
+        if (!an.tameMark || an.claimed || an.dead || !lit(an.x, an.y)) continue;
+        const d = Math.abs(an.x - this.x) + Math.abs(an.y - this.y);
+        if (d < bestTD) {
+          bestTD = d;
+          bestT = an;
+        }
+      }
+      if (bestT) {
+        const target = bestT;
+        candidates.push({
+          dist: bestTD / TILE_SIZE,
+          start: () => {
+            const path = findPath(
+              world, this.tileX, this.tileY,
+              Math.floor(target.x / TILE_SIZE), Math.floor(target.y / TILE_SIZE)
+            );
+            if (!path) return false;
+            target.claimed = true;
+            const wanted = TAME_TARGET[target.type];
+            const barn =
+              this.lastBuildings?.find(
+                (b) => b.type === BuildingType.Barn && b.done && b.farmType === wanted
+              ) ?? null;
+            this.job = { kind: "tame", animal: target, barn };
+            this.startPath(path);
+            return true;
+          },
+        });
+      }
+    }
+
     // ortalık işçisi: elle/kulübece işaretlenmiş her kaynağa gider
     if (!isFull("wood") && !bagFull && !gathererBlocksWood) {
       this.pushTileJobCandidate(
@@ -1646,6 +1700,8 @@ export class Villager {
         return !this.job.animal.dead;
       case "hunt":
         return !this.job.animal.dead && this.job.animal.hunted;
+      case "tame":
+        return !this.job.animal.dead && this.job.animal.tameMark;
       case "build":
       case "worship":
         return !this.job.building.removed &&
@@ -1764,6 +1820,11 @@ export class Villager {
       case "hunt":
         this.state = "tending";
         this.timer = TEND_TIME / speedFactor;
+        this.faceTowards(this.job.animal.x);
+        break;
+      case "tame":
+        this.state = "tending";
+        this.timer = TAME_TIME / speedFactor;
         this.faceTowards(this.job.animal.x);
         break;
       case "build":
@@ -2251,8 +2312,14 @@ export class Villager {
 
   private tend(dt: number): void {
     const job = this.job;
-    if (!job || (job.kind !== "tend" && job.kind !== "hunt") || job.animal.dead) {
-      if (job?.kind === "tend" || job?.kind === "hunt") job.animal.claimed = false;
+    if (
+      !job ||
+      (job.kind !== "tend" && job.kind !== "hunt" && job.kind !== "tame") ||
+      job.animal.dead
+    ) {
+      if (job?.kind === "tend" || job?.kind === "hunt" || job?.kind === "tame") {
+        job.animal.claimed = false;
+      }
       this.job = null;
       this.toIdle();
       return;
@@ -2261,6 +2328,32 @@ export class Villager {
     this.timer -= dt;
     if (this.timer <= 0) {
       const a = job.animal;
+      if (job.kind === "tame") {
+        // evcilleştirme: yabani tür evcil karşılığına dönüşür
+        const target = TAME_TARGET[a.type];
+        if (target) {
+          a.type = target;
+          a.tameMark = false;
+          a.hunted = false;
+          a.claimed = false;
+          a.hp = a.def.hp;
+          a.fleeTimer = 0;
+          if (target === "dog") {
+            a.barn = null;
+            a.owner = null; // main en uygun avcıya bağlar
+            addJournal(`🐕 ${this.fullName} bir kurdu evcilleştirdi — artık köpek!`);
+            addFloater(a.x, a.y - 10, "🐕 Evcilleşti!", "#8fd05e");
+          } else {
+            a.barn = job.barn;
+            a.produceTimer = a.def.interval * (0.4 + Math.random() * 0.6);
+            addJournal(`🐄 ${this.fullName} bir ${ANIMAL_DEFS[target].name.toLowerCase()} kazandırdı (evcilleştirme)`);
+            addFloater(a.x, a.y - 10, "Evcilleşti!", "#8fd05e");
+          }
+        }
+        this.job = null;
+        this.toIdle();
+        return;
+      }
       if (job.kind === "hunt") {
         // av: hayvan gider, balık gelir
         this.gainItem("fish", a.def.huntYield, a.x, a.y - 10);

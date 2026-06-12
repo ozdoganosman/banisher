@@ -16,7 +16,9 @@ export type TechId =
   | "toolworkshop"
   | "kan"
   | "gathering"
-  | "leatherworking";
+  | "leatherworking"
+  | "aidiyet"
+  | "ciftlik";
 
 export interface Tech {
   id: TechId;
@@ -114,6 +116,24 @@ export const TECHS: Tech[] = [
     desc: "Toplayıcı kulübesini açar: doğaya yemiş eker ve toplar",
     prereq: ["mushroomology"],
     gridX: 2,
+    gridY: 6,
+  },
+  {
+    id: "aidiyet",
+    name: "Aidiyet",
+    cost: 18,
+    desc: "Kurtlar evcilleştirilip köpek olur; köpek avcısıyla gezer, ava saldırır ve av menzilini genişletir",
+    prereq: ["merak"],
+    gridX: 3,
+    gridY: 4,
+  },
+  {
+    id: "ciftlik",
+    name: "Çiftlik",
+    cost: 22,
+    desc: "Çiftlik kurulur: bir tür seçilir; o türe evrilen yabaniler (geyik->inek, kuş->tavuk, keçi->koyun, yaban domuzu->domuz) evcilleştirilince çiftliğe gelir",
+    prereq: ["aidiyet", "gathering"],
+    gridX: 3,
     gridY: 6,
   },
   {

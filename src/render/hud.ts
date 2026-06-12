@@ -19,6 +19,7 @@ import {
   totalStored,
   type ItemType,
 } from "../sim/resources";
+import { ANIMAL_DEFS } from "../sim/animals";
 import { journal } from "../sim/journal";
 import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
@@ -850,6 +851,8 @@ let bpanelSpearPlus: { x: number; y: number; w: number; h: number } | null = nul
 let bpanelSpearMinus: { x: number; y: number; w: number; h: number } | null = null;
 let bpanelClothPlus: { x: number; y: number; w: number; h: number } | null = null;
 let bpanelClothMinus: { x: number; y: number; w: number; h: number } | null = null;
+// Çiftlik tür seçimi düğmeleri
+let bpanelFarmBtns: { kind: "farmCow" | "farmChicken" | "farmSheep" | "farmPig"; x: number; y: number; w: number; h: number }[] = [];
 // Meşale takma düğmesi (Doğa araştırıldıysa, meşalesiz binalarda)
 let bpanelTorch: { x: number; y: number; w: number; h: number } | null = null;
 
@@ -858,7 +861,8 @@ export function buildingPanelHitTest(
   sy: number
 ):
   | "close" | "hire" | "fire" | "demolish" | "orderPlus" | "orderMinus"
-  | "spearPlus" | "spearMinus" | "clothPlus" | "clothMinus" | "torch" | "panel" | null {
+  | "spearPlus" | "spearMinus" | "clothPlus" | "clothMinus" | "torch"
+  | "farmCow" | "farmChicken" | "farmSheep" | "farmPig" | "panel" | null {
   const cx = bpanel.x + bpanel.w - 24;
   const cy = bpanel.y + 6;
   if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return "close";
@@ -872,6 +876,9 @@ export function buildingPanelHitTest(
   if (inRect(bpanelSpearMinus)) return "spearMinus";
   if (inRect(bpanelClothPlus)) return "clothPlus";
   if (inRect(bpanelClothMinus)) return "clothMinus";
+  for (const fb of bpanelFarmBtns) {
+    if (inRect(fb)) return fb.kind;
+  }
   if (inRect(bpanelTorch)) return "torch";
   if (inRect(bpanelDemolish)) return "demolish";
   if (sx >= bpanel.x && sx <= bpanel.x + bpanel.w && sy >= bpanel.y && sy <= bpanel.y + bpanel.h) {
@@ -941,6 +948,7 @@ export function drawBuildingPanel(
       b.type === BuildingType.Temple ||
       b.type === BuildingType.HunterLodge
     ) h += 22;
+    else if (b.type === BuildingType.Barn) h += b.farmType ? 22 : 52;
     else if (b.type === BuildingType.ToolWorkshop) {
       h += 64;
       if (hasTech("kan")) h += 40;
@@ -964,6 +972,7 @@ export function drawBuildingPanel(
   bpanelSpearMinus = null;
   bpanelClothPlus = null;
   bpanelClothMinus = null;
+  bpanelFarmBtns = [];
   bpanelTorch = null;
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
@@ -1206,6 +1215,36 @@ export function drawBuildingPanel(
     ctx.font = "12px monospace";
     ctx.fillStyle = "#e8e2d0";
     ctx.fillText("Avcılar mızrakla en yakın avı vurur", x + 12, ly + 2);
+  } else if (b.type === BuildingType.Barn) {
+    ctx.font = "12px monospace";
+    if (b.farmType) {
+      ctx.fillStyle = "#8fd05e";
+      ctx.fillText(`Tür: ${ANIMAL_DEFS[b.farmType].name} çiftliği`, x + 12, ly + 2);
+    } else {
+      ctx.fillStyle = "#e0a83c";
+      ctx.fillText("Tür seç (evcilleşenler buraya gelir):", x + 12, ly);
+      const opts = [
+        { kind: "farmCow", label: "İnek" },
+        { kind: "farmChicken", label: "Tavuk" },
+        { kind: "farmSheep", label: "Koyun" },
+        { kind: "farmPig", label: "Domuz" },
+      ] as const;
+      let bx = x + 12;
+      const byy = ly + 14;
+      ctx.font = "11px monospace";
+      for (const o of opts) {
+        const bw = ctx.measureText(o.label).width + 14;
+        bpanelFarmBtns.push({ kind: o.kind, x: bx, y: byy, w: bw, h: 18 });
+        ctx.fillStyle = "rgba(143, 208, 94, 0.15)";
+        ctx.fillRect(bx, byy, bw, 18);
+        ctx.strokeStyle = "#8fd05e";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx + 0.5, byy + 0.5, bw - 1, 17);
+        ctx.fillStyle = "#c8e8b0";
+        ctx.fillText(o.label, bx + 7, byy + 9);
+        bx += bw + 6;
+      }
+    }
   } else if (b.type === BuildingType.Temple) {
     ctx.font = "12px monospace";
     if (b.worshipClaimed) {
@@ -1598,13 +1637,23 @@ export function drawJournalPanel(ctx: CanvasRenderingContext2D): void {
   }
 }
 
-const TECH_CARD_W = 200;
-const TECH_CARD_H = 116;
-const TECH_COL_W = 220;
-const TECH_ROW_H = 78;
-const TECH_W = 24 + 4 * TECH_COL_W + TECH_CARD_W + 24; // 1128
-const TECH_H = 64 + 6 * TECH_ROW_H + TECH_CARD_H + 20; // 668
-let techRect = { x: 0, y: 0, w: TECH_W, h: TECH_H };
+const TECH_CARD_W = 210;
+const TECH_CARD_H = 118;
+const TECH_COL_W = 250;
+const TECH_ROW_H = 80;
+const TECH_TOP = 34; // üst barın altından başlar (tam ekran)
+const TECH_MAX_COL = 4; // en sağdaki sütun (gridX)
+// Sütun başlıkları: bilgi soldan sağa çağ çağ akar
+const TECH_COL_NAMES = ["Sezgiler", "Temeller", "Beceriler", "Zanaat", "Ustalık"];
+let techRect = { x: 0, y: 0, w: 0, h: 0 };
+let techScrollX = 0; // yatay kaydırma (sürükle / tekerlek)
+let techViewW = 1280;
+
+export function techScrollBy(dx: number): void {
+  const contentW = 80 + (TECH_MAX_COL + 1) * TECH_COL_W;
+  const max = Math.max(0, contentW - techViewW);
+  techScrollX = Math.max(0, Math.min(max, techScrollX + dx));
+}
 
 export type TechHit =
   | { kind: "close" }
@@ -1613,8 +1662,8 @@ export type TechHit =
   | null;
 
 function getTechPos(tech: Tech, panelX: number, panelY: number) {
-  const startX = panelX + 24;
-  const startY = panelY + 64;
+  const startX = panelX + 60 - techScrollX;
+  const startY = panelY + 88;
   return {
     x: startX + tech.gridX * TECH_COL_W,
     y: startY + tech.gridY * TECH_ROW_H,
@@ -1648,30 +1697,59 @@ export function techPanelHitTest(sx: number, sy: number): TechHit {
 }
 
 export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
-  const w = TECH_W;
-  const h = TECH_H;
-  const x = (ctx.canvas.width - w) / 2 + panelOffsets.tech.x;
-  const y = 54 + panelOffsets.tech.y;
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height - TECH_TOP;
+  const x = 0;
+  const y = TECH_TOP;
   techRect = { x, y, w, h };
+  techViewW = w;
+  techScrollBy(0); // pencere küçüldüyse kaydırmayı sınırla
 
-  ctx.fillStyle = "rgba(10, 12, 16, 0.95)";
+  // tam ekran zemin: koyu taş dokusu hissi + kenar vinyeti
+  ctx.fillStyle = "rgba(12, 11, 16, 0.97)";
   ctx.fillRect(x, y, w, h);
+  const vg = ctx.createRadialGradient(w / 2, y + h / 2, h * 0.3, w / 2, y + h / 2, h);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(0,0,0,0.5)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(x, y, w, h);
+
+  // sütun kılavuzları ve çağ başlıkları
+  for (let c = 0; c <= TECH_MAX_COL; c++) {
+    const cx = 60 - techScrollX + c * TECH_COL_W;
+    if (cx + TECH_CARD_W < 0 || cx > w) continue;
+    ctx.fillStyle = "rgba(255,255,255,0.025)";
+    ctx.fillRect(cx - 14, y + 70, TECH_CARD_W + 28, h - 90);
+    ctx.fillStyle = "#8a7a5c";
+    ctx.font = "bold 13px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(TECH_COL_NAMES[c] ?? "", cx + TECH_CARD_W / 2, y + 56);
+    ctx.textAlign = "left";
+  }
+
+  // başlık şeridi
+  ctx.fillStyle = "rgba(20, 16, 28, 0.9)";
+  ctx.fillRect(x, y, w, 36);
   ctx.strokeStyle = "#8a6cc0";
   ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-  drawCloseButton(ctx, x + w - 26, y + 8);
+  ctx.beginPath();
+  ctx.moveTo(x, y + 36.5);
+  ctx.lineTo(x + w, y + 36.5);
+  ctx.stroke();
+  drawCloseButton(ctx, x + w - 30, y + 9);
 
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   ctx.fillStyle = "#d8c8f0";
-  ctx.font = "bold 15px monospace";
-  ctx.fillText("Teknoloji Ağacı", x + 12, y + 18);
-  ctx.font = "12px monospace";
+  ctx.font = "bold 17px monospace";
+  ctx.fillText("Teknoloji Ağacı", x + 16, y + 18);
+  ctx.font = "13px monospace";
   ctx.fillStyle = "#b08fe0";
-  ctx.fillText(`Bilgi: ${resources.knowledge}`, x + 12, y + 40);
+  ctx.fillText(`Bilgi: ${resources.knowledge}`, x + 200, y + 18);
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
-  ctx.fillText("(rahipler tapınakta üretir)", x + 110, y + 40);
+  ctx.fillText("(rahipler tapınakta üretir)  •  ◀ ▶ sürükleyerek/tekerlekle kaydır", x + 300, y + 18);
 
   const cardW = TECH_CARD_W;
   const cardH = TECH_CARD_H;
@@ -1694,44 +1772,60 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
       ctx.strokeStyle = isOwned
         ? "rgba(143, 208, 94, 0.65)"
         : isParentOwned
-        ? "rgba(176, 143, 224, 0.45)"
+        ? "rgba(176, 143, 224, 0.5)"
         : "rgba(255, 255, 255, 0.1)";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(pRightX, pRightY);
       ctx.bezierCurveTo(
-        pRightX + 30,
-        pRightY,
-        curLeftX - 30,
-        curLeftY,
-        curLeftX,
-        curLeftY
+        pRightX + 36, pRightY,
+        curLeftX - 36, curLeftY,
+        curLeftX, curLeftY
       );
       ctx.stroke();
+      // akış yönü oku
+      ctx.fillStyle = isParentOwned ? "rgba(176,143,224,0.7)" : "rgba(255,255,255,0.18)";
+      ctx.beginPath();
+      ctx.moveTo(curLeftX - 1, curLeftY);
+      ctx.lineTo(curLeftX - 7, curLeftY - 3.5);
+      ctx.lineTo(curLeftX - 7, curLeftY + 3.5);
+      ctx.closePath();
+      ctx.fill();
     }
   });
 
   // 2. Kartları çiz
   TECHS.forEach((tech) => {
     const pos = getTechPos(tech, x, y);
+    if (pos.x + cardW < 0 || pos.x > w) return; // görünüm dışı
     const owned = hasTech(tech.id);
     const locked = !prereqsMet(tech);
     const affordable = resources.knowledge >= tech.cost;
 
-    // Kart arka planı
+    // Kart arka planı (yuvarlatılmış, satın alınabilirse ışıltılı)
+    ctx.beginPath();
+    ctx.roundRect(pos.x, pos.y, cardW, cardH, 7);
     if (owned) {
-      ctx.fillStyle = "rgba(90, 143, 60, 0.25)";
+      ctx.fillStyle = "rgba(90, 143, 60, 0.28)";
       ctx.strokeStyle = "#8fd05e";
     } else if (locked) {
-      ctx.fillStyle = "rgba(20, 20, 20, 0.45)";
+      ctx.fillStyle = "rgba(22, 22, 26, 0.7)";
       ctx.strokeStyle = "#3a3d42";
     } else {
-      ctx.fillStyle = affordable ? "rgba(138, 108, 192, 0.25)" : "rgba(255, 255, 255, 0.04)";
+      ctx.fillStyle = affordable ? "rgba(138, 108, 192, 0.3)" : "rgba(255, 255, 255, 0.05)";
       ctx.strokeStyle = affordable ? "#b08fe0" : "#5a5f68";
     }
-    ctx.lineWidth = 1;
-    ctx.fillRect(pos.x, pos.y, cardW, cardH);
-    ctx.strokeRect(pos.x + 0.5, pos.y + 0.5, cardW - 1, cardH - 1);
+    if (!owned && !locked && affordable) {
+      ctx.save();
+      ctx.shadowColor = "rgba(176, 143, 224, 0.8)";
+      ctx.shadowBlur = 14;
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.fill();
+    }
+    ctx.lineWidth = owned || (!locked && affordable) ? 1.6 : 1;
+    ctx.stroke();
 
     // İsim (uzun adlar iki satıra sarılır)
     ctx.font = "bold 13px monospace";
@@ -1765,6 +1859,7 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
 
     // Ayraç çizgisi
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(pos.x + 10, cy2 + 0.5);
     ctx.lineTo(pos.x + cardW - 10, cy2 + 0.5);
@@ -1786,10 +1881,22 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
     // Satın alınabilir kartlarda tıklama ipucu
     if (buyHint) {
       ctx.font = "bold 11px monospace";
-      ctx.fillStyle = "#b08fe0";
+      ctx.fillStyle = "#d8c0ff";
       ctx.fillText("▶ Araştırmak için tıkla", pos.x + 10, pos.y + cardH - 11);
     }
   });
+
+  // kaydırma çubuğu (altta ince şerit)
+  const contentW = 80 + (TECH_MAX_COL + 1) * TECH_COL_W;
+  if (contentW > w) {
+    const trackW = w - 24;
+    const thumbW = Math.max(60, (w / contentW) * trackW);
+    const tx2 = 12 + (techScrollX / (contentW - w)) * (trackW - thumbW);
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(12, y + h - 10, trackW, 4);
+    ctx.fillStyle = "#8a6cc0";
+    ctx.fillRect(tx2, y + h - 10, thumbW, 4);
+  }
 }
 
 // ---- Üst bar, bildirimler, araç çubuğu ----

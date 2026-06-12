@@ -962,14 +962,45 @@ export class Renderer {
         ctx.fillRect(x + 1.5, y - 1.5, 1, 1.5);
         break;
       }
-      case "rabbit": {
-        ctx.fillStyle = "#cfc8ba";
-        ctx.fillRect(x - 2, y - 3 + bob, 4, 2.5);
-        ctx.fillRect(x + f * 1.8 - 0.5, y - 4 + bob + headDrop, 2, 2); // kafa
-        ctx.fillRect(x + f * 1.8 - 0.3, y - 5.8 + bob + headDrop, 0.8, 2); // kulaklar
-        ctx.fillRect(x + f * 1.8 + 0.8, y - 5.8 + bob + headDrop, 0.8, 2);
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(x - f * 2.2, y - 2.5 + bob, 1, 1); // pamuk kuyruk
+      case "bird": {
+        // küçük yer kuşu: tombul gövde + gaga + kanat çizgisi
+        ctx.fillStyle = "#8a7a64";
+        ctx.beginPath();
+        ctx.ellipse(x, y - 2.6 + bob, 2.6, 1.9, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#6e5f4c";
+        ctx.fillRect(x - 1.6, y - 3.2 + bob, 2.6, 1); // kanat
+        ctx.fillStyle = "#8a7a64";
+        ctx.fillRect(x + f * 2.2 - 0.8, y - 4.6 + bob + headDrop, 1.8, 1.8); // kafa
+        ctx.fillStyle = "#e0a030";
+        ctx.fillRect(x + f * 3.2, y - 4 + bob + headDrop, 1.1, 0.8); // gaga
+        ctx.fillStyle = "#2a2622";
+        ctx.fillRect(x + f * 2.4, y - 4.2 + bob + headDrop, 0.6, 0.6); // göz
+        ctx.fillStyle = "#e0a030";
+        ctx.fillRect(x - 0.6, y - 0.8, 0.7, 1); // bacaklar
+        ctx.fillRect(x + 0.4, y - 0.8, 0.7, 1);
+        break;
+      }
+      case "dog": {
+        // evcil köpek: kahverengi, kıvrık kuyruk, dik kulak
+        ctx.fillStyle = "#b08050";
+        ctx.fillRect(x - 3.2, y - 4.6 + bob, 6.4, 3);
+        ctx.fillRect(x + f * 3.2 - 1, y - 5.4 + bob + headDrop, 2.6, 2.4); // kafa
+        ctx.fillRect(x + f * 3.1, y - 6.4 + bob + headDrop, 0.9, 1.2); // kulak
+        // kıvrık kuyruk
+        ctx.strokeStyle = "#b08050";
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.arc(x - f * 3.6, y - 5 + bob, 1.6, 0, Math.PI * 1.2);
+        ctx.stroke();
+        ctx.fillStyle = "#8a6038";
+        ctx.fillRect(x - 2.6, y - 1.8, 1, 1.8);
+        ctx.fillRect(x + 1.6, y - 1.8, 1, 1.8);
+        ctx.fillStyle = "#2a2622";
+        ctx.fillRect(x + f * 4.6, y - 4.4 + bob + headDrop, 0.9, 0.9); // burun
+        // tasma (evcil işareti)
+        ctx.fillStyle = "#c0473f";
+        ctx.fillRect(x + f * 2 - 0.6, y - 3.2 + bob, 1.6, 0.8);
         break;
       }
       case "deer": {
@@ -1042,6 +1073,21 @@ export class Renderer {
       ctx.beginPath();
       ctx.ellipse(x, y - 4.5, 5.5, 4, 0, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // evcilleştirme işareti: yeşil köşeli çerçeve
+    if (a.tameMark) {
+      ctx.strokeStyle = "rgba(110, 220, 120, 0.95)";
+      ctx.lineWidth = 0.8;
+      const r2 = 6;
+      for (const [cxs, cys] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        ctx.beginPath();
+        ctx.moveTo(x + cxs * r2, y - 4 + cys * r2);
+        ctx.lineTo(x + cxs * r2, y - 4 + cys * r2 * 0.45);
+        ctx.moveTo(x + cxs * r2, y - 4 + cys * r2);
+        ctx.lineTo(x + cxs * r2 * 0.45, y - 4 + cys * r2);
+        ctx.stroke();
+      }
     }
 
     // av işareti: kırmızı köşeli çerçeve
