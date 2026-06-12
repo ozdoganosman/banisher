@@ -1197,6 +1197,8 @@ function step(dt: number) {
       b.warnedOut = true;
       if (b.type === BuildingType.ToolWorkshop) {
         addMessage(`⚠ ${b.def.name} sipariş bekliyor! (binaya tıklayıp sipariş ver)`);
+      } else if (b.type === BuildingType.Splitter) {
+        addMessage("⚠ Kırıcıda işlenecek odun yok! (baltayla ağaç kestirin)");
       } else {
         addMessage(`⚠ ${b.def.name} kulübesinin menzilinde kaynak kalmadı!`);
       }

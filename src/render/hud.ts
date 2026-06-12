@@ -400,6 +400,7 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.Woodcutter,
   BuildingType.Gatherer,
   BuildingType.ToolWorkshop,
+  BuildingType.Splitter,
   BuildingType.Fisher,
   BuildingType.Barn,
   BuildingType.HunterLodge,

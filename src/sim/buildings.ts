@@ -1,7 +1,7 @@
 import { TILE_SIZE } from "../world/tiles";
 import { Tile } from "../world/tiles";
 import type { World } from "../world/world";
-import { isFull } from "./resources";
+import { isFull, resources as resourceStore } from "./resources";
 import { hasTech } from "./tech";
 
 export const enum BuildingType {
@@ -18,6 +18,7 @@ export const enum BuildingType {
   Barn = 10, // çiftlik: tavuk/inek/domuz besler, çiftçiler ürün toplar
   ToolWorkshop = 12, // Alet atölyesi: sipariş üzerine balta/mızrak üretir
   HunterLodge = 13, // Avcı kulübesi: mızraklı avcılar en yakın hayvanları avlar
+  Splitter = 14, // Kırıcı: odunu dala böler (1 odun -> 4 dal)
 }
 
 export interface BuildingDef {
@@ -138,7 +139,20 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     maxWorkers: 3,
     desc: "3 avcı: mızrakla en yakın hayvanları avlar; et, deri ve yün kazanılır",
   },
+  [BuildingType.Splitter]: {
+    name: "Kırıcı",
+    cost: 10,
+    buildTime: 8,
+    size: 2,
+    maxWorkers: 1,
+    desc: "Kırıcı odunu dala böler: 1 odun -> 4 dal (stokta odun oldukça çalışır)",
+  },
 };
+
+// Kırıcı dönüşümü
+export const SPLIT_LOG_COST = 1;
+export const SPLIT_BRANCH_YIELD = 4;
+export const SPLIT_TIME = 5;
 
 // Balta üretim reçetesi
 export const AXE_WOOD_COST = 3;
@@ -179,6 +193,7 @@ export const ROLE_NAMES: Partial<Record<BuildingType, string>> = {
   [BuildingType.ToolWorkshop]: "Alet Ustası",
   [BuildingType.Nursery]: "Bakıcı",
   [BuildingType.HunterLodge]: "Avcı",
+  [BuildingType.Splitter]: "Kırıcı",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları
@@ -282,6 +297,11 @@ export class Building {
         this.orders <= 0 && this.spearOrders <= 0 && this.clothOrders <= 0;
       return;
     }
+    if (this.type === BuildingType.Splitter) {
+      // işlenecek odun yoksa uyar
+      this.outOfResources = resourceStore.log < SPLIT_LOG_COST;
+      return;
+    }
     if (this.type !== BuildingType.Woodcutter && this.type !== BuildingType.Gatherer) return;
     this.scanTimer -= dt;
     if (this.scanTimer > 0) return;
@@ -352,6 +372,7 @@ export function isBuildingUnlocked(type: BuildingType): boolean {
   if (type === BuildingType.Gatherer) return hasTech("gathering"); // toplayıcılık
   if (type === BuildingType.ToolWorkshop) return hasTech("toolworkshop");
   if (type === BuildingType.HunterLodge) return hasTech("kan");
+  if (type === BuildingType.Splitter) return hasTech("toolworkshop"); // odun keşfi
   // Meşale artık ayrı bina değil: Doğa ile binalara takılır
   return false;
 }

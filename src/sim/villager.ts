@@ -10,6 +10,9 @@ import {
   AXE_WOOD_COST,
   CLOTH_CRAFT_TIME,
   CLOTH_LEATHER_COST,
+  SPLIT_BRANCH_YIELD,
+  SPLIT_LOG_COST,
+  SPLIT_TIME,
   BuildingType,
   isDepositPoint,
   isLit,
@@ -40,6 +43,7 @@ import {
   ITEM_INFO,
   ITEM_TYPES,
   resources,
+  totalStored,
   type ItemType,
   FOOD_TYPES,
   FOOD_NUTRITION,
@@ -166,6 +170,7 @@ type Job =
   | { kind: "craft"; building: Building; product: "axe" | "spear" | "cloth" }
   | { kind: "pickup"; building: Building; product: "axe" | "spear" | "cloth"; amount: number }
   | { kind: "spearhunt"; animal: Animal; thrown: number }
+  | { kind: "split"; building: Building }
   | { kind: "sleep"; building: Building | null }
   | { kind: "eat"; building: Building }
   | { kind: "deposit"; building: Building };
@@ -389,6 +394,7 @@ export class Villager {
           case "build": return "Şantiyeye gidiyor";
           case "worship": return "Tapınağa gidiyor";
           case "craft": return "Atölyeye gidiyor";
+          case "split": return "Kırıcıya gidiyor";
           case "pickup":
             return this.job.product === "axe"
               ? "Balta almaya gidiyor"
@@ -406,6 +412,7 @@ export class Villager {
       case "chopping":
         return this.hasAxe ? "Ağaç kesiyor" : "Dal topluyor";
       case "crafting":
+        if (this.job?.kind === "split") return "Odun yarıyor";
         return this.job?.kind === "craft" && this.job.product === "spear"
           ? "Mızrak yapıyor"
           : this.job?.kind === "craft" && this.job.product === "cloth"
@@ -855,6 +862,7 @@ export class Villager {
         this.job.thrown = 0;
         break;
       case "craft": break;
+      case "split": break;
       case "deposit": break;
     }
     this.job = null;
@@ -1086,6 +1094,27 @@ export class Villager {
               );
               if (!path) return false;
               this.job = { kind: "craft", building: hut, product };
+              this.startPath(path);
+              return true;
+            },
+          });
+        }
+      } else if (hut.type === BuildingType.Splitter) {
+        // Kırıcı: stokta odun varsa ve dallara yer varsa kütük yarar
+        const space = resources.cap - totalStored();
+        if (
+          resources.log >= SPLIT_LOG_COST &&
+          space >= SPLIT_BRANCH_YIELD - SPLIT_LOG_COST &&
+          lit(hut.centerX, hut.centerY)
+        ) {
+          candidates.push({
+            dist: 0,
+            start: () => {
+              const path = findPathAdjacentRect(
+                world, this.tileX, this.tileY, hut.x, hut.y, hut.size
+              );
+              if (!path) return false;
+              this.job = { kind: "split", building: hut };
               this.startPath(path);
               return true;
             },
@@ -1629,6 +1658,9 @@ export class Villager {
         }
         return shop.clothOrders > 0 && resources.leather >= CLOTH_LEATHER_COST;
       }
+      case "split":
+        return !this.job.building.removed && resources.log >= SPLIT_LOG_COST &&
+          (!night || isLit(buildings, this.job.building.centerX, this.job.building.centerY));
       case "pickup":
         return !this.job.building.removed &&
           (this.job.product === "axe"
@@ -1734,6 +1766,11 @@ export class Villager {
       case "worship":
         this.state = "worshipping";
         this.timer = WORSHIP_TIME / speedFactor;
+        this.faceTowards(this.job.building.centerX);
+        break;
+      case "split":
+        this.state = "crafting";
+        this.timer = SPLIT_TIME / speedFactor;
         this.faceTowards(this.job.building.centerX);
         break;
       case "craft":
@@ -1922,6 +1959,10 @@ export class Villager {
   // Atölyede balta yap: hammadde tamamlanınca düşülür, stok artar
   private craft(dt: number): void {
     const job = this.job;
+    if (job?.kind === "split") {
+      this.split(dt, job.building);
+      return;
+    }
     if (!job || job.kind !== "craft" || job.building.removed) {
       this.job = null;
       this.toIdle();
@@ -1968,6 +2009,30 @@ export class Villager {
       }
       if (!made) {
         addFloater(shop.centerX, shop.y * TILE_SIZE - 6, "Hammadde yok!", "#ff6655");
+      }
+      this.job = null;
+      this.toIdle();
+    }
+  }
+
+  // Kırıcıda kütük yarma: 1 odun -> 4 dal
+  private split(dt: number, shop: Building): void {
+    if (shop.removed) {
+      this.job = null;
+      this.toIdle();
+      return;
+    }
+    this.walkPhase += dt * 10; // balyoz ritmi
+    this.hitParticles(dt, shop.centerX, shop.centerY - 6, "#8a6a43");
+    this.timer -= dt;
+    if (this.timer <= 0) {
+      if (resources.log >= SPLIT_LOG_COST) {
+        resources.log -= SPLIT_LOG_COST;
+        const added = addItem("wood", SPLIT_BRANCH_YIELD);
+        addFloater(
+          shop.centerX, shop.y * TILE_SIZE - 6,
+          `+${added} dal`, "#8a6a43"
+        );
       }
       this.job = null;
       this.toIdle();

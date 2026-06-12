@@ -20,7 +20,6 @@ const SKIN = "#e8b88a";
 const LINE = "#26221e";
 const WOOD_DARK = "#6b4a2b";
 const WOOD_MID = "#8a6a43";
-const WALL = "#b08d5a"; // bina duvarı: zemindeki toprak tonundan ayrışsın
 const OUTLINE = "#3a2c1a";
 
 // Su: sığdan derine doğru koyulaşan iki palet (alt kare başına karıştırılır)
@@ -836,42 +835,30 @@ export class Renderer {
       case BuildingType.Barn: this.drawBarn(ctx, px, py); break;
       case BuildingType.ToolWorkshop: this.drawToolWorkshop(ctx, px, py); break;
       case BuildingType.HunterLodge: this.drawHunterLodge(ctx, px, py); break;
+      case BuildingType.Splitter: this.drawSplitter(ctx, px, py); break;
     }
   }
 
   private drawBarn(ctx: CanvasRenderingContext2D, px: number, py: number): void {
     this.baseShadow(ctx, px + 16, py + 29, 15);
-    // kırmızı ahır: beyaz çerçeveli büyük kapı
-    ctx.fillStyle = "#a8362e";
-    ctx.fillRect(px + 3, py + 12, 26, 17);
-    this.outlineRect(ctx, px + 3, py + 12, 26, 17);
-    // beşik çatı
-    ctx.fillStyle = "#7a2820";
-    for (let r = 0; r < 7; r++) {
-      const w = 8 + r * 3;
-      ctx.fillRect(px + 16 - w / 2, py + 4 + r, w, 1.5);
-    }
-    ctx.fillStyle = "#c4524a";
-    ctx.fillRect(px + 12, py + 4, 8, 1.5);
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 3, py + 12, 26, 2);
-    // büyük kapı + beyaz çapraz
-    ctx.fillStyle = "#7a2820";
-    ctx.fillRect(px + 11, py + 18, 10, 11);
-    ctx.strokeStyle = "#e8e2d0";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(px + 11.5, py + 18.5, 9, 10);
-    ctx.beginPath();
-    ctx.moveTo(px + 11.5, py + 18.5);
-    ctx.lineTo(px + 20.5, py + 28.5);
-    ctx.moveTo(px + 20.5, py + 18.5);
-    ctx.lineTo(px + 11.5, py + 28.5);
-    ctx.stroke();
-    // saman balyası
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 3, py + 10, 2.2, 12);
+    ctx.fillRect(px + 14, py + 10, 2.2, 12);
+    this.paintThatch(ctx, px + 1, py + 5, 17, 6);
     ctx.fillStyle = "#d8b84a";
-    ctx.fillRect(px + 24, py + 23, 5, 5);
+    ctx.beginPath();
+    ctx.ellipse(px + 9, py + 20, 4.6, 3.2, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(px + 4.4, py + 20, 9.2, 2);
     ctx.fillStyle = "#b89a38";
-    ctx.fillRect(px + 24, py + 25, 5, 1);
+    ctx.fillRect(px + 5.4, py + 19, 7, 1);
+    ctx.fillStyle = "#6b4a2b";
+    for (const fx of [20, 25, 30] as const) ctx.fillRect(px + fx, py + 14, 1.8, 14);
+    ctx.fillStyle = "#8a6a43";
+    for (const fy of [17, 22] as const) ctx.fillRect(px + 20, py + fy, 11.4, 1.6);
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 4, py + 25.5, 14, 1.6);
+    for (const fx2 of [4, 10, 16] as const) ctx.fillRect(px + fx2, py + 23.6, 1.8, 5.4);
   }
 
   // ---- Çiftlik hayvanları ----
@@ -1065,92 +1052,108 @@ export class Renderer {
 
   private drawFisher(ctx: CanvasRenderingContext2D, px: number, py: number): void {
     this.baseShadow(ctx, px + 11, py + 29, 10);
-    // mavi çatılı kıyı kulübesi
-    ctx.fillStyle = WALL;
-    ctx.fillRect(px + 3, py + 12, 17, 17);
-    this.outlineRect(ctx, px + 3, py + 12, 17, 17);
-    ctx.fillStyle = "#3f7abd";
-    ctx.fillRect(px + 2, py + 8, 19, 5);
-    ctx.fillStyle = "#5b94d4";
-    ctx.fillRect(px + 2, py + 8, 19, 2);
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 3, py + 13, 17, 2);
-    ctx.fillStyle = "#4a2e1a";
-    ctx.fillRect(px + 9, py + 21, 5, 8);
-    // duvarda asılı balık tabelası
-    ctx.fillStyle = "#6fa8c9";
-    ctx.fillRect(px + 5, py + 16, 5, 2);
-    ctx.fillRect(px + 10, py + 15, 1.5, 4);
-    // fıçı + olta kamışı
-    this.baseShadow(ctx, px + 26, py + 27, 4, 1.3);
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(px + 23, py + 22, 6, 6);
-    ctx.fillStyle = "#9a6c40";
-    ctx.fillRect(px + 23, py + 24, 6, 1);
-    ctx.strokeStyle = WOOD_DARK;
-    ctx.lineWidth = 1;
+    this.paintLogWall(ctx, px + 3, py + 16, 15, 13);
+    this.paintThatch(ctx, px + 1, py + 10, 19, 6);
+    ctx.fillStyle = "#3a2616";
+    ctx.fillRect(px + 8, py + 22, 5, 7);
+    this.outlineRect(ctx, px + 8, py + 22, 5, 7);
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 21, py + 14, 1.8, 15);
+    ctx.fillRect(px + 29, py + 14, 1.8, 15);
+    ctx.strokeStyle = "#d8d2c0";
+    ctx.lineWidth = 0.8;
     ctx.beginPath();
-    ctx.moveTo(px + 28, py + 22);
-    ctx.lineTo(px + 31, py + 14);
+    ctx.moveTo(px + 22, py + 16);
+    ctx.lineTo(px + 30, py + 16);
     ctx.stroke();
+    for (const fx of [23.4, 26, 28.4] as const) {
+      ctx.fillStyle = "#6fa8c9";
+      ctx.beginPath();
+      ctx.ellipse(px + fx, py + 19, 1.1, 2.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#8fc4e0";
+      ctx.fillRect(px + fx - 0.8, py + 21, 1.6, 1.2);
+    }
   }
 
   private drawCafeteria(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 16, py + 29, 15);
-    // geniş yemek salonu
-    ctx.fillStyle = WALL;
-    ctx.fillRect(px + 2, py + 12, 28, 17);
-    this.outlineRect(ctx, px + 2, py + 12, 28, 17);
-    ctx.fillStyle = "#a85b32";
-    ctx.fillRect(px + 1, py + 7, 30, 6); // turuncu çatı
-    ctx.fillStyle = "#c07242";
-    ctx.fillRect(px + 1, py + 7, 30, 2);
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 2, py + 13, 28, 2);
-    // baca ve duman
-    ctx.fillStyle = "#6e7178";
-    ctx.fillRect(px + 24, py + 2, 3, 6);
-    ctx.fillStyle = "rgba(220,220,220,0.5)";
-    ctx.fillRect(px + 25, py - 1, 2, 2);
-    ctx.fillRect(px + 27, py - 3, 2, 2);
-    // tezgah ve çorba kasesi
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(px + 6, py + 22, 20, 3);
-    ctx.fillStyle = "#e8e0cc";
-    ctx.fillRect(px + 13, py + 19, 6, 3);
-    ctx.fillStyle = "#d43f3f";
-    ctx.fillRect(px + 14, py + 19, 4, 1.5);
-    // kapı
-    ctx.fillStyle = "#4a2e1a";
-    ctx.fillRect(px + 4, py + 21, 5, 8);
+    this.baseShadow(ctx, px + 16, py + 28, 14);
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 3, py + 8, 2, 12);
+    ctx.fillRect(px + 27, py + 8, 2, 12);
+    this.paintThatch(ctx, px + 1, py + 3, 30, 5);
+    ctx.fillStyle = "#7c7f86";
+    ctx.beginPath();
+    ctx.ellipse(px + 16, py + 22, 6, 3.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#4a3320";
+    ctx.beginPath();
+    ctx.ellipse(px + 16, py + 22, 4.2, 2.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#e8842c";
+    ctx.fillRect(px + 14.4, py + 18.6, 3.2, 3);
+    ctx.fillStyle = "#ffc83c";
+    ctx.fillRect(px + 15.2, py + 17.6, 1.6, 2);
+    ctx.strokeStyle = "#6b4a2b";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(px + 10, py + 22);
+    ctx.lineTo(px + 10, py + 14);
+    ctx.moveTo(px + 22, py + 22);
+    ctx.lineTo(px + 22, py + 14);
+    ctx.moveTo(px + 9, py + 15);
+    ctx.lineTo(px + 23, py + 15);
+    ctx.stroke();
+    ctx.fillStyle = "#c0564a";
+    ctx.beginPath();
+    ctx.ellipse(px + 16, py + 15, 2.6, 1.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#8a6a43";
+    ctx.fillRect(px + 4, py + 26, 9, 2.6);
+    ctx.fillRect(px + 19, py + 26, 9, 2.6);
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 0.7;
+    ctx.strokeRect(px + 4, py + 26, 9, 2.6);
+    ctx.strokeRect(px + 19, py + 26, 9, 2.6);
   }
 
   private drawNursery(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 16, py + 29, 14);
-    // bakımevi: açık duvar, pembe çatı
-    ctx.fillStyle = "#d8c9b0";
-    ctx.fillRect(px + 3, py + 12, 26, 17);
-    this.outlineRect(ctx, px + 3, py + 12, 26, 17);
-    ctx.fillStyle = "#c97a9a";
-    ctx.fillRect(px + 2, py + 7, 28, 6);
-    ctx.fillStyle = "#e09ab8";
-    ctx.fillRect(px + 2, py + 7, 28, 2);
-    ctx.fillStyle = "rgba(0,0,0,0.18)";
-    ctx.fillRect(px + 3, py + 13, 26, 2);
-    // beşik: yarım daire üstüne yatak
-    ctx.fillStyle = WOOD_DARK;
+    this.baseShadow(ctx, px + 14, py + 29, 12);
+    ctx.fillStyle = "#caa888";
     ctx.beginPath();
-    ctx.arc(px + 11, py + 24, 4, 0, Math.PI);
+    ctx.ellipse(px + 13, py + 24, 11, 11, 0, Math.PI, 0);
     ctx.fill();
+    ctx.fillRect(px + 2, py + 24, 22, 5);
+    ctx.fillStyle = "#b08e6e";
+    ctx.beginPath();
+    ctx.ellipse(px + 13, py + 24, 11, 11, 0, Math.PI, Math.PI * 1.35);
+    ctx.lineTo(px + 13, py + 24);
+    ctx.fill();
+    ctx.strokeStyle = "#8a6a50";
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(px + 8, py + 15);
+    ctx.lineTo(px + 7, py + 28);
+    ctx.moveTo(px + 17, py + 14.6);
+    ctx.lineTo(px + 18.6, py + 28);
+    ctx.stroke();
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(px + 13, py + 24, 11, 11, 0, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillStyle = "#3a2616";
+    ctx.fillRect(px + 10.5, py + 21.6, 5, 7.4);
+    ctx.fillStyle = "#e09ab8";
+    ctx.fillRect(px + 10.5, py + 21.6, 5, 2);
+    this.outlineRect(ctx, px + 10.5, py + 21.6, 5, 7.4);
+    ctx.fillStyle = "#8a6a43";
+    ctx.fillRect(px + 25.4, py + 24.6, 6, 3.6);
     ctx.fillStyle = "#f0eaff";
-    ctx.fillRect(px + 7, py + 21, 8, 3);
+    ctx.fillRect(px + 26.2, py + 23.4, 4.4, 2);
     ctx.fillStyle = "#ffb0d0";
-    ctx.fillRect(px + 9, py + 20, 4, 2);
-    // pencere ve kapı
-    ctx.fillStyle = "#bcd9f0";
-    ctx.fillRect(px + 20, py + 16, 5, 4);
-    ctx.fillStyle = "#4a2e1a";
-    ctx.fillRect(px + 19, py + 22, 5, 7);
+    ctx.fillRect(px + 27.2, py + 22.6, 2.4, 1.6);
+    this.outlineRect(ctx, px + 25.4, py + 23.4, 6, 4.8);
   }
 
   private drawSmallSite(ctx: CanvasRenderingContext2D, px: number, py: number, t: number): void {
@@ -1312,163 +1315,182 @@ export class Renderer {
     ctx.fill();
   }
 
-  private drawHouse(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 15, py + 29, 12);
+  // ---- İlkel çağ yapı dili: saz dam, kütük duvar, deri örtü ----
 
-    // Duvarlar: çamur-sıva, düzensiz görünümlü
-    ctx.fillStyle = "#9c7f58"; // çamur
-    ctx.fillRect(px + 5, py + 15, 22, 14);
-    ctx.fillStyle = "#8a6c40";
-    ctx.fillRect(px + 5, py + 22, 22, 1); // kirş
-    ctx.fillRect(px + 12, py + 15, 2, 14); // orta direk
-    ctx.fillRect(px + 20, py + 15, 2, 14); // yan direk
-    // Düzensiz çamur doku (küçük lekeler)
-    ctx.fillStyle = "#7a5c34";
-    ctx.fillRect(px + 7,  py + 17, 3, 1);
-    ctx.fillRect(px + 15, py + 20, 4, 1);
-    ctx.fillRect(px + 8,  py + 24, 2, 1);
-    ctx.fillRect(px + 22, py + 18, 2, 1);
-    ctx.fillRect(px + 18, py + 25, 3, 1);
-
-    // Çatı: eğrili çapraz dallar
-    ctx.strokeStyle = "#5a3820";
-    ctx.lineWidth = 1.8;
-    ctx.lineCap = "round";
-    // sol taraf çatı döşeşi
-    for (let r = 0; r < 8; r++) {
-      const w = 3 + r * 2.6;
-      ctx.fillStyle = r < 2 ? "#7a5230" : r < 5 ? "#5a3820" : "#3e2410";
-      ctx.fillRect(px + 15 - w / 2, py + 5 + r * 1.2, w, 1.5);
-    }
-    // çatı üzerine dagınık dallar
-    ctx.strokeStyle = "#7a5230";
+  // Katmanlı saz dam (püsküllü alt kenarlı)
+  private paintThatch(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+    ctx.fillStyle = "#c2a44e";
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "#d8bc62";
+    ctx.fillRect(x, y, w, 1.6);
+    ctx.fillStyle = "#a8883c";
+    for (let i = 1; i * 3 < h; i++) ctx.fillRect(x, y + i * 3, w, 1);
+    ctx.fillStyle = "#b89a44";
+    for (let i = 1; i < w - 2; i += 3) ctx.fillRect(x + i, y + h, 2, 1.6);
+    ctx.strokeStyle = OUTLINE;
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(px + 5,  py + 14); ctx.lineTo(px + 11, py + 6);
-    ctx.moveTo(px + 27, py + 14); ctx.lineTo(px + 20, py + 5);
-    ctx.moveTo(px + 8,  py + 14); ctx.lineTo(px + 15, py + 5);
-    ctx.moveTo(px + 22, py + 14); ctx.lineTo(px + 15, py + 5);
-    ctx.stroke();
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  }
 
-    // Çatı üst direk
-    ctx.fillStyle = "#5a3820";
-    ctx.fillRect(px + 14, py + 4, 3, 12);
+  // Dikey kütüklerden duvar
+  private paintLogWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+    ctx.fillStyle = "#8a6a43";
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "#6b4a2b";
+    for (let i = 3; i < w - 1; i += 4) ctx.fillRect(x + i, y, 1.3, h);
+    ctx.fillStyle = "rgba(0,0,0,0.2)";
+    ctx.fillRect(x, y, w, 1.6);
+    this.outlineRect(ctx, x, y, w, h);
+  }
 
-    // Kapı: ham tahtadan yapılmış
-    ctx.fillStyle = "#3e2410";
-    ctx.fillRect(px + 14, py + 21, 5, 8);
-    ctx.strokeStyle = "#5a3820";
-    ctx.lineWidth = 0.8;
-    ctx.strokeRect(px + 14.5, py + 21.5, 4, 7);
-    // Kapı üzerine yatay tahta çizgileri
-    ctx.beginPath();
-    ctx.moveTo(px + 14, py + 23.5); ctx.lineTo(px + 19, py + 23.5);
-    ctx.moveTo(px + 14, py + 25.5); ctx.lineTo(px + 19, py + 25.5);
-    ctx.stroke();
+  // Yatay kütük istifi (uçları halkalı)
+  private paintLogPile(ctx: CanvasRenderingContext2D, x: number, y: number, rows: number, len: number): void {
+    for (let r = 0; r < rows; r++) {
+      const ly = y - r * 3.2;
+      const off = (r % 2) * 1.5;
+      ctx.fillStyle = "#6b4a2b";
+      ctx.fillRect(x + off, ly, len, 3);
+      ctx.fillStyle = "#8a6a43";
+      ctx.beginPath();
+      ctx.ellipse(x + off + len, ly + 1.5, 1.6, 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#c9a35a";
+      ctx.beginPath();
+      ctx.ellipse(x + off + len, ly + 1.5, 0.7, 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
-    // Küçük ham pencere (tek)
-    ctx.fillStyle = "rgba(180, 160, 100, 0.5)";
-    ctx.fillRect(px + 7, py + 17, 4, 3);
-    ctx.strokeStyle = "#5a3820";
-    ctx.lineWidth = 0.8;
-    ctx.strokeRect(px + 7.5, py + 17.5, 3, 2);
+  private drawHouse(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 16, py + 29, 13);
+    this.paintLogWall(ctx, px + 5, py + 15, 22, 14);
+    this.paintThatch(ctx, px + 3, py + 9, 26, 6);
+    this.paintThatch(ctx, px + 7, py + 4, 18, 5);
+    ctx.fillStyle = "#3a2616";
+    ctx.fillRect(px + 13, py + 21, 6, 8);
+    ctx.fillStyle = "#b89878";
+    ctx.fillRect(px + 13, py + 21, 6, 4);
+    ctx.fillStyle = "#8a6a50";
+    ctx.fillRect(px + 13, py + 24, 6, 0.8);
+    this.outlineRect(ctx, px + 13, py + 21, 6, 8);
   }
 
   private drawDepot(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 16, py + 29, 15);
-    // geniş ambar
-    ctx.fillStyle = WALL;
-    ctx.fillRect(px + 2, py + 11, 28, 18);
-    this.outlineRect(ctx, px + 2, py + 11, 28, 18);
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(px + 1, py + 6, 30, 6); // düz çatı bandı
-    ctx.fillStyle = "#7d5835";
-    ctx.fillRect(px + 1, py + 6, 30, 2); // çatı ışığı
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 2, py + 12, 28, 2); // saçak gölgesi
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(px + 12, py + 18, 8, 11); // büyük kapı
-    // yandaki sandıklar
-    ctx.fillStyle = "#c9a35a";
-    ctx.fillRect(px + 4, py + 23, 5, 5);
-    ctx.fillRect(px + 23, py + 23, 5, 5);
-    ctx.strokeStyle = WOOD_DARK;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(px + 4.5, py + 23.5, 4, 4);
-    ctx.strokeRect(px + 23.5, py + 23.5, 4, 4);
+    this.baseShadow(ctx, px + 16, py + 29, 13);
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 6, py + 17, 2.4, 12);
+    ctx.fillRect(px + 24, py + 17, 2.4, 12);
+    ctx.fillRect(px + 15, py + 17, 2.4, 12);
+    ctx.fillStyle = "#8a6a43";
+    ctx.fillRect(px + 3, py + 14, 26, 4);
+    ctx.fillStyle = "#6b4a2b";
+    for (let i = 6; i < 26; i += 5) ctx.fillRect(px + 3 + i, py + 14, 1, 4);
+    this.outlineRect(ctx, px + 3, py + 14, 26, 4);
+    this.paintThatch(ctx, px + 4, py + 5, 24, 6);
+    ctx.fillStyle = "#b89878";
+    ctx.beginPath();
+    ctx.ellipse(px + 10, py + 12.6, 2.6, 2.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#8a6a50";
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+    this.paintLogPile(ctx, px + 17, py + 11.4, 1, 7);
+    ctx.fillStyle = "#b8884a";
+    ctx.fillRect(px + 19, py + 22, 5, 4);
+    ctx.strokeStyle = "#8a6230";
+    ctx.strokeRect(px + 19.5, py + 22.5, 4, 3);
   }
 
   private drawWoodcutter(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 11, py + 29, 10);
-    this.baseShadow(ctx, px + 26, py + 27, 5, 1.5); // kütük yığını
-    // kulübe
-    ctx.fillStyle = WALL;
-    ctx.fillRect(px + 3, py + 12, 17, 17);
-    this.outlineRect(ctx, px + 3, py + 12, 17, 17);
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(px + 2, py + 8, 19, 5);
-    ctx.fillStyle = "#7d5835";
-    ctx.fillRect(px + 2, py + 8, 19, 2);
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 3, py + 13, 17, 2);
-    ctx.fillStyle = "#4a2e1a";
-    ctx.fillRect(px + 9, py + 21, 5, 8);
-    // kütük yığını
-    ctx.fillStyle = "#7a5230";
-    ctx.fillRect(px + 22, py + 24, 8, 3);
-    ctx.fillRect(px + 22, py + 20, 8, 3);
-    ctx.fillStyle = "#9a6c40";
-    ctx.fillRect(px + 23, py + 16, 6, 3);
+    this.baseShadow(ctx, px + 15, py + 29, 13);
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 4, py + 12, 2.2, 17);
+    ctx.fillRect(px + 17, py + 12, 2.2, 17);
+    this.paintThatch(ctx, px + 2, py + 7, 20, 6);
+    this.paintLogPile(ctx, px + 6, py + 25, 3, 10);
+    ctx.fillStyle = "#8a6a43";
+    ctx.beginPath();
+    ctx.ellipse(px + 26, py + 24, 3.4, 2.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 22.6, py + 24, 6.8, 4);
+    ctx.fillStyle = "#c9a35a";
+    ctx.beginPath();
+    ctx.ellipse(px + 26, py + 24, 1.4, 0.9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#7a5a36";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(px + 27, py + 22.5);
+    ctx.lineTo(px + 30, py + 17);
+    ctx.stroke();
+    ctx.fillStyle = "#c9d4dc";
+    ctx.fillRect(px + 28.6, py + 16, 2.6, 2);
   }
 
   private drawGatherer(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 11, py + 29, 10);
-    this.baseShadow(ctx, px + 26, py + 27, 4, 1.3); // sepet
-    // yeşil çatılı kulübe
-    ctx.fillStyle = WALL;
-    ctx.fillRect(px + 3, py + 12, 17, 17);
-    this.outlineRect(ctx, px + 3, py + 12, 17, 17);
-    ctx.fillStyle = "#4a7a3a";
-    ctx.fillRect(px + 2, py + 8, 19, 5);
-    ctx.fillStyle = "#62975a";
-    ctx.fillRect(px + 2, py + 8, 19, 2);
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 3, py + 13, 17, 2);
-    ctx.fillStyle = "#4a2e1a";
-    ctx.fillRect(px + 9, py + 21, 5, 8);
-    // meyve sepeti
-    ctx.fillStyle = "#b8884a";
-    ctx.fillRect(px + 23, py + 23, 6, 4);
-    ctx.fillStyle = "#d43f3f";
-    ctx.fillRect(px + 24, py + 21, 2, 2);
-    ctx.fillRect(px + 27, py + 22, 1, 1);
+    this.baseShadow(ctx, px + 13, py + 29, 11);
+    ctx.fillStyle = "#c2a44e";
+    ctx.beginPath();
+    ctx.ellipse(px + 12, py + 21, 9.5, 8.5, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(px + 2.5, py + 21, 19, 8);
+    ctx.fillStyle = "#a8883c";
+    for (let i = 0; i < 3; i++) ctx.fillRect(px + 3.5, py + 16 + i * 4, 17, 1);
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(px + 12, py + 21, 9.5, 8.5, 0, Math.PI, 0);
+    ctx.moveTo(px + 2.5, py + 21);
+    ctx.lineTo(px + 2.5, py + 29);
+    ctx.moveTo(px + 21.5, py + 21);
+    ctx.lineTo(px + 21.5, py + 29);
+    ctx.stroke();
+    ctx.fillStyle = "#8a6a30";
+    ctx.fillRect(px + 10.5, py + 11, 3, 2.4);
+    ctx.fillStyle = "#3a2616";
+    ctx.fillRect(px + 9.5, py + 22, 5, 7);
+    this.outlineRect(ctx, px + 9.5, py + 22, 5, 7);
+    for (const bx of [25, 28.5] as const) {
+      ctx.fillStyle = "#b8884a";
+      ctx.fillRect(px + bx - 2, py + 24, 4, 4);
+      ctx.strokeStyle = "#8a6230";
+      ctx.lineWidth = 0.6;
+      ctx.strokeRect(px + bx - 1.7, py + 24.3, 3.4, 3.4);
+      ctx.fillStyle = "#d43f3f";
+      ctx.fillRect(px + bx - 1.4, py + 22.8, 1.4, 1.4);
+      ctx.fillRect(px + bx + 0.2, py + 23.2, 1.2, 1.2);
+    }
   }
 
   private drawToolWorkshop(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 11, py + 29, 10);
-    this.baseShadow(ctx, px + 26, py + 27, 4, 1.3); // örs kütüğü
-    // gri çatılı taş atölye
-    ctx.fillStyle = WALL;
-    ctx.fillRect(px + 3, py + 12, 17, 17);
-    this.outlineRect(ctx, px + 3, py + 12, 17, 17);
-    ctx.fillStyle = "#5a6068"; // taş grisi çatı
-    ctx.fillRect(px + 2, py + 8, 19, 5);
-    ctx.fillStyle = "#7a828c";
-    ctx.fillRect(px + 2, py + 8, 19, 2);
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 3, py + 13, 17, 2);
-    ctx.fillStyle = "#4a2e1a";
-    ctx.fillRect(px + 9, py + 21, 5, 8);
-    // duvara asılı balta
-    ctx.fillStyle = "#7a5a36"; // sap
-    ctx.fillRect(px + 16, py + 15, 1.4, 5);
-    ctx.fillStyle = "#c9d4dc"; // demir baş
-    ctx.fillRect(px + 14.6, py + 14.4, 4, 2);
-    // kütük üstünde örs
-    ctx.fillStyle = "#6a4a2e";
-    ctx.fillRect(px + 24, py + 24, 5, 3);
+    this.baseShadow(ctx, px + 15, py + 29, 13);
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 3, py + 9, 2.2, 20);
+    ctx.fillRect(px + 26, py + 9, 2.2, 20);
+    ctx.fillStyle = "#caa888";
+    ctx.fillRect(px + 1, py + 5, 30, 5);
+    ctx.fillStyle = "#b08e6e";
+    ctx.fillRect(px + 1, py + 8, 30, 2);
+    this.outlineRect(ctx, px + 1, py + 5, 30, 5);
+    ctx.fillStyle = "#8a6a43";
+    ctx.fillRect(px + 6, py + 19, 20, 4);
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 7, py + 23, 2.4, 6);
+    ctx.fillRect(px + 22.6, py + 23, 2.4, 6);
+    this.outlineRect(ctx, px + 6, py + 19, 20, 4);
     ctx.fillStyle = "#9aa4ae";
-    ctx.fillRect(px + 23.5, py + 22.4, 6, 2);
+    ctx.fillRect(px + 9, py + 15.6, 5.4, 3.4);
+    ctx.fillStyle = "#c9d4dc";
+    ctx.fillRect(px + 9, py + 15.6, 5.4, 1.2);
+    ctx.fillStyle = "#7a5a36";
+    ctx.fillRect(px + 19, py + 13.6, 1.3, 6);
+    ctx.fillStyle = "#c9d4dc";
+    ctx.fillRect(px + 17.6, py + 13, 4, 1.8);
+    ctx.fillStyle = "#7c7f86";
+    ctx.fillRect(px + 12, py + 26, 4, 2.6);
+    ctx.fillStyle = "#9aa0a8";
+    ctx.fillRect(px + 13, py + 25, 2.6, 1.6);
   }
 
   // Binaya takılı meşale: kısa sap + titreyen alev
@@ -1487,32 +1509,100 @@ export class Renderer {
   }
 
   private drawHunterLodge(ctx: CanvasRenderingContext2D, px: number, py: number): void {
-    this.baseShadow(ctx, px + 11, py + 29, 10);
-    // koyu ahşap kulübe, girişte post asılı
-    ctx.fillStyle = WALL;
-    ctx.fillRect(px + 3, py + 12, 17, 17);
-    this.outlineRect(ctx, px + 3, py + 12, 17, 17);
-    ctx.fillStyle = "#7a3a2a"; // kızıl-kahve çatı
-    ctx.fillRect(px + 2, py + 8, 19, 5);
-    ctx.fillStyle = "#94503a";
-    ctx.fillRect(px + 2, py + 8, 19, 2);
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.fillRect(px + 3, py + 13, 17, 2);
-    ctx.fillStyle = "#4a2e1a";
-    ctx.fillRect(px + 9, py + 21, 5, 8);
-    // duvarda çapraz mızraklar
+    this.baseShadow(ctx, px + 12, py + 29, 11);
+    ctx.fillStyle = "#caa888";
+    ctx.beginPath();
+    ctx.moveTo(px + 12, py + 6);
+    ctx.lineTo(px + 22, py + 29);
+    ctx.lineTo(px + 2, py + 29);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#b08e6e";
+    ctx.beginPath();
+    ctx.moveTo(px + 12, py + 6);
+    ctx.lineTo(px + 22, py + 29);
+    ctx.lineTo(px + 12, py + 29);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 12, py + 6);
+    ctx.lineTo(px + 22, py + 29);
+    ctx.moveTo(px + 12, py + 6);
+    ctx.lineTo(px + 2, py + 29);
+    ctx.stroke();
+    ctx.strokeStyle = "#6b4a2b";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(px + 9, py + 2);
+    ctx.lineTo(px + 14.6, py + 9);
+    ctx.moveTo(px + 15, py + 2);
+    ctx.lineTo(px + 9.4, py + 9);
+    ctx.stroke();
+    ctx.fillStyle = "#3a2616";
+    ctx.beginPath();
+    ctx.moveTo(px + 12, py + 19);
+    ctx.lineTo(px + 15.6, py + 29);
+    ctx.lineTo(px + 8.4, py + 29);
+    ctx.closePath();
+    ctx.fill();
     ctx.strokeStyle = "#d4c49a";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(px + 14.5, py + 19.5); ctx.lineTo(px + 19.5, py + 14.5);
-    ctx.moveTo(px + 14.5, py + 14.5); ctx.lineTo(px + 19.5, py + 19.5);
+    ctx.moveTo(px + 24, py + 28);
+    ctx.lineTo(px + 30, py + 14);
+    ctx.moveTo(px + 30, py + 28);
+    ctx.lineTo(px + 24, py + 14);
     ctx.stroke();
-    // kurutma askısında deri
+    ctx.fillStyle = "#9aa0a8";
+    ctx.fillRect(px + 29.2, py + 12.6, 1.8, 2.4);
+    ctx.fillRect(px + 23.2, py + 12.6, 1.8, 2.4);
     ctx.fillStyle = "#a87c4f";
-    ctx.fillRect(px + 23, py + 20, 6, 7);
-    ctx.strokeStyle = "#6a4a2e";
+    ctx.fillRect(px + 24.4, py + 20, 5.2, 5);
+    ctx.strokeStyle = "#6b4a2b";
     ctx.lineWidth = 0.8;
-    ctx.strokeRect(px + 23, py + 20, 6, 7);
+    ctx.strokeRect(px + 24, py + 19.6, 6, 5.8);
+  }
+
+
+  private drawSplitter(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 14, py + 29, 12);
+    ctx.fillStyle = "#6b4a2b";
+    ctx.fillRect(px + 6.6, py + 18, 10.8, 8);
+    ctx.fillStyle = "#8a6a43";
+    ctx.beginPath();
+    ctx.ellipse(px + 12, py + 18, 5.4, 3.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#c9a35a";
+    ctx.beginPath();
+    ctx.ellipse(px + 12, py + 18, 2.6, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 6.6, py + 18);
+    ctx.lineTo(px + 6.6, py + 26);
+    ctx.moveTo(px + 17.4, py + 18);
+    ctx.lineTo(px + 17.4, py + 26);
+    ctx.stroke();
+    ctx.strokeStyle = "#7a5a36";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(px + 13.4, py + 16);
+    ctx.lineTo(px + 19, py + 8);
+    ctx.stroke();
+    ctx.fillStyle = "#c9d4dc";
+    ctx.fillRect(px + 17.6, py + 6.6, 4, 2.6);
+    this.paintLogPile(ctx, px + 22, py + 26, 2, 8);
+    ctx.strokeStyle = "#8a6a43";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 3, py + 27);
+    ctx.lineTo(px + 7, py + 25);
+    ctx.moveTo(px + 4, py + 29);
+    ctx.lineTo(px + 8, py + 28);
+    ctx.stroke();
   }
 
   // ---- Köylüler: blok dünyaya uygun tombul piksel insanlar ----
