@@ -315,12 +315,13 @@ export function placeBuilding(world: World, b: Building): void {
 }
 
 export function isBuildingUnlocked(type: BuildingType): boolean {
-  // Beşer/Doğa artık bina açmıyor (yalnız moral ve ateş etkisi verir);
-  // temel üretim binaları baştan serbest, ileride yeniden ayarlanacak
+  // Başlangıçta yalnız ev ve tapınak kurulabilir; diğer üretim binaları
+  // ileride çağlara uygun araştırmalara bağlanacak
+  if (type === BuildingType.House || type === BuildingType.Temple || type === BuildingType.Camp) return true;
   if (type === BuildingType.Depot) return hasTech("capital");
   if (type === BuildingType.Collective) return hasTech("collective");
   if (type === BuildingType.Torch) return hasTech("nature"); // ateş keşfi
   if (type === BuildingType.Nursery) return hasTech("cognitive");
   if (type === BuildingType.ToolWorkshop) return hasTech("toolworkshop");
-  return true;
+  return false;
 }
