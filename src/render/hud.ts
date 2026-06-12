@@ -306,7 +306,9 @@ function isItemVisible(item: IconItem): boolean {
     return hasTech("mushroomology") || resources.mushroom > 0;
   }
   if (item === "fish") {
-    return hasTech("nature") || resources.fish > 0;
+    // balıkçı kulübesi henüz hiçbir araştırmaya bağlı değil (kilitli);
+    // balık ancak gerçekten stokta varsa gösterilir
+    return resources.fish > 0;
   }
   if (item === "meat" || item === "leather" || item === "wool") {
     return hasTech("kan") || resources[item] > 0;
