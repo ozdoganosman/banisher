@@ -34,7 +34,7 @@ import {
   panelRectOf,
   type PanelId,
 } from "./render/hud";
-import { buyTech, hasTech } from "./sim/tech";
+import { buyTech, grantTech, hasTech, TECHS, type TechId } from "./sim/tech";
 import { Animal, ANIMAL_DEFS, BARN_HERD, WILD_POOL, type AnimalType } from "./sim/animals";
 import {
   AXE_STONE_COST,
@@ -1207,8 +1207,106 @@ declare global {
     __game: unknown;
   }
 }
+// ---- Konsol hileleri (debug): F12 konsolunda hile.yardim() yaz ----
+
+const hile = {
+  yardim(): void {
+    console.log(
+      `Banisher hileleri:
+  hile.bilgi(50)          bilgi ekle
+  hile.ver("wood", 50)    kaynak ekle: wood stone berry mushroom fish meat leather wool
+  hile.doldur()           temel kaynaklardan bolca ver
+  hile.arastir("kan")     tek araştırmayı bedava aç (id listesi: hile.arastirmalar())
+  hile.hepsiniArastir()   tüm araştırmaları aç
+  hile.moral(80)          herkesin moralini ayarla (0-100)
+  hile.doyur()            herkesi doyur
+  hile.balta()            herkese balta
+  hile.mizrak(5)          yetişkinlere mızrak
+  hile.giysi()            herkese deri giysi
+  hile.insa()             tüm şantiyeleri anında bitir
+  hile.koylu(3)           kampa N yetişkin köylü ekle
+  hile.bebek()            bir bebek doğur
+  hile.kurt() / hile.ayi()  kamp yakınına yırtıcı sal
+  hile.gun(2)             takvimi N gün ileri sar
+  hile.hiz(8)             oyun hızı (1/2/4/8/16)
+  __game.tuning           dayLength / timeScale / moveSpeed canlı ayar
+Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
+    );
+  },
+  arastirmalar(): string[] {
+    return TECHS.map((t) => `${t.id} (${t.name})`);
+  },
+  bilgi(n = 50): void {
+    resources.knowledge += n;
+  },
+  ver(item: ItemType, n = 50): void {
+    resources[item] += n;
+  },
+  doldur(): void {
+    for (const it of ["wood", "stone", "berry", "meat", "leather"] as ItemType[]) {
+      resources[it] += 30;
+    }
+  },
+  arastir(id: TechId): void {
+    const had = hasTech("humanity");
+    grantTech(id);
+    if (id === "humanity" && !had) {
+      for (const v of villagers) v.changeMorale(10, "Tanrı inancı");
+    }
+  },
+  hepsiniArastir(): void {
+    for (const t of TECHS) this.arastir(t.id);
+  },
+  moral(n = 80): void {
+    for (const v of villagers) v.changeMorale(n - v.morale, "Hile");
+  },
+  doyur(): void {
+    for (const v of villagers) v.hunger = 0;
+  },
+  balta(): void {
+    for (const v of villagers) if (v.canWork) v.hasAxe = true;
+  },
+  mizrak(n = 5): void {
+    for (const v of villagers) if (v.canWork) v.spears = Math.min(5, n);
+  },
+  giysi(): void {
+    for (const v of villagers) v.hasClothes = true;
+  },
+  insa(): void {
+    for (const b of buildings) if (!b.done) b.progress = b.def.buildTime;
+  },
+  koylu(n = 1): void {
+    const placed = spawnVillagersAround(campCenter.x, campCenter.y, n);
+    addMessage(`Hile: ${placed} köylü geldi`);
+  },
+  bebek(): void {
+    const mom = villagers.find((v) => v.identity.female && v.canWork);
+    const baby = new Villager(campCenter.x, campCenter.y + 1, true);
+    if (mom) baby.mother = mom;
+    villagers.push(baby);
+    addMessage(`Hile: 👶 ${baby.fullName} doğdu`);
+  },
+  kurt(): void {
+    animals.push(new Animal("wolf", null, campCenter.x + 5, campCenter.y + 5));
+  },
+  ayi(): void {
+    animals.push(new Animal("bear", null, campCenter.x - 5, campCenter.y - 5));
+  },
+  gun(n = 1): void {
+    gameTime.total += n * tuning.dayLength;
+  },
+  hiz(n = 1): void {
+    if ([1, 2, 4, 8, 16].includes(n)) gameSpeed = n;
+  },
+};
+
 // tuning: konsoldan canlı ayar (__game.tuning.dayLength / timeScale / moveSpeed)
-window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams };
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile };
+(window as unknown as { hile: typeof hile }).hile = hile;
+console.info(
+  "%cBanisher debug: konsola hile.yardim() yaz",
+  "color:#8fd05e;font-weight:bold"
+);
 
 let last = performance.now();
 let accumulator = 0;

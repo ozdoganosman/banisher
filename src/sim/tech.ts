@@ -155,6 +155,11 @@ export function prereqsMet(tech: Tech): boolean {
   return !tech.prereq || tech.prereq.every((p) => purchased.has(p));
 }
 
+// Debug/hile: araştırmayı koşulsuz ve bedava aç
+export function grantTech(id: TechId): void {
+  purchased.add(id);
+}
+
 // Araştırmayı satın al; başarılıysa true döner
 export function buyTech(id: TechId): boolean {
   const tech = TECHS.find((t) => t.id === id);
