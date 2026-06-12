@@ -48,10 +48,12 @@ erken (Paleolitik) basamaklarıdır: Beşer (tanrı inancı, +10 moral),
 Doğa (ateşin keşfi → binalara meşale takılır, gece ışıkta çalışılır),
 Korku (çığlıkla yardım çağırma), Merak (oyuncuya yakaran köylü
 mikrofonla teskin edilir), Sermaye → Depo, Sert Cisimler → çakıl,
-Mantaroloji → mantar tanıma, Motor Beceriler (+%20 hız), Bilişsel
-Beceriler → bakımevi ve eğitim, Alet Atölyesi → balta, Kan → mızrak
-ve avcı kulübesi. Sonraki çağlar: dil, pişirme, deri işleme, tarım,
-çömlek, maden ve yazıya doğru ilerlenecek.
+Mantaroloji → mantar tanıma, Toplayıcılık → toplayıcı kulübesi,
+Motor Beceriler (+%20 hız), Bilişsel Beceriler → bakımevi ve eğitim,
+Alet Atölyesi → balta, Kan → mızrak ve avcı kulübesi, Deri İşleme →
+giysi (kış koruması), Aidiyet → köpek, Çiftlik → evcilleştirme çiftliği,
+Hırs → taş yol. Sonraki çağlar: dil, pişirme, tarım, çömlek, maden ve
+yazıya doğru ilerlenecek.
 
 **Zaman ve yaşam döngüsü.** Takvimde **1 gün = 1 mevsim, 4 gün = 1 yıl**;
 tarih "İlkbahar/3" gibi mevsim/yıl olarak akar ve yıl her ilkbaharda artar.
@@ -68,7 +70,7 @@ kalıcı +%20 hız), 18 yaşında işe başlarlar.
 yemek tokluğu tamamen doldurur), yemek biterse açlıktan ölürler. Moral
 20'den başlar ve iş hızını belirler (0 moral = yarı hız); ev uykusu,
 tanrı inancı ve gece meşale başında ısınmak yükseltir. Depo kapasitesi
-paylaşımlıdır (100, depo binalarıyla artar); dolu ürünü kimse toplamaz.
+paylaşımlıdır (kamp 500, depo binalarıyla artar); dolu ürün toplanmaz.
 Kış haritayı bembeyaz örter ve bitki büyümesini durdurur — balıkçılık
 kışın da çalışan tek üretimdir.
 
@@ -98,9 +100,11 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | Mini haritaya tık/sürükle | Kamerayı o noktaya götür / gezdir |
 | Köylüye sol tık | Profilini aç (kimlik, durum, tokluk, moral dökümü, çanta) |
 | Binaya sol tık | Detay paneli (depo içeriği, inşaat ilerlemesi, işçi al/çıkar) |
-| Yabani hayvana sol tık | Av işareti koy / kaldır |
-| N / "Nüfus" düğmesi | Nüfus yönetim menüsü: tüm köylüler tek listede |
-| T / "Teknoloji" düğmesi | Teknoloji ağacı paneli |
+| Hayvana sol tık | Hayvan paneli: ad, can, verim + Saldır / Evcilleştir |
+| N / "İşler" düğmesi | İş yönetim menüsü (istihdam satırları) |
+| M / "İnsanlar" düğmesi | Detaylı köylü listesi (özellikler + ekipman) |
+| B / "Defter" düğmesi | Savaş ve Tehlike Defteri |
+| T / "Teknoloji" düğmesi | Tam ekran teknoloji ağacı (sürükleyerek kaydır) |
 | 1-9, 0 | Araç çubuğundaki kilidi açık binalardan seç |
 | Esc / sağ tık | Seçimi iptal et |
 | Space | Duraklat / devam et |
