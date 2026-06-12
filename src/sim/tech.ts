@@ -9,14 +9,17 @@ export type TechId =
   | "capital"
   | "collective"
   | "mushroomology"
-  | "hardobjects";
+  | "hardobjects"
+  | "motorskills"
+  | "cognitive"
+  | "toolworkshop";
 
 export interface Tech {
   id: TechId;
   name: string;
   cost: number; // bilgi
   desc: string;
-  prereq?: TechId;
+  prereq?: TechId[]; // tümü araştırılmadan açılmaz
   gridX: number;
   gridY: number;
 }
@@ -26,24 +29,32 @@ export const TECHS: Tech[] = [
     id: "humanity",
     name: "Beşer",
     cost: 6,
-    desc: "Oduncu, çiftlik, yemekhane, bakımevi ve meşaleyi açar",
+    desc: "Tanrı inancı doğar: herkese kalıcı +10 moral",
     gridX: 0,
-    gridY: 1,
+    gridY: 0,
   },
   {
     id: "nature",
     name: "Doğa",
     cost: 6,
-    desc: "Toplayıcıyı açar",
+    desc: "Ateş keşfedilir: meşale yapılır, gece meşale başında moral artar",
     gridX: 0,
-    gridY: 3,
+    gridY: 2,
+  },
+  {
+    id: "motorskills",
+    name: "Motor Beceriler",
+    cost: 10,
+    desc: "Herkes %20 daha hızlı yürür ve çalışır",
+    gridX: 0,
+    gridY: 4,
   },
   {
     id: "capital",
     name: "Sermaye",
     cost: 12,
     desc: "Depo binasını açar",
-    prereq: "humanity",
+    prereq: ["humanity"],
     gridX: 1,
     gridY: 0,
   },
@@ -52,16 +63,25 @@ export const TECHS: Tech[] = [
     name: "Kollektif",
     cost: 12,
     desc: "Kollektif binasını açar (sadece gıda depolar)",
-    prereq: "nature",
+    prereq: ["nature"],
     gridX: 1,
     gridY: 2,
+  },
+  {
+    id: "cognitive",
+    name: "Bilişsel ve Problem Çözme Becerileri",
+    cost: 14,
+    desc: "Bakımevini açar; orada eğitilen çocuklar %20 daha hızlı çalışır ve yürür",
+    prereq: ["motorskills"],
+    gridX: 1,
+    gridY: 4,
   },
   {
     id: "hardobjects",
     name: "Sert Cisimler",
     cost: 12,
     desc: "Yerden çakıl toplanabilir (taş verir)",
-    prereq: "capital",
+    prereq: ["capital"],
     gridX: 2,
     gridY: 0,
   },
@@ -69,9 +89,18 @@ export const TECHS: Tech[] = [
     id: "mushroomology",
     name: "Mantaroloji",
     cost: 15,
-    desc: "Mantarcı binasını açar (mantar ekilip toplanır)",
-    prereq: "collective",
+    desc: "Yabani mantarlar tanınır ve toplanabilir",
+    prereq: ["collective"],
     gridX: 2,
+    gridY: 2,
+  },
+  {
+    id: "toolworkshop",
+    name: "Alet Atölyesi",
+    cost: 18,
+    desc: "Alet atölyesini açar: baltayla ağaç kesilip odun alınır",
+    prereq: ["cognitive", "hardobjects"],
+    gridX: 3,
     gridY: 2,
   },
 ];
@@ -82,11 +111,15 @@ export function hasTech(id: TechId): boolean {
   return purchased.has(id);
 }
 
+export function prereqsMet(tech: Tech): boolean {
+  return !tech.prereq || tech.prereq.every((p) => purchased.has(p));
+}
+
 // Araştırmayı satın al; başarılıysa true döner
 export function buyTech(id: TechId): boolean {
   const tech = TECHS.find((t) => t.id === id);
   if (!tech || purchased.has(id) || resources.knowledge < tech.cost) return false;
-  if (tech.prereq && !purchased.has(tech.prereq)) return false;
+  if (!prereqsMet(tech)) return false;
   resources.knowledge -= tech.cost;
   purchased.add(id);
   return true;

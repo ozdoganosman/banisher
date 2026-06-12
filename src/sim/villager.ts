@@ -5,10 +5,14 @@ import type { Animal } from "./animals";
 import type { Building } from "./buildings";
 import {
   AUTO_MARK_RADIUS,
+  AXE_CRAFT_TIME,
+  AXE_STONE_COST,
+  AXE_WOOD_COST,
   BuildingType,
   isDepositPoint,
   isLit,
   KNOWLEDGE_PER_WORSHIP,
+  LIGHT_RADIUS,
   ROLE_NAMES,
   WORSHIP_TIME,
 } from "./buildings";
@@ -35,6 +39,8 @@ import {
 
 const WALK_SPEED = 36; // dünya-piksel / saniye
 const CHOP_TIME = 8; // elle dal toplama: yavaş iş
+const CHOP_TIME_AXE = 5; // baltayla kesim daha hızlı
+const AXE_WOOD_YIELD = 4; // devrilen ağaç birden çok dal verir
 const GATHER_TIME = 8; // elle yemiş/mantar toplama: dal toplamayla aynı yavaşlıkta
 const MINE_TIME = 4;
 const STONE_PER_MINE = 3;
@@ -108,6 +114,7 @@ type VillagerState =
   | "fishing"
   | "planting"
   | "tending"
+  | "crafting"
   | "sleeping"
   | "eating";
 
@@ -121,6 +128,8 @@ type Job =
   | { kind: "hunt"; animal: Animal }
   | { kind: "build"; building: Building }
   | { kind: "worship"; building: Building }
+  | { kind: "craft"; building: Building }
+  | { kind: "pickup"; building: Building }
   | { kind: "sleep"; building: Building | null }
   | { kind: "eat"; building: Building }
   | { kind: "deposit"; building: Building };
@@ -139,6 +148,8 @@ export class Villager {
   sleepAccumulator = 0; // uyku süresi biriktirici (saniye)
   groundSleep = false; // bu gece yerde mi uyuyor
   dead = false;
+  educated = false; // bakımevinde yetişen çocuk: %20 hız bonusu
+  hasAxe = false; // atölyeden balta aldı: ağaçları kesip odun çıkarır
   assignment: Assignment = { kind: "laborer" };
   baby: boolean;
   birthDay: number; // doğduğu gün (toplam gün sayısı)
@@ -197,7 +208,7 @@ export class Villager {
       const type = this.assignment.building.type;
       if (type === BuildingType.Woodcutter) return "#27ae60"; // Oduncu: Orman Yeşili
       if (type === BuildingType.Gatherer) return "#d35400";    // Toplayıcı: Turuncu/Kızıl
-      if (type === BuildingType.MushroomGatherer) return "#d9b06b"; // Mantarcı: Mantar sarısı
+      if (type === BuildingType.ToolWorkshop) return "#7f8c8d"; // Alet ustası: Demir Grisi
       if (type === BuildingType.Fisher) return "#2980b9";      // Balıkçı: Deniz Mavisi
       if (type === BuildingType.Temple) return "#8e44ad";      // Rahip: Mor
       if (type === BuildingType.Barn) return "#8a6a43";        // Çiftçi: Çamur Kahvesi
@@ -226,6 +237,8 @@ export class Villager {
           case "hunt": return "Ava gidiyor";
           case "build": return "Şantiyeye gidiyor";
           case "worship": return "Tapınağa gidiyor";
+          case "craft": return "Atölyeye gidiyor";
+          case "pickup": return "Balta almaya gidiyor";
           case "sleep":
             return this.job.building && this.job.building === this.home
               ? "Eve dönüyor" : "Kampa dönüyor";
@@ -234,7 +247,9 @@ export class Villager {
         }
         break;
       case "chopping":
-        return "Dal topluyor";
+        return this.hasAxe ? "Ağaç kesiyor" : "Dal topluyor";
+      case "crafting":
+        return "Balta yapıyor";
       case "gathering": {
         if (this.job?.kind !== "gather") return "Topluyor";
         const n = ITEM_INFO[this.job.item].name;
@@ -307,7 +322,7 @@ export class Villager {
   }
 
   // Morali sınırlar içinde değiştir ve gerçekleşen farkı neden bazında deftere işle
-  private changeMorale(amount: number, reason: string): void {
+  changeMorale(amount: number, reason: string): void {
     const next = Math.max(0, Math.min(100, this.morale + amount));
     const delta = next - this.morale;
     if (delta === 0) return;
@@ -317,7 +332,10 @@ export class Villager {
 
   getWorkSpeedFactor(): number {
     // 100 moral -> 1.0, 0 moral -> 0.5 (yarı yarıya yavaş)
-    return 0.5 + this.morale / 200;
+    let f = 0.5 + this.morale / 200;
+    if (hasTech("motorskills")) f *= 1.2; // herkese %20 hız
+    if (this.educated) f *= 1.2; // bakımevi eğitimi: ek %20
+    return f;
   }
 
   shouldGoSleep(buildings: Building[]): boolean {
@@ -369,12 +387,14 @@ export class Villager {
       (b) => b.type === BuildingType.Nursery && b.done
     );
 
-    // Bebek büyümesi: bakımevi varsa iki kat hızlı
+    // Bebek büyümesi: bakımevi varsa iki kat hızlı; orada yetişen çocuk
+    // eğitim alır (kalıcı %20 hız bonusu)
     if (this.baby && this.ageDays >= (hasNursery ? GROW_DAYS_NURSERY : GROW_DAYS)) {
       this.baby = false;
       this.grewUp = true;
       this.identity.age = 16;
       this.assignment = { kind: "laborer" };
+      if (hasNursery) this.educated = true;
     }
 
     // açlık her durumda işler; bakımevi bebeklere bakar: acıkmaz, toparlanır
@@ -399,10 +419,25 @@ export class Villager {
       this.state === "chopping" || this.state === "gathering" ||
       this.state === "mining" || this.state === "building" ||
       this.state === "worshipping" || this.state === "fishing" ||
-      this.state === "tending" || this.state === "planting";
+      this.state === "tending" || this.state === "planting" ||
+      this.state === "crafting";
     if (working && ((isNight() && !isLit(buildings, this.x, this.y)) || this.shouldGoSleep(buildings))) {
       this.releaseJob(world);
       this.toIdle();
+    }
+
+    // Gece meşale başında olmak içi ısıtır: yavaşça moral kazandırır
+    if (isNight() && this.state !== "sleeping" && !this.baby) {
+      const r = LIGHT_RADIUS[BuildingType.Torch] ?? 0;
+      for (const b of buildings) {
+        if (b.type !== BuildingType.Torch || !b.done) continue;
+        const dx = this.x - b.centerX;
+        const dy = this.y - b.centerY;
+        if (dx * dx + dy * dy <= r * r) {
+          this.changeMorale(0.08 * dt, "Meşale başında");
+          break;
+        }
+      }
     }
 
     // sabah oldu: uyan (evde uyuyan evin yanına çıkar)
@@ -465,6 +500,9 @@ export class Villager {
       case "worshipping":
         this.worship(dt);
         break;
+      case "crafting":
+        this.craft(dt);
+        break;
       case "eating":
         this.timer -= dt;
         if (this.timer <= 0) {
@@ -501,6 +539,10 @@ export class Villager {
       case "tend": this.job.animal.claimed = false; break;
       case "hunt": this.job.animal.claimed = false; break;
       case "worship": this.job.building.worshipClaimed = false; break;
+      case "pickup":
+        this.job.building.toolReserved = Math.max(0, this.job.building.toolReserved - 1);
+        break;
+      case "craft": break;
       case "deposit": break;
     }
     this.job = null;
@@ -675,32 +717,26 @@ export class Villager {
             }
           );
         }
-      } else if (hut.type === BuildingType.MushroomGatherer && !bagFull) {
-        const currentCount = world.countTilesNear(
-          [Tile.Mushroom, Tile.Sapling],
-          hx, hy, AUTO_MARK_RADIUS
-        );
-        let plantedEnough = currentCount >= FOOD_TARGET;
-
-        if (!plantedEnough) {
-          this.pushPlantCandidate(world, candidates, hx, hy, Tile.Mushroom, litTile);
-          if (candidates.length === 0) {
-            plantedEnough = true;
-          }
-        }
-
-        if (plantedEnough) {
-          this.pushTileJobCandidate(
-            world, candidates, world.markedBushes, world.claimedBushes,
-            (x, y) => {
-              const item = foodItemOf(world.get(x, y));
-              return item === "mushroom" && inArea(x, y) && litTile(x, y) && !isFull(item);
+      } else if (hut.type === BuildingType.ToolWorkshop) {
+        // Alet ustası: bekleyen sipariş ve hammadde varsa tezgâha geçer
+        if (
+          hut.orders > 0 &&
+          resources.wood >= AXE_WOOD_COST &&
+          resources.stone >= AXE_STONE_COST &&
+          lit(hut.centerX, hut.centerY)
+        ) {
+          candidates.push({
+            dist: 0,
+            start: () => {
+              const path = findPathAdjacentRect(
+                world, this.tileX, this.tileY, hut.x, hut.y, hut.size
+              );
+              if (!path) return false;
+              this.job = { kind: "craft", building: hut };
+              this.startPath(path);
+              return true;
             },
-            (i) => {
-              world.claimedBushes.add(i);
-              this.job = { kind: "gather", tile: i, item: "mushroom" };
-            }
-          );
+          });
         }
       } else if (hut.type === BuildingType.Fisher) {
         if (!isFull("fish") && !bagFull) {
@@ -772,6 +808,44 @@ export class Villager {
       this.pushLaborerCandidates(world, candidates, animals, bagFull, lit, litTile);
     }
 
+    // Ağaç işi yapanlar baltasızsa stoğu olan atölyeden balta alır
+    // (rezervasyon sayesinde boşa gidip dönen olmaz)
+    if (
+      !this.hasAxe &&
+      (a.kind === "laborer" ||
+        (a.kind === "building" && a.building.type === BuildingType.Woodcutter))
+    ) {
+      let bestShop: Building | null = null;
+      let bestShopD = Infinity;
+      for (const b of buildings) {
+        if (b.type !== BuildingType.ToolWorkshop || !b.done || b.removed) continue;
+        if (b.toolStock - b.toolReserved <= 0) continue;
+        if (!lit(b.centerX, b.centerY)) continue;
+        const d = Math.abs(b.x + 1 - this.tileX) + Math.abs(b.y + 1 - this.tileY);
+        if (d < bestShopD) {
+          bestShopD = d;
+          bestShop = b;
+        }
+      }
+      if (bestShop) {
+        const shop = bestShop;
+        candidates.push({
+          dist: bestShopD,
+          start: () => {
+            if (shop.toolStock - shop.toolReserved <= 0) return false;
+            const path = findPathAdjacentRect(
+              world, this.tileX, this.tileY, shop.x, shop.y, shop.size
+            );
+            if (!path) return false;
+            shop.toolReserved++;
+            this.job = { kind: "pickup", building: shop };
+            this.startPath(path);
+            return true;
+          },
+        });
+      }
+    }
+
     let minPrimaryDist = Infinity;
     for (const c of candidates) {
       if (c.dist < minPrimaryDist) {
@@ -821,15 +895,12 @@ export class Villager {
     const a = this.assignment;
     const isWoodcutter = a.kind === "building" && a.building.type === BuildingType.Woodcutter;
     const isGatherer = a.kind === "building" && a.building.type === BuildingType.Gatherer;
-    const isMushroomGatherer = a.kind === "building" && a.building.type === BuildingType.MushroomGatherer;
 
     // Oduncular kendi depoları (wood) dolu değilse meyve/yiyecek toplamaz
     const woodcutterBlocksFood = isWoodcutter && !isFull("wood");
 
     // Toplayıcılar kendi depoları dolu değilse odun toplamaz
-    const gathererBlocksWood =
-      (isGatherer && !isFull("berry")) ||
-      (isMushroomGatherer && !isFull("mushroom"));
+    const gathererBlocksWood = isGatherer && !isFull("berry");
 
     // av: oyuncunun işaretlediği yabani hayvanlar
     if (!bagFull && !isFull("fish") && !woodcutterBlocksFood) {
@@ -879,11 +950,13 @@ export class Villager {
         world, candidates, world.markedBushes, world.claimedBushes,
         (x, y) => {
           const item = foodItemOf(world.get(x, y));
-          return item === "berry" && litTile(x, y) && !isFull(item);
+          // mantar işaretleri zaten Mantaroloji araştırılınca konabiliyor
+          return (item === "berry" || item === "mushroom") && litTile(x, y) && !isFull(item);
         },
-        (i) => {
+        (i, x, y) => {
           world.claimedBushes.add(i);
-          this.job = { kind: "gather", tile: i, item: "berry" };
+          const item = foodItemOf(world.get(x, y)) ?? "berry";
+          this.job = { kind: "gather", tile: i, item };
         }
       );
     }
@@ -1115,6 +1188,12 @@ export class Villager {
       case "worship":
         return !this.job.building.removed &&
           (!night || isLit(buildings, this.job.building.centerX, this.job.building.centerY));
+      case "craft":
+        return !this.job.building.removed && this.job.building.orders > 0 &&
+          resources.wood >= AXE_WOOD_COST && resources.stone >= AXE_STONE_COST &&
+          (!night || isLit(buildings, this.job.building.centerX, this.job.building.centerY));
+      case "pickup":
+        return !this.job.building.removed && this.job.building.toolStock > 0;
       case "sleep":
         return this.shouldGoSleep(buildings);
       case "eat":
@@ -1173,7 +1252,7 @@ export class Villager {
     switch (this.job.kind) {
       case "chop":
         this.state = "chopping";
-        this.timer = chopTime() / speedFactor;
+        this.timer = (this.hasAxe ? CHOP_TIME_AXE : chopTime()) / speedFactor;
         break;
       case "gather":
         this.state = "gathering";
@@ -1212,6 +1291,23 @@ export class Villager {
         this.timer = WORSHIP_TIME / speedFactor;
         this.faceTowards(this.job.building.centerX);
         break;
+      case "craft":
+        this.state = "crafting";
+        this.timer = AXE_CRAFT_TIME / speedFactor;
+        this.faceTowards(this.job.building.centerX);
+        break;
+      case "pickup": {
+        const shop = this.job.building;
+        shop.toolReserved = Math.max(0, shop.toolReserved - 1);
+        if (shop.toolStock > 0 && !this.hasAxe) {
+          shop.toolStock--;
+          this.hasAxe = true;
+          addFloater(this.x, this.y - 14, "Balta aldı", "#c9d4dc");
+        }
+        this.job = null;
+        this.toIdle();
+        break;
+      }
       case "sleep": {
         const b = this.job.building;
         this.job = null;
@@ -1330,12 +1426,57 @@ export class Villager {
     }
     const c = this.jobTileCenter(world, job.tile);
     this.faceTowards(c.x);
-    // Elle dal toplama: balta yok, yavaş öne eğilme hareketi
-    this.walkPhase += dt * 4;
+    if (this.hasAxe) {
+      // Baltayla kesim: hızlı vuruş, talaş saçılır
+      this.walkPhase += dt * 10;
+      this.hitParticles(dt, c.x, c.y - 4, "#7a5a36");
+    } else {
+      // Elle dal toplama: balta yok, yavaş öne eğilme hareketi
+      this.walkPhase += dt * 4;
+    }
     this.timer -= dt;
     if (this.timer <= 0) {
-      world.pruneTree(job.tile % world.width, Math.floor(job.tile / world.width));
-      this.gainItem("wood", 1, c.x, c.y - 10);
+      const tx = job.tile % world.width;
+      const ty = Math.floor(job.tile / world.width);
+      if (this.hasAxe) {
+        // ağaç tamamen devrilir (yeniden çıkmaz), bolca odun verir
+        world.fellTree(tx, ty);
+        this.gainItem("wood", AXE_WOOD_YIELD, c.x, c.y - 10);
+      } else {
+        world.pruneTree(tx, ty);
+        this.gainItem("wood", 1, c.x, c.y - 10);
+      }
+      this.job = null;
+      this.toIdle();
+    }
+  }
+
+  // Atölyede balta yap: hammadde tamamlanınca düşülür, stok artar
+  private craft(dt: number): void {
+    const job = this.job;
+    if (!job || job.kind !== "craft" || job.building.removed) {
+      this.job = null;
+      this.toIdle();
+      return;
+    }
+    const shop = job.building;
+    this.walkPhase += dt * 9; // çekiç ritmi
+    this.hitParticles(dt, shop.centerX, shop.centerY - 6, "#c9d4dc");
+    this.timer -= dt;
+    if (this.timer <= 0) {
+      if (
+        shop.orders > 0 &&
+        resources.wood >= AXE_WOOD_COST &&
+        resources.stone >= AXE_STONE_COST
+      ) {
+        resources.wood -= AXE_WOOD_COST;
+        resources.stone -= AXE_STONE_COST;
+        shop.orders--;
+        shop.toolStock++;
+        addFloater(shop.centerX, shop.y * TILE_SIZE - 6, "+1 balta", "#c9d4dc");
+      } else {
+        addFloater(shop.centerX, shop.y * TILE_SIZE - 6, "Hammadde yok!", "#ff6655");
+      }
       this.job = null;
       this.toIdle();
     }

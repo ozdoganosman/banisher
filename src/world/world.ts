@@ -96,8 +96,8 @@ export class World {
           if (f > 0.55 && hash2(x, y, seed + 13) > 0.65) {
             // orman kuşakları
             t = Tile.Tree;
-          } else if (f > 0.55 && hash2(x, y, seed + 61) > 0.8) {
-            // orman içlerinde mantarlar (ağaç çıkmayan boşluklarda)
+          } else if (f > 0.55 && hash2(x, y, seed + 61) > 0.94) {
+            // orman içlerinde seyrek mantarlar (yenileri binalardan uzakta biter)
             t = Tile.Mushroom;
           } else if (f > 0.46 && hash2(x, y, seed + 31) > 0.95) {
             // orman kenarlarında yemiş çalıları (seyrek)
@@ -251,6 +251,14 @@ export class World {
     const i = this.index(x, y);
     this.markedBushes.delete(i);
     this.claimedBushes.delete(i);
+    this.set(x, y, Tile.Grass);
+  }
+
+  // Baltayla kesim: ağaç tamamen devrilir, yeniden çıkmaz
+  fellTree(x: number, y: number): void {
+    const i = this.index(x, y);
+    this.markedTrees.delete(i);
+    this.claimedTrees.delete(i);
     this.set(x, y, Tile.Grass);
   }
 

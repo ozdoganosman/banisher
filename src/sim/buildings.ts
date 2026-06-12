@@ -17,7 +17,7 @@ export const enum BuildingType {
   Fisher = 9, // su kenarına kurulur; balıkçılar kıyıdan balık tutar
   Barn = 10, // çiftlik: tavuk/inek/domuz besler, çiftçiler ürün toplar
   Collective = 11, // Kollektif ambar (sadece gıda depolar)
-  MushroomGatherer = 12, // Mantarcı binası (mantar ekilip toplanır)
+  ToolWorkshop = 12, // Alet atölyesi: sipariş üzerine balta üretir
 }
 
 export interface BuildingDef {
@@ -130,15 +130,20 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     maxWorkers: 0,
     desc: "Gıda kapasitesi +60 (sadece gıda depolar)",
   },
-  [BuildingType.MushroomGatherer]: {
-    name: "Mantarcı",
-    cost: 10,
-    buildTime: 8,
+  [BuildingType.ToolWorkshop]: {
+    name: "Alet Atölyesi",
+    cost: 16,
+    buildTime: 10,
     size: 2,
-    maxWorkers: 3,
-    desc: "3 mantarcı: alanına mantar eker ve toplar",
+    maxWorkers: 1,
+    desc: "Sipariş üzerine balta üretir (3 dal + 3 taş); baltalı işçiler ağaç kesip odun alır",
   },
 };
+
+// Balta üretim reçetesi
+export const AXE_WOOD_COST = 3;
+export const AXE_STONE_COST = 3;
+export const AXE_CRAFT_TIME = 10; // saniye
 
 // ---- Konut sistemi ----
 
@@ -156,7 +161,7 @@ export const ROLE_NAMES: Partial<Record<BuildingType, string>> = {
   [BuildingType.Temple]: "Rahip",
   [BuildingType.Fisher]: "Balıkçı",
   [BuildingType.Barn]: "Çiftçi",
-  [BuildingType.MushroomGatherer]: "Mantarcı",
+  [BuildingType.ToolWorkshop]: "Alet Ustası",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları
@@ -199,6 +204,10 @@ export class Building {
   warnedOut = false; // kaynak bitti bildirimi bir kez gösterilir
   worshipTimer = 8; // tapınak: bu sayaç bitince yeni ayin yapılabilir
   worshipClaimed = false;
+  // Alet atölyesi: bekleyen balta siparişi, hazır stok ve yolda olan rezervasyonlar
+  orders = 0;
+  toolStock = 0;
+  toolReserved = 0;
   private scanTimer = Math.random() * SCAN_INTERVAL;
 
   constructor(
@@ -238,7 +247,12 @@ export class Building {
     if (this.type === BuildingType.Temple && this.worshipTimer > 0) {
       this.worshipTimer -= dt;
     }
-    if (this.type !== BuildingType.Woodcutter && this.type !== BuildingType.Gatherer && this.type !== BuildingType.MushroomGatherer) return;
+    if (this.type === BuildingType.ToolWorkshop) {
+      // sipariş yokken bina üzerinde uyarı çıksın
+      this.outOfResources = this.orders <= 0;
+      return;
+    }
+    if (this.type !== BuildingType.Woodcutter && this.type !== BuildingType.Gatherer) return;
     this.scanTimer -= dt;
     if (this.scanTimer > 0) return;
     this.scanTimer = SCAN_INTERVAL;
@@ -262,14 +276,6 @@ export class Building {
       this.outOfResources =
         !t && markedNear === 0 && !world.findPlantSpot(cx, cy, AUTO_MARK_RADIUS, cx, cy);
       if (isFull("berry")) return;
-      if (markedNear >= maxMarks) return;
-      if (t) world.markFood(t.x, t.y);
-    } else if (this.type === BuildingType.MushroomGatherer) {
-      const t = world.findNearestTileOfType(Tile.Mushroom, cx, cy, AUTO_MARK_RADIUS, world.markedBushes);
-      const markedNear = world.countMarkedNear(world.markedBushes, cx, cy, AUTO_MARK_RADIUS);
-      this.outOfResources =
-        !t && markedNear === 0 && !world.findPlantSpot(cx, cy, AUTO_MARK_RADIUS, cx, cy);
-      if (isFull("mushroom")) return;
       if (markedNear >= maxMarks) return;
       if (t) world.markFood(t.x, t.y);
     }
@@ -308,20 +314,12 @@ export function placeBuilding(world: World, b: Building): void {
 }
 
 export function isBuildingUnlocked(type: BuildingType): boolean {
-  if (type === BuildingType.House || type === BuildingType.Temple || type === BuildingType.Camp) return true;
+  // Beşer/Doğa artık bina açmıyor (yalnız moral ve ateş etkisi verir);
+  // temel üretim binaları baştan serbest, ileride yeniden ayarlanacak
   if (type === BuildingType.Depot) return hasTech("capital");
-  if (type === BuildingType.Woodcutter) return hasTech("humanity");
-  if (type === BuildingType.Gatherer) return hasTech("nature");
   if (type === BuildingType.Collective) return hasTech("collective");
-  if (type === BuildingType.Fisher) return hasTech("nature");
-  if (type === BuildingType.MushroomGatherer) return hasTech("mushroomology");
-  if (
-    type === BuildingType.Barn ||
-    type === BuildingType.Cafeteria ||
-    type === BuildingType.Nursery ||
-    type === BuildingType.Torch
-  ) {
-    return hasTech("humanity");
-  }
-  return false;
+  if (type === BuildingType.Torch) return hasTech("nature"); // ateş keşfi
+  if (type === BuildingType.Nursery) return hasTech("cognitive");
+  if (type === BuildingType.ToolWorkshop) return hasTech("toolworkshop");
+  return true;
 }

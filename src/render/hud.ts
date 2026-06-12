@@ -1,4 +1,6 @@
 import {
+  AXE_STONE_COST,
+  AXE_WOOD_COST,
   BUILDING_DEFS,
   BuildingType,
   HOUSE_CAPACITY,
@@ -17,7 +19,7 @@ import {
   type ItemType,
   FOOD_TYPES,
 } from "../sim/resources";
-import { hasTech, TECHS, type TechId, type Tech } from "../sim/tech";
+import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
   darkness,
   dateString,
@@ -320,7 +322,7 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.Collective,
   BuildingType.Woodcutter,
   BuildingType.Gatherer,
-  BuildingType.MushroomGatherer,
+  BuildingType.ToolWorkshop,
   BuildingType.Fisher,
   BuildingType.Barn,
   BuildingType.Torch,
@@ -413,7 +415,9 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(10, 12, 16, 0.7)";
-  const visibleFilters = MARK_FILTERS.filter(f => f.id !== "stone" || hasTech("humanity"));
+  const visibleFilters = MARK_FILTERS.filter(
+    (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
+  );
   const totalW = 64 + visibleFilters.reduce(
     (s, f) => s + ctx.measureText(f.label).width + 22, 0
   );
@@ -596,7 +600,11 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.font = "13px monospace";
   ctx.fillStyle = "#e8e2d0";
   const ageText = v.baby ? `${v.ageDays} günlük` : `Yaş: ${v.identity.age}`;
-  ctx.fillText(`${ageText} • ${v.identity.female ? "Kadın" : "Erkek"}`, tx, y + 46);
+  const eduText = v.educated ? " • Eğitimli" : "";
+  ctx.fillText(
+    `${ageText} • ${v.identity.female ? "Kadın" : "Erkek"}${eduText}`,
+    tx, y + 46, w - 82 - 12
+  );
   ctx.fillStyle = "#c9a35a";
   ctx.fillText(`Görev: ${v.baby ? "Bebek" : assignmentLabel(v.assignment)}`, tx, y + 64, w - 82 - 12);
   ctx.fillStyle = "#9ad0ff";
@@ -675,11 +683,14 @@ let bpanel = { x: 12, y: 44, w: 252, h: 120 };
 let bpanelHire: { x: number; y: number; w: number; h: number } | null = null;
 let bpanelFire: { x: number; y: number; w: number; h: number } | null = null;
 let bpanelDemolish: { x: number; y: number; w: number; h: number } | null = null;
+// Alet atölyesi: balta siparişi artır/azalt düğmeleri
+let bpanelOrderPlus: { x: number; y: number; w: number; h: number } | null = null;
+let bpanelOrderMinus: { x: number; y: number; w: number; h: number } | null = null;
 
 export function buildingPanelHitTest(
   sx: number,
   sy: number
-): "close" | "hire" | "fire" | "demolish" | "panel" | null {
+): "close" | "hire" | "fire" | "demolish" | "orderPlus" | "orderMinus" | "panel" | null {
   const cx = bpanel.x + bpanel.w - 24;
   const cy = bpanel.y + 6;
   if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return "close";
@@ -687,6 +698,8 @@ export function buildingPanelHitTest(
     r && sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h;
   if (inRect(bpanelHire)) return "hire";
   if (inRect(bpanelFire)) return "fire";
+  if (inRect(bpanelOrderPlus)) return "orderPlus";
+  if (inRect(bpanelOrderMinus)) return "orderMinus";
   if (inRect(bpanelDemolish)) return "demolish";
   if (sx >= bpanel.x && sx <= bpanel.x + bpanel.w && sy >= bpanel.y && sy <= bpanel.y + bpanel.h) {
     return "panel";
@@ -753,15 +766,17 @@ export function drawBuildingPanel(
     else if (
       b.type === BuildingType.Woodcutter ||
       b.type === BuildingType.Gatherer ||
-      b.type === BuildingType.MushroomGatherer ||
       b.type === BuildingType.Temple
     ) h += 22;
+    else if (b.type === BuildingType.ToolWorkshop) h += 64;
   }
   if (b.type !== BuildingType.Camp) h += 32; // yık düğmesi satırı
   bpanel = { x, y, w, h };
   bpanelHire = null;
   bpanelFire = null;
   bpanelDemolish = null;
+  bpanelOrderPlus = null;
+  bpanelOrderMinus = null;
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
   ctx.fillRect(x, y, w, h);
@@ -884,8 +899,7 @@ export function drawBuildingPanel(
     }
   } else if (
     b.type === BuildingType.Woodcutter ||
-    b.type === BuildingType.Gatherer ||
-    b.type === BuildingType.MushroomGatherer
+    b.type === BuildingType.Gatherer
   ) {
     const marked = b.type === BuildingType.Woodcutter
       ? world.countMarkedNear(world.markedTrees, b.x + 1, b.y + 1, 9)
@@ -893,6 +907,35 @@ export function drawBuildingPanel(
     ctx.fillStyle = "#e8e2d0";
     ctx.font = "12px monospace";
     ctx.fillText(`Çevrede işaretli: ${marked}`, x + 12, ly + 2);
+  } else if (b.type === BuildingType.ToolWorkshop) {
+    // Balta üretim sırası: stok, sipariş ve +/− düğmeleri
+    ctx.font = "12px monospace";
+    ctx.fillStyle = "#c9d4dc";
+    ctx.fillText(`🪓 Balta stoğu: ${b.toolStock}`, x + 12, ly);
+    if (b.toolReserved > 0) {
+      ctx.fillStyle = "#9a9488";
+      ctx.fillText(`(${b.toolReserved} alınıyor)`, x + 150, ly);
+    }
+    ly += 20;
+    ctx.fillStyle = b.orders > 0 ? "#e8e2d0" : "#e0a83c";
+    ctx.fillText(`Sipariş: ${b.orders}`, x + 12, ly);
+    bpanelOrderMinus = { x: x + 140, y: ly - 9, w: 22, h: 18 };
+    bpanelOrderPlus = { x: x + 204, y: ly - 9, w: 22, h: 18 };
+    for (const [r, sym] of [[bpanelOrderMinus, "−"], [bpanelOrderPlus, "+"]] as const) {
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = "#5a5f68";
+      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      ctx.fillStyle = "#e8e2d0";
+      ctx.font = "bold 13px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(sym, r.x + r.w / 2, r.y + r.h / 2 + 1);
+      ctx.textAlign = "left";
+    }
+    ly += 20;
+    ctx.font = "11px monospace";
+    ctx.fillStyle = "#9a9488";
+    ctx.fillText(`Balta başına ${AXE_WOOD_COST} dal + ${AXE_STONE_COST} taş`, x + 12, ly);
   } else if (b.type === BuildingType.Temple) {
     ctx.font = "12px monospace";
     if (b.worshipClaimed) {
@@ -1112,8 +1155,8 @@ const TECH_CARD_W = 200;
 const TECH_CARD_H = 116;
 const TECH_COL_W = 220;
 const TECH_ROW_H = 78;
-const TECH_W = 24 + 2 * TECH_COL_W + TECH_CARD_W + 24; // 688
-const TECH_H = 64 + 3 * TECH_ROW_H + TECH_CARD_H + 20; // 434
+const TECH_W = 24 + 3 * TECH_COL_W + TECH_CARD_W + 24; // 908
+const TECH_H = 64 + 4 * TECH_ROW_H + TECH_CARD_H + 20; // 512
 let techRect = { x: 0, y: 0, w: TECH_W, h: TECH_H };
 
 export type TechHit =
@@ -1143,7 +1186,7 @@ export function techPanelHitTest(sx: number, sy: number): TechHit {
     const pos = getTechPos(tech, techRect.x, techRect.y);
     if (sx >= pos.x && sx <= pos.x + cardW && sy >= pos.y && sy <= pos.y + cardH) {
       const owned = hasTech(tech.id);
-      const locked = tech.prereq && !hasTech(tech.prereq);
+      const locked = !prereqsMet(tech);
       if (!owned && !locked) {
         return { kind: "buy", id: tech.id };
       }
@@ -1188,37 +1231,36 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
 
   // 1. Bağlantı çizgilerini çiz (kartların arkasında kalması için)
   TECHS.forEach((tech) => {
-    if (tech.prereq) {
-      const parent = TECHS.find((t) => t.id === tech.prereq);
-      if (parent) {
-        const pPos = getTechPos(parent, x, y);
-        const curPos = getTechPos(tech, x, y);
-        const pRightX = pPos.x + cardW;
-        const pRightY = pPos.y + cardH / 2;
-        const curLeftX = curPos.x;
-        const curLeftY = curPos.y + cardH / 2;
+    for (const pid of tech.prereq ?? []) {
+      const parent = TECHS.find((t) => t.id === pid);
+      if (!parent) continue;
+      const pPos = getTechPos(parent, x, y);
+      const curPos = getTechPos(tech, x, y);
+      const pRightX = pPos.x + cardW;
+      const pRightY = pPos.y + cardH / 2;
+      const curLeftX = curPos.x;
+      const curLeftY = curPos.y + cardH / 2;
 
-        const isOwned = hasTech(tech.id);
-        const isParentOwned = hasTech(parent.id);
+      const isOwned = hasTech(tech.id);
+      const isParentOwned = hasTech(parent.id);
 
-        ctx.strokeStyle = isOwned
-          ? "rgba(143, 208, 94, 0.65)"
-          : isParentOwned
-          ? "rgba(176, 143, 224, 0.45)"
-          : "rgba(255, 255, 255, 0.1)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(pRightX, pRightY);
-        ctx.bezierCurveTo(
-          pRightX + 30,
-          pRightY,
-          curLeftX - 30,
-          curLeftY,
-          curLeftX,
-          curLeftY
-        );
-        ctx.stroke();
-      }
+      ctx.strokeStyle = isOwned
+        ? "rgba(143, 208, 94, 0.65)"
+        : isParentOwned
+        ? "rgba(176, 143, 224, 0.45)"
+        : "rgba(255, 255, 255, 0.1)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(pRightX, pRightY);
+      ctx.bezierCurveTo(
+        pRightX + 30,
+        pRightY,
+        curLeftX - 30,
+        curLeftY,
+        curLeftX,
+        curLeftY
+      );
+      ctx.stroke();
     }
   });
 
@@ -1226,7 +1268,7 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
   TECHS.forEach((tech) => {
     const pos = getTechPos(tech, x, y);
     const owned = hasTech(tech.id);
-    const locked = tech.prereq && !hasTech(tech.prereq);
+    const locked = !prereqsMet(tech);
     const affordable = resources.knowledge >= tech.cost;
 
     // Kart arka planı
@@ -1244,45 +1286,58 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
     ctx.fillRect(pos.x, pos.y, cardW, cardH);
     ctx.strokeRect(pos.x + 0.5, pos.y + 0.5, cardW - 1, cardH - 1);
 
-    // İsim
-    ctx.font = "bold 14px monospace";
+    // İsim (uzun adlar iki satıra sarılır)
+    ctx.font = "bold 13px monospace";
     if (owned) ctx.fillStyle = "#8fd05e";
     else if (locked) ctx.fillStyle = "#6a6458";
     else ctx.fillStyle = "#e8e2d0";
-    ctx.fillText(tech.name, pos.x + 10, pos.y + 17, cardW - 20);
+    const nameLines = wrapText(ctx, tech.name, cardW - 20).slice(0, 2);
+    let cy2 = pos.y + 16;
+    for (const line of nameLines) {
+      ctx.fillText(line, pos.x + 10, cy2, cardW - 20);
+      cy2 += 15;
+    }
 
     // Maliyet / Durum
     ctx.font = "12px monospace";
+    cy2 += 4;
     if (owned) {
       ctx.fillStyle = "#8fd05e";
-      ctx.fillText("✓ Araştırıldı", pos.x + 10, pos.y + 37);
+      ctx.fillText("✓ Araştırıldı", pos.x + 10, cy2);
     } else if (locked) {
       ctx.fillStyle = "#b06a5c";
-      const parentName = TECHS.find((t) => t.id === tech.prereq)?.name ?? "";
-      ctx.fillText(`Kilitli — önce ${parentName}`, pos.x + 10, pos.y + 37, cardW - 20);
+      const missing = (tech.prereq ?? [])
+        .filter((p) => !hasTech(p))
+        .map((p) => TECHS.find((t) => t.id === p)?.name ?? p);
+      ctx.fillText(`Kilitli — önce ${missing.join(" + ")}`, pos.x + 10, cy2, cardW - 20);
     } else {
       ctx.fillStyle = affordable ? "#e0b864" : "#b06a5c";
-      ctx.fillText(`Maliyet: ${tech.cost} bilgi`, pos.x + 10, pos.y + 37);
+      ctx.fillText(`Maliyet: ${tech.cost} bilgi`, pos.x + 10, cy2);
     }
+    cy2 += 11;
 
     // Ayraç çizgisi
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.beginPath();
-    ctx.moveTo(pos.x + 10, pos.y + 48.5);
-    ctx.lineTo(pos.x + cardW - 10, pos.y + 48.5);
+    ctx.moveTo(pos.x + 10, cy2 + 0.5);
+    ctx.lineTo(pos.x + cardW - 10, cy2 + 0.5);
     ctx.stroke();
+    cy2 += 13;
 
-    // Açıklama (satırlara bölünmüş)
+    // Açıklama (satırlara bölünmüş, kart sınırına sığdığı kadar)
     ctx.font = "11px monospace";
     ctx.fillStyle = locked ? "#6a6458" : "#b8b2a4";
     const descLines = wrapText(ctx, tech.desc, cardW - 20);
-    const maxLines = !owned && !locked && affordable ? 3 : 4;
-    for (let i = 0; i < Math.min(descLines.length, maxLines); i++) {
-      ctx.fillText(descLines[i], pos.x + 10, pos.y + 62 + i * 14, cardW - 20);
+    const buyHint = !owned && !locked && affordable;
+    const bottomLimit = pos.y + cardH - (buyHint ? 20 : 8);
+    for (const line of descLines) {
+      if (cy2 > bottomLimit) break;
+      ctx.fillText(line, pos.x + 10, cy2, cardW - 20);
+      cy2 += 14;
     }
 
     // Satın alınabilir kartlarda tıklama ipucu
-    if (!owned && !locked && affordable) {
+    if (buyHint) {
       ctx.font = "bold 11px monospace";
       ctx.fillStyle = "#b08fe0";
       ctx.fillText("▶ Araştırmak için tıkla", pos.x + 10, pos.y + cardH - 11);

@@ -37,6 +37,8 @@ import {
 import { buyTech, hasTech } from "./sim/tech";
 import { Animal, ANIMAL_DEFS, BARN_HERD, WILD_POOL, type AnimalType } from "./sim/animals";
 import {
+  AXE_STONE_COST,
+  AXE_WOOD_COST,
   Building,
   BUILDING_DEFS,
   BuildingType,
@@ -297,7 +299,9 @@ function spawnVillagersAround(cx: number, cy: number, count: number): number {
         const x = cx + dx;
         const y = cy + dy;
         if (!world.walkableAt(x, y)) continue;
-        villagers.push(new Villager(x, y));
+        const v = new Villager(x, y);
+        if (hasTech("humanity")) v.changeMorale(10, "Tanrı inancı");
+        villagers.push(v);
         placed++;
       }
     }
@@ -387,7 +391,13 @@ input.onClick = (wx, wy, sx, sy) => {
     if (hit) {
       if (hit.kind === "close") showTech = false;
       else if (hit.kind === "buy") {
-        if (!buyTech(hit.id)) addMessage("Yetersiz bilgi!");
+        if (!buyTech(hit.id)) {
+          addMessage("Yetersiz bilgi!");
+        } else if (hit.id === "humanity") {
+          // Tanrı inancı: yaşayan herkese kalıcı +10 moral
+          for (const v of villagers) v.changeMorale(10, "Tanrı inancı");
+          addMessage("Tanrı inancı doğdu: herkese +10 moral!");
+        }
       }
       return;
     }
@@ -430,7 +440,18 @@ input.onClick = (wx, wy, sx, sy) => {
       if (hit === "close") selectedBuilding = null;
       else if (hit === "hire") hire(selectedBuilding);
       else if (hit === "fire") fire(selectedBuilding);
-      else if (hit === "demolish") demolishBuilding(selectedBuilding);
+      else if (hit === "orderPlus") {
+        // hammadde yeterliyse sipariş ver (alete bastığımızda hammadde varsa üretsin)
+        const queuedWood = (selectedBuilding.orders + 1) * AXE_WOOD_COST;
+        const queuedStone = (selectedBuilding.orders + 1) * AXE_STONE_COST;
+        if (resources.wood >= queuedWood && resources.stone >= queuedStone) {
+          selectedBuilding.orders++;
+        } else {
+          addMessage(`Yetersiz hammadde! (balta: ${AXE_WOOD_COST} dal + ${AXE_STONE_COST} taş)`);
+        }
+      } else if (hit === "orderMinus") {
+        selectedBuilding.orders = Math.max(0, selectedBuilding.orders - 1);
+      } else if (hit === "demolish") demolishBuilding(selectedBuilding);
       return;
     }
   }
@@ -746,6 +767,7 @@ function nightlyBirths(): void {
           if (!world.walkableAt(x, y)) continue;
           const baby = new Villager(x, y, true);
           baby.home = b;
+          if (hasTech("humanity")) baby.changeMorale(10, "Tanrı inancı");
           villagers.push(baby);
           addMessage(`👶 ${baby.fullName} doğdu!`);
           addFloater(b.centerX, b.y * TILE_SIZE - 6, "+1 bebek", "#ffb0d0");
@@ -811,12 +833,49 @@ function checkStorageFull() {
   wasFamine = famine;
 }
 
+// Mantarlar yalnızca binalardan uzak, el değmemiş yerlerde kendiliğinden biter
+const MUSHROOM_MIN_BUILDING_DIST = 12; // blok
+const MUSHROOM_WILD_CAP = 60;
+let mushroomTimer = 20;
+
+function trySpawnWildMushroom(): void {
+  // üst sınır: harita mantar kaplamasın
+  let count = 0;
+  for (let i = 0; i < world.tiles.length; i++) {
+    if (world.tiles[i] === Tile.Mushroom) count++;
+  }
+  if (count >= MUSHROOM_WILD_CAP) return;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const x = 1 + Math.floor(Math.random() * (MAP_W - 2));
+    const y = 1 + Math.floor(Math.random() * (MAP_H - 2));
+    if (world.get(x, y) !== Tile.Grass || !world.walkableAt(x, y)) continue;
+    let nearBuilding = false;
+    for (const b of buildings) {
+      const d = Math.max(Math.abs(x - (b.x + 1)), Math.abs(y - (b.y + 1)));
+      if (d < MUSHROOM_MIN_BUILDING_DIST) {
+        nearBuilding = true;
+        break;
+      }
+    }
+    if (nearBuilding) continue;
+    world.set(x, y, Tile.Mushroom);
+    return;
+  }
+}
+
 function step(dt: number) {
   updateTime(dt);
   world.update(dt);
   updateEffects(dt);
   checkStorageFull();
   checkMilestones();
+
+  // yabani mantar türemesi
+  mushroomTimer -= dt;
+  if (mushroomTimer <= 0) {
+    mushroomTimer = 18 + Math.random() * 12;
+    trySpawnWildMushroom();
+  }
 
   // gün dönümü: doğumlar
   const days = totalDays();
@@ -887,7 +946,11 @@ function step(dt: number) {
     // kaynak bitti uyarısı (bir kez; kaynak dönerse sıfırlanır)
     if (b.outOfResources && !b.warnedOut && workersOf(b) > 0) {
       b.warnedOut = true;
-      addMessage(`⚠ ${b.def.name} kulübesinin menzilinde kaynak kalmadı!`);
+      if (b.type === BuildingType.ToolWorkshop) {
+        addMessage(`⚠ ${b.def.name} sipariş bekliyor! (binaya tıklayıp sipariş ver)`);
+      } else {
+        addMessage(`⚠ ${b.def.name} kulübesinin menzilinde kaynak kalmadı!`);
+      }
     } else if (!b.outOfResources) {
       b.warnedOut = false;
     }

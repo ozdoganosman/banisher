@@ -721,7 +721,6 @@ export class Renderer {
       const isWorkHut =
         ghost.type === BuildingType.Woodcutter ||
         ghost.type === BuildingType.Gatherer ||
-        ghost.type === BuildingType.MushroomGatherer ||
         ghost.type === BuildingType.Fisher;
       const pr = lr ?? (isWorkHut ? AUTO_MARK_RADIUS * TILE_SIZE : 0);
       if (pr) {
@@ -831,7 +830,7 @@ export class Renderer {
       case BuildingType.Nursery: this.drawNursery(ctx, px, py); break;
       case BuildingType.Fisher: this.drawFisher(ctx, px, py); break;
       case BuildingType.Barn: this.drawBarn(ctx, px, py); break;
-      case BuildingType.MushroomGatherer: this.drawMushroomGatherer(ctx, px, py); break;
+      case BuildingType.ToolWorkshop: this.drawToolWorkshop(ctx, px, py); break;
     }
   }
 
@@ -1427,28 +1426,31 @@ export class Renderer {
     ctx.fillRect(px + 27, py + 22, 1, 1);
   }
 
-  private drawMushroomGatherer(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+  private drawToolWorkshop(ctx: CanvasRenderingContext2D, px: number, py: number): void {
     this.baseShadow(ctx, px + 11, py + 29, 10);
-    this.baseShadow(ctx, px + 26, py + 27, 4, 1.3); // basket
-    // brownish-yellow roofed hut
+    this.baseShadow(ctx, px + 26, py + 27, 4, 1.3); // örs kütüğü
+    // gri çatılı taş atölye
     ctx.fillStyle = WALL;
     ctx.fillRect(px + 3, py + 12, 17, 17);
     this.outlineRect(ctx, px + 3, py + 12, 17, 17);
-    ctx.fillStyle = "#8a6c40"; // brown roof
+    ctx.fillStyle = "#5a6068"; // taş grisi çatı
     ctx.fillRect(px + 2, py + 8, 19, 5);
-    ctx.fillStyle = "#a88452";
+    ctx.fillStyle = "#7a828c";
     ctx.fillRect(px + 2, py + 8, 19, 2);
     ctx.fillStyle = "rgba(0,0,0,0.22)";
     ctx.fillRect(px + 3, py + 13, 17, 2);
     ctx.fillStyle = "#4a2e1a";
     ctx.fillRect(px + 9, py + 21, 5, 8);
-    // mushroom basket
-    ctx.fillStyle = "#b8884a";
-    ctx.fillRect(px + 23, py + 23, 6, 4);
-    ctx.fillStyle = "#d9b06b"; // mushroom cap color
-    ctx.fillRect(px + 24, py + 21, 2, 2);
-    ctx.fillStyle = "#e8e0cc"; // mushroom stem/gills color
-    ctx.fillRect(px + 27, py + 22, 1, 1);
+    // duvara asılı balta
+    ctx.fillStyle = "#7a5a36"; // sap
+    ctx.fillRect(px + 16, py + 15, 1.4, 5);
+    ctx.fillStyle = "#c9d4dc"; // demir baş
+    ctx.fillRect(px + 14.6, py + 14.4, 4, 2);
+    // kütük üstünde örs
+    ctx.fillStyle = "#6a4a2e";
+    ctx.fillRect(px + 24, py + 24, 5, 3);
+    ctx.fillStyle = "#9aa4ae";
+    ctx.fillRect(px + 23.5, py + 22.4, 6, 2);
   }
 
   // ---- Cin Ali tarzı çöp adam ----
@@ -1638,6 +1640,16 @@ export class Renderer {
 
     drawVillagerJobAccessories(ctx, x, y, v.facing, v.assignment, 1);
 
+    // baltalı köylü: elinde küçük balta taşır
+    if (v.hasAxe && !v.baby) {
+      const hx = x + 2.6 * v.facing;
+      const hy = y - 5.2;
+      ctx.fillStyle = "#7a5a36"; // sap
+      ctx.fillRect(hx - 0.5, hy - 2.6, 1, 3.2);
+      ctx.fillStyle = "#c9d4dc"; // demir baş
+      ctx.fillRect(hx - 0.5 + 0.9 * v.facing, hy - 3.2, 1.8 * v.facing, 1.4);
+    }
+
     // yemek yerken kafanın yanında lokma
     if (v.state === "eating") {
       ctx.fillStyle = "#d43f3f";
@@ -1786,20 +1798,14 @@ export function drawVillagerJobAccessories(
       ctx.fillRect(x - 0.8 * s, y - 7.5 * s, 1.6 * s, 2.5 * s);
     }
     
-    // 6. Mushroom Gatherer (Mantarcı)
-    else if (type === 12) { // BuildingType.MushroomGatherer
-      // Kırmızı mantar şapka (mushroom cap)
-      ctx.fillStyle = "#c43030";
-      ctx.beginPath();
-      ctx.arc(x, y - 12.5 * s, 2.8 * s, Math.PI, 0);
-      ctx.fill();
-      // Alt taban düzlüğü
-      ctx.fillRect(x - 2.8 * s, y - 12.8 * s, 5.6 * s, 0.8 * s);
-      // Beyaz benekler
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(x - 1.2 * s, y - 14.5 * s, 0.6 * s, 0.6 * s);
-      ctx.fillRect(x + 1.2 * s, y - 14.5 * s, 0.6 * s, 0.6 * s);
-      ctx.fillRect(x, y - 13.5 * s, 0.6 * s, 0.6 * s);
+    // 6. Tool Smith (Alet Ustası)
+    else if (type === 12) { // BuildingType.ToolWorkshop
+      // Koyu deri demirci önlüğü
+      ctx.fillStyle = "#4a3526";
+      ctx.fillRect(x - 0.9 * s, y - 8.5 * s, 1.8 * s, 3.5 * s);
+      // Alın bandı
+      ctx.fillStyle = "#7f8c8d";
+      ctx.fillRect(x - 2 * s, y - 13.2 * s, 4 * s, 0.9 * s);
     }
   }
   
