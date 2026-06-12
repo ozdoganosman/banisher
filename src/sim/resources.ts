@@ -44,7 +44,7 @@ export const FOOD_NUTRITION: Record<ItemType, number> = {
 export const resources: Record<ItemType, number> & { cap: number; knowledge: number } = {
   ...(Object.fromEntries(ITEM_TYPES.map((t) => [t, 0])) as Record<ItemType, number>),
   wood: 20,
-  berry: 20,
+  berry: 45, // 10 kişilik kabilenin ilk gün erzağı
   cap: 500, // temel çadır (kamp) stoğu
   knowledge: 0, // tapınaklarda üretilir; depo kapasitesine tabi değildir
 };

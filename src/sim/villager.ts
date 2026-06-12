@@ -69,7 +69,7 @@ const MELEE_DAMAGE = 3;
 const HUNT_GIVEUP_RANGE = 15 * TILE_SIZE; // mızrak attıktan sonra av bu kadar kaçarsa bırak
 const HUNT_APPROACH_RANGE = 40 * TILE_SIZE; // ava yaklaşma için mutlak üst sınır
 const EVENING_FRAC = 17 / 24; // 23:00 — iş biter, ateş başına toplanılır
-const COLD_MORALE_RATE = 0.045; // kışın giysisiz dışarıda olmanın moral bedeli (sn başına)
+const COLD_MORALE_RATE = 0.022; // kışın giysisiz dışarıda olmanın moral bedeli (sn başına)
 const FISH_PER_CATCH = 2;
 const TEND_TIME = 2.5;
 const TAME_TIME = 6; // evcilleştirme: sabırlı yaklaşma
@@ -78,7 +78,7 @@ const FOOD_TARGET = 14; // toplayıcının alanında hedef çalı/mantar/yemiş
 
 // Toplanabilir yemeklerin verimi (eşya başına)
 const GATHER_YIELD: Partial<Record<ItemType, number>> = {
-  berry: 4, mushroom: 1,
+  berry: 6, mushroom: 2,
 };
 
 // Teknolojiye göre değişen değerler
@@ -98,7 +98,10 @@ function forageBonus(): number {
   return 0;
 }
 
-const HUNGER_RATE = 40 / 150; // günde 40 birim beslenme düşsün (150 saniyede 40 artar)
+// Günde 40 birim açlık: gün süresi tuning'den okunur (gün uzarsa oran düşer)
+function hungerRate(): number {
+  return 40 / tuning.dayLength;
+}
 export const EAT_THRESHOLD = 40;
 const EAT_TIME = 1.2;
 const STARVE_TIME = 45;
@@ -619,7 +622,7 @@ export class Villager {
       this.state = "idle";
       this.path = [];
       this.timer = 0.3;
-      this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
+      this.hunger = Math.min(100, this.hunger + hungerRate() * dt);
       return;
     }
 
@@ -638,7 +641,7 @@ export class Villager {
       this.state = "idle";
       this.path = [];
       this.timer = 0.4;
-      this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
+      this.hunger = Math.min(100, this.hunger + hungerRate() * dt);
       return;
     }
     if (isSleepTime()) {
@@ -700,7 +703,7 @@ export class Villager {
     if (this.baby && this.nurseryCovered) {
       this.hunger = Math.max(0, this.hunger - 8 * dt);
     } else {
-      this.hunger = Math.min(100, this.hunger + HUNGER_RATE * dt);
+      this.hunger = Math.min(100, this.hunger + hungerRate() * dt);
     }
     if (this.starving) {
       this.starveTimer += dt;
@@ -733,10 +736,12 @@ export class Villager {
       this.toIdle();
     }
 
-    // Kış: giysisi olmayan dışarıda üşür, morali erir (deri giysi korur)
+    // Kış: giysisi olmayan dışarıda üşür, morali erir.
+    // Deri giysi VEYA ateş başında olmak (kamp ateşi/meşale ışığı) korur.
     if (
       season() === 3 && !this.hasClothes && !this.baby &&
-      this.state !== "sleeping"
+      this.state !== "sleeping" &&
+      !isLit(buildings, this.x, this.y)
     ) {
       this.changeMorale(-COLD_MORALE_RATE * dt, "Soğuk (giysisiz)");
     }
@@ -770,7 +775,8 @@ export class Villager {
       const targetSleep = 28; // saniye (yaklaşık 4.5 oyun saati)
       if (this.sleepAccumulator < targetSleep) {
         const deficit = targetSleep - this.sleepAccumulator;
-        const moraleLoss = Math.floor(deficit * 1.5);
+        // ceza sınırlı: bir gece uykusuzluk insanı bitirmesin
+        const moraleLoss = Math.min(8, Math.floor(deficit * 1.5));
         if (moraleLoss > 0) {
           this.changeMorale(-moraleLoss, "Az uyku");
           addFloater(this.x, this.y - 12, `Az uyku: -${moraleLoss} moral`, "#ff4444");
