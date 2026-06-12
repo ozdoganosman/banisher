@@ -41,6 +41,7 @@ import {
   toolbarHitTest,
   updateMessages,
   drawTaskList,
+  drawGoalCard,
   type TaskCounts,
   dragPanelBy,
   panelRectOf,
@@ -80,6 +81,7 @@ import {
 } from "./sim/resources";
 import { DIFFICULTY_PRESETS, difficulty, type DifficultyLevel } from "./sim/difficulty";
 import { eventFlags } from "./sim/events";
+import { currentGoal, goalState, tickGoals } from "./sim/goals";
 import { addJournal, journal } from "./sim/journal";
 import { screams, updateScreams, Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
@@ -177,6 +179,7 @@ function saveGame(): void {
     resources: { ...resources },
     tech: purchasedList(),
     events: { ...eventFlags },
+    goal: goalState.index,
     world: world.serialize(),
     journal: journal.map((e) => ({ ...e })),
     camera: { x: camera.x, y: camera.y, zoom: camera.zoom },
@@ -231,6 +234,7 @@ function loadGame(): boolean {
     Object.assign(resources, d.resources);
     restorePurchased(d.tech);
     eventFlags.coldSnapUntilDay = d.events?.coldSnapUntilDay ?? -1;
+    goalState.index = d.goal ?? 0; // eski kayıtlar: karşılanan hedefler peş peşe tamamlanır
     eventTimer = 0.5 * tuning.dayLength; // eski kayıtlarda olay sayacı tazelenir
     world.restore(d.world);
     journal.splice(0, journal.length, ...d.journal);
@@ -1750,6 +1754,16 @@ function step(dt: number) {
   checkStorageFull();
   checkMilestones();
 
+  // hedef zinciri: tamamlananı kutla, sıradakini duyur
+  const doneGoal = tickGoals({ world, villagers, buildings, animals });
+  if (doneGoal) {
+    addMessage(`🎯 Hedef tamamlandı: ${doneGoal.title} (+${doneGoal.reward} bilgi)`);
+    addJournal(`🎯 Hedef tamamlandı: ${doneGoal.title} (+${doneGoal.reward} bilgi)`);
+    const next = currentGoal();
+    if (next) addMessage(`🎯 Yeni hedef: ${next.title}`);
+    else addMessage("🏆 Tüm hedefler tamamlandı — kabilenin kaderi artık senin ellerinde!");
+  }
+
   schedulePleading(dt);
   updateScreams(dt);
 
@@ -1989,7 +2003,7 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
 };
 
 // tuning: konsoldan canlı ayar (__game.tuning.dayLength / timeScale / moveSpeed)
-window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile };
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, goals: { state: goalState, current: currentGoal } };
 (window as unknown as { hile: typeof hile }).hile = hile;
 console.info(
   "%cBanisher debug: konsola hile.yardim() yaz",
@@ -2101,7 +2115,11 @@ function frame(now: number) {
   renderer.drawMinimap(ctx, camera, villagers, buildings, TOOLBAR_HEIGHT);
   drawHud(ctx, villagers.length, selected, paused, gameSpeed);
   if (villagers.length > 0) drawMarkFilters(ctx, markFilter);
-  if (villagers.length > 0) drawTaskList(ctx, getTaskCounts());
+  let taskListY = 42;
+  if (villagers.length > 0) {
+    taskListY += drawGoalCard(ctx, { world, villagers, buildings, animals });
+    drawTaskList(ctx, getTaskCounts(), taskListY);
+  }
 
   // alan seçerken imlecin yanında canlı sayım
   if (selecting?.mode === "rect") {

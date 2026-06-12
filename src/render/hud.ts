@@ -21,6 +21,7 @@ import {
 } from "../sim/resources";
 import { ANIMAL_DEFS, TAME_TARGET, type Animal } from "../sim/animals";
 import { journal } from "../sim/journal";
+import { currentGoal, type GoalCtx } from "../sim/goals";
 import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
   darkness,
@@ -36,6 +37,70 @@ import { drawVillagerJobAccessories } from "./renderer";
 
 export const TOOLBAR_HEIGHT = 64;
 
+// ---- Sol üst hedef kartı (tutorial görev zinciri) ----
+
+// Aktif hedefi çizer; kapladığı yüksekliği döndürür (görev listesi altına kayar)
+export function drawGoalCard(ctx: CanvasRenderingContext2D, gctx: GoalCtx): number {
+  const goal = currentGoal();
+  if (!goal) return 0;
+
+  const x = 12;
+  const y = 42;
+  const W = 252;
+  const PAD = 8;
+
+  ctx.font = "11px monospace";
+  const hintLines = wrapText(ctx, goal.hint, W - PAD * 2);
+  const prog = goal.progress?.(gctx) ?? null;
+  const H = 22 + 18 + hintLines.length * 14 + (prog ? 16 : 0) + PAD;
+
+  // arka plan + altın çerçeve
+  ctx.fillStyle = "rgba(10, 12, 16, 0.82)";
+  ctx.fillRect(x, y, W, H);
+  ctx.strokeStyle = "rgba(255, 214, 110, 0.45)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, W - 1, H - 1);
+
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+
+  // başlık satırı: HEDEF + ödül
+  ctx.font = "bold 11px monospace";
+  ctx.fillStyle = "#c9a35a";
+  ctx.fillText("🎯 HEDEF", x + PAD, y + 13);
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#b9a6ff";
+  ctx.fillText(`Ödül: +${goal.reward} bilgi`, x + W - PAD, y + 13);
+  ctx.textAlign = "left";
+
+  // hedef adı
+  ctx.font = "bold 13px monospace";
+  ctx.fillStyle = "#ffe296";
+  ctx.fillText(goal.title, x + PAD, y + 32, W - PAD * 2);
+
+  // ipucu (nerede/nasıl)
+  ctx.font = "11px monospace";
+  ctx.fillStyle = "#b8b2a2";
+  hintLines.forEach((l, i) => ctx.fillText(l, x + PAD, y + 48 + i * 14));
+
+  // ilerleme çubuğu
+  if (prog) {
+    const py = y + 48 + hintLines.length * 14 + 2;
+    const barW = W - PAD * 2 - 56;
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillRect(x + PAD, py - 4, barW, 8);
+    ctx.fillStyle = "#8fd05e";
+    ctx.fillRect(x + PAD, py - 4, barW * Math.min(1, prog.cur / prog.max), 8);
+    ctx.fillStyle = "#d8d2c0";
+    ctx.font = "bold 11px monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(`${prog.cur}/${prog.max}`, x + W - PAD, py);
+    ctx.textAlign = "left";
+  }
+
+  return H + 8;
+}
+
 // ---- Sol üst görev listesi (işaretli iş sayaçları) ----
 
 export interface TaskCounts {
@@ -45,7 +110,7 @@ export interface TaskCounts {
   stone: number;
 }
 
-export function drawTaskList(ctx: CanvasRenderingContext2D, tasks: TaskCounts): void {
+export function drawTaskList(ctx: CanvasRenderingContext2D, tasks: TaskCounts, yTop = 42): void {
   const entries: { label: string; color: string; count: number }[] = [];
   if (tasks.wood     > 0) entries.push({ label: "Dal",    color: "#8a6a43", count: tasks.wood });
   if (tasks.berry    > 0) entries.push({ label: "Yemiş",  color: "#d43f3f", count: tasks.berry });
@@ -55,7 +120,7 @@ export function drawTaskList(ctx: CanvasRenderingContext2D, tasks: TaskCounts): 
   if (entries.length === 0) return;
 
   const x = 12;
-  const y = 42;
+  const y = yTop;
   const W = 128;
   const ROW_H = 22;
   const PAD  = 8;

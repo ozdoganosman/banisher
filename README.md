@@ -120,7 +120,20 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.0)
+## Şu anki özellikler (v2.1)
+
+### v2.1: Hedef zinciri — oyun içi tutorial
+
+- **Sol üstte hedef kartı**: sırayla 12 hedef — 5 çalı işaretle → Ev →
+  Tapınak → 6 bilgi → ilk araştırma → 100 yemek → ilk kışı atlat →
+  nüfus 15 → balta → mızrak → köpek → nüfus 20
+- Her hedefin altında **nasıl/nerede yapılacağını anlatan ipucu satırı**
+  (tuş, maliyet, mekanik açıklaması) — oyunu oynarken öğreten tutorial
+- Ölçülebilir hedeflerde **ilerleme çubuğu** (örn. 64/100 yemek)
+- Tamamlanınca **bilgi ödülü** (+1'den +8'e), kutlama mesajı ve Defter
+  kaydı; sıradaki hedef otomatik duyurulur
+- Hedef sırası kayıtla birlikte saklanır; eski kayıtlarda karşılanmış
+  hedefler peş peşe tamamlanıp ödüllerini verir
 
 ### v2.0: Rastgele olaylar ve yaşayan denge
 
