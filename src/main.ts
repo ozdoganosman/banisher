@@ -17,7 +17,11 @@ import {
   MARK_FILTERS,
   markFilterHitTest,
   pauseButtonHitTest,
-  popScrollBy,
+  peopleScrollBy,
+  peoplePanelHitTest,
+  peopleButtonHitTest,
+  drawPeoplePanel,
+  isOverPeoplePanel,
   type MarkFilter,
   profileHitTest,
   speedButtonHitTest,
@@ -131,6 +135,7 @@ let selected: BuildingType | null = null;
 let selectedVillager: Villager | null = null;
 let selectedBuilding: Building | null = null;
 let showPopulation = false;
+let showPeople = false;
 let showTech = false;
 let markFilter: MarkFilter = "all";
 // sol tuş sürükleme: alan seçimi veya mini harita gezdirme
@@ -375,9 +380,13 @@ input.onClick = (wx, wy, sx, sy) => {
     return;
   }
 
-  // üst bardaki nüfus ve teknoloji düğmeleri
+  // üst bardaki işler, insanlar ve teknoloji düğmeleri
   if (popButtonHitTest(sx, sy)) {
     showPopulation = !showPopulation;
+    return;
+  }
+  if (peopleButtonHitTest(sx, sy)) {
+    showPeople = !showPeople;
     return;
   }
   if (techButtonHitTest(sx, sy)) {
@@ -412,16 +421,23 @@ input.onClick = (wx, wy, sx, sy) => {
     }
   }
 
-  // nüfus yönetim menüsü: yalnızca üzerine gelen tıklamaları yutar
+  // iş yönetim menüsü: yalnızca üzerine gelen tıklamaları yutar
   if (showPopulation) {
-    const hit = popPanelHitTest(sx, sy, villagers, buildings);
+    const hit = popPanelHitTest(sx, sy, buildings);
+    if (hit) {
+      if (hit.kind === "close") showPopulation = false;
+      else if (hit.kind === "hire") hire(hit.building);
+      else if (hit.kind === "fire") fire(hit.building);
+      return;
+    }
+  }
+
+  // insanlar paneli
+  if (showPeople) {
+    const hit = peoplePanelHitTest(sx, sy, villagers);
     if (hit) {
       if (hit.kind === "close") {
-        showPopulation = false;
-      } else if (hit.kind === "hire") {
-        hire(hit.building);
-      } else if (hit.kind === "fire") {
-        fire(hit.building);
+        showPeople = false;
       } else if (hit.kind === "select") {
         // isme tıkla: köylünün profilini de aç ve kameraya al (menü açık kalır)
         const v = villagers[hit.index];
@@ -576,6 +592,7 @@ input.onClick = (wx, wy, sx, sy) => {
 function closeTopmost(): boolean {
   if (selected !== null) { selected = null; return true; }
   if (showTech) { showTech = false; return true; }
+  if (showPeople) { showPeople = false; return true; }
   if (showPopulation) { showPopulation = false; return true; }
   if (selectedVillager) { selectedVillager = null; return true; }
   if (selectedBuilding) { selectedBuilding = null; return true; }
@@ -598,6 +615,7 @@ input.onLeftDragStart = (wx, wy, sx, sy) => {
     sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h;
   const panelOrder: [boolean, PanelId][] = [
     [showTech, "tech"],
+    [showPeople, "people"],
     [showPopulation, "pop"],
     [!!selectedVillager, "profile"],
     [!!selectedBuilding, "building"],
@@ -727,9 +745,12 @@ function markSelection(sel: { x0: number; y0: number; x1: number; y1: number }):
 
 // Nüfus menüsü açıkken üzerindeyken tekerlek menüyü kaydırır
 input.wheelInterceptor = (sx, sy, deltaY) => {
-  if (showPopulation && isOverPopPanel(sx, sy)) {
-    popScrollBy(deltaY > 0 ? 1 : -1, villagers.length);
+  if (showPeople && isOverPeoplePanel(sx, sy)) {
+    peopleScrollBy(deltaY > 0 ? 1 : -1, villagers.length);
     return true;
+  }
+  if (showPopulation && isOverPopPanel(sx, sy)) {
+    return true; // iş paneli kaydırılmaz ama tekerlek zoom'a düşmesin
   }
   return false;
 };
@@ -744,6 +765,8 @@ window.addEventListener("keydown", (e) => {
     gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : gameSpeed === 4 ? 8 : gameSpeed === 8 ? 16 : 1;
   } else if (e.code === "KeyN") {
     showPopulation = !showPopulation;
+  } else if (e.code === "KeyM") {
+    showPeople = !showPeople;
   } else if (e.code === "KeyT") {
     showTech = !showTech;
   } else if (e.code === "KeyF") {
@@ -1419,6 +1442,7 @@ function frame(now: number) {
     if (selectedVillager) drawProfile(ctx, selectedVillager);
     if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers);
     if (showPopulation) drawPopulationPanel(ctx, villagers, buildings);
+    if (showPeople) drawPeoplePanel(ctx, villagers);
     if (showTech) drawTechPanel(ctx);
   }
 

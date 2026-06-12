@@ -61,7 +61,8 @@ const SPEAR_THROW_RANGE = 4.5 * TILE_SIZE;
 const SPEAR_THROW_TIME = 1.3; // atışlar arası süre
 const MELEE_RANGE = 12; // baltayla yakın dövüş (dünya-piksel)
 const MELEE_DAMAGE = 3;
-const HUNT_GIVEUP_RANGE = 15 * TILE_SIZE; // av bu kadar uzaklaşırsa vazgeç
+const HUNT_GIVEUP_RANGE = 15 * TILE_SIZE; // mızrak attıktan sonra av bu kadar kaçarsa bırak
+const HUNT_APPROACH_RANGE = 40 * TILE_SIZE; // ava yaklaşma için mutlak üst sınır
 const EVENING_FRAC = 17 / 24; // 23:00 — iş biter, ateş başına toplanılır
 const COLD_MORALE_RATE = 0.045; // kışın giysisiz dışarıda olmanın moral bedeli (sn başına)
 const FISH_PER_CATCH = 2;
@@ -1995,8 +1996,10 @@ export class Villager {
     const useSpear = this.spears > 0;
     const range = useSpear ? SPEAR_THROW_RANGE : MELEE_RANGE;
 
-    // av çok uzaklaştı veya cephane bitti: mızrakları toplayıp vazgeç
-    if (dist > HUNT_GIVEUP_RANGE || (!useSpear && !this.hasAxe)) {
+    // vazgeçme: cephane bitti, av menzilden tamamen çıktı veya
+    // (mızrak atıldıktan sonra) av kaçmayı başardı
+    const escaped = job.thrown > 0 && dist > HUNT_GIVEUP_RANGE;
+    if (dist > HUNT_APPROACH_RANGE || escaped || (!useSpear && !this.hasAxe)) {
       this.spears += job.thrown;
       this.job = null;
       this.toIdle();
@@ -2007,11 +2010,22 @@ export class Villager {
       // kovala (düz koşu; adrenalin moral cezasını kısmen bastırır)
       const speed =
         WALK_SPEED * 1.45 * tuning.moveSpeed * Math.max(0.8, this.getWorkSpeedFactor());
-      const nx = this.x + (dx / dist) * speed * dt;
-      const ny = this.y + (dy / dist) * speed * dt;
+      const step = speed * dt;
+      const nx = this.x + (dx / dist) * step;
+      const ny = this.y + (dy / dist) * step;
       if (world.walkableAt(Math.floor(nx / TILE_SIZE), Math.floor(ny / TILE_SIZE))) {
         this.x = nx;
         this.y = ny;
+      } else if (world.walkableAt(Math.floor(nx / TILE_SIZE), Math.floor(this.y / TILE_SIZE))) {
+        this.x = nx; // engel boyunca yatay kay
+      } else if (world.walkableAt(Math.floor(this.x / TILE_SIZE), Math.floor(ny / TILE_SIZE))) {
+        this.y = ny; // engel boyunca dikey kay
+      } else {
+        // sıkıştı: avı bırak (çakılı kalmasın)
+        this.spears += job.thrown;
+        this.job = null;
+        this.toIdle();
+        return;
       }
       this.facing = dx > 0 ? 1 : -1;
       this.walkPhase += dt * 10;

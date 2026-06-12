@@ -1627,15 +1627,24 @@ export class Renderer {
       ctx.stroke();
     }
 
-    // hamile karnı: gün geçtikçe adım adım büyür
+    // hamile karnı: gövdenin önünden belirgin biçimde taşar, adım adım büyür
     if (v.pregnant) {
-      const belly = 0.8 + v.pregnancyProgress * 1.6;
+      const belly = 1.2 + v.pregnancyProgress * 2.0;
+      const bx = x + v.facing * (2.4 + belly * 0.45);
+      const by = y - 6.2;
       ctx.fillStyle = v.shirtColor;
       ctx.beginPath();
-      ctx.arc(x + v.facing * 1.6, y - 6.6, belly, 0, Math.PI * 2);
+      ctx.arc(bx, by, belly, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.35)";
-      ctx.lineWidth = 0.5;
+      // açık tonda yansıma: karın gövdeden ayrışsın
+      ctx.fillStyle = "rgba(255,255,255,0.22)";
+      ctx.beginPath();
+      ctx.arc(bx + v.facing * belly * 0.3, by - belly * 0.3, belly * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = LINE;
+      ctx.lineWidth = 0.55;
+      ctx.beginPath();
+      ctx.arc(bx, by, belly, 0, Math.PI * 2);
       ctx.stroke();
       ctx.lineWidth = 1.1;
     }

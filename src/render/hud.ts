@@ -533,13 +533,14 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
 // ---- Sürüklenebilir paneller ----
 // Her panel başlangıç konumuna göre bir ofset taşır; sürükleyince değişir.
 
-export type PanelId = "profile" | "building" | "tech" | "pop";
+export type PanelId = "profile" | "building" | "tech" | "pop" | "people";
 
 const panelOffsets: Record<PanelId, { x: number; y: number }> = {
   profile: { x: 0, y: 0 },
   building: { x: 0, y: 0 },
   tech: { x: 0, y: 0 },
   pop: { x: 0, y: 0 },
+  people: { x: 0, y: 0 },
 };
 
 // Panelin son çizilen (ofset dahil) dikdörtgeni
@@ -555,6 +556,7 @@ export function panelRectOf(id: PanelId): { x: number; y: number; w: number; h: 
     case "building": return bpanel;
     case "tech": return techRect;
     case "pop": return popRect;
+    case "people": return peopleRect;
   }
 }
 
@@ -569,7 +571,7 @@ export function dragPanelBy(id: PanelId, dx: number, dy: number, vw: number, vh:
 
 // ---- Köylü profil paneli ----
 
-const PROFILE = { x: 12, y: 44, w: 262, h: 206 };
+const PROFILE = { x: 12, y: 44, w: 262, h: 224 };
 function profilePos() {
   return { x: PROFILE.x + panelOffsets.profile.x, y: PROFILE.y + panelOffsets.profile.y };
 }
@@ -732,37 +734,49 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   ctx.fillStyle = "#9ad0ff";
   ctx.fillText(v.statusText, tx, y + 82, w - 82 - 12);
 
+  // ekipman satırı: balta / mızrak / giysi
+  ctx.fillStyle = "#c9d4dc";
+  ctx.font = "12px monospace";
+  const gear: string[] = [];
+  if (v.hasAxe) gear.push("🪓 balta");
+  if (v.spears > 0) gear.push(`🗡 ${v.spears} mızrak`);
+  if (v.hasClothes) gear.push("🧥 giysi");
+  ctx.fillText(
+    `Ekipman: ${gear.length > 0 ? gear.join(" • ") : "—"}`,
+    tx, y + 100, w - 82 - 12
+  );
+
   // tokluk barı
   ctx.fillStyle = "#e8e2d0";
   ctx.font = "12px monospace";
-  ctx.fillText("Tokluk", x + 10, y + 116);
+  ctx.fillText("Tokluk", x + 10, y + 134);
   const barX = x + 72;
   const barW = w - 72 - 14;
   ctx.fillStyle = "rgba(255,255,255,0.12)";
-  ctx.fillRect(barX, y + 110, barW, 12);
+  ctx.fillRect(barX, y + 128, barW, 12);
   const fullness = 1 - v.hunger / 100;
   ctx.fillStyle = fullness > 0.5 ? "#6fbf4a" : fullness > 0.2 ? "#e0a83c" : "#d4453f";
-  ctx.fillRect(barX + 1, y + 111, (barW - 2) * fullness, 10);
+  ctx.fillRect(barX + 1, y + 129, (barW - 2) * fullness, 10);
   ctx.strokeStyle = "#3a3f48";
-  ctx.strokeRect(barX + 0.5, y + 110.5, barW - 1, 11);
+  ctx.strokeRect(barX + 0.5, y + 128.5, barW - 1, 11);
 
   // moral barı: evde uyumak yükseltir, yerde yatmak düşürür
   ctx.fillStyle = "#e8e2d0";
   ctx.font = "12px monospace";
-  ctx.fillText("Moral", x + 10, y + 136);
+  ctx.fillText("Moral", x + 10, y + 154);
   ctx.fillStyle = "rgba(255,255,255,0.12)";
-  ctx.fillRect(barX, y + 130, barW, 12);
+  ctx.fillRect(barX, y + 148, barW, 12);
   const m = v.morale / 100;
   ctx.fillStyle = m > 0.5 ? "#7aa8e0" : m > 0.25 ? "#e0a83c" : "#d4453f";
-  ctx.fillRect(barX + 1, y + 131, (barW - 2) * m, 10);
+  ctx.fillRect(barX + 1, y + 149, (barW - 2) * m, 10);
   ctx.strokeStyle = "#3a3f48";
-  ctx.strokeRect(barX + 0.5, y + 130.5, barW - 1, 11);
+  ctx.strokeRect(barX + 0.5, y + 148.5, barW - 1, 11);
 
   // moral dökümü: neden bazında birikimli artış/azalışlar
   ctx.font = "11px monospace";
   for (let i = 0; i < moraleEntries.length; i++) {
     const [reason, delta] = moraleEntries[i];
-    const ly = y + 150 + i * 14;
+    const ly = y + 168 + i * 14;
     ctx.fillStyle = "#9a9488";
     ctx.fillText(reason, x + 24, ly);
     ctx.fillStyle = delta > 0 ? "#8fd05e" : "#e07a6a";
@@ -776,16 +790,16 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   // gerisi boş kalır
   ctx.font = "12px monospace";
   ctx.fillStyle = "#e8e2d0";
-  ctx.fillText("Çanta", x + 10, y + breakdownH + 165);
+  ctx.fillText("Çanta", x + 10, y + breakdownH + 183);
   const slotS = 26;
   const held = ITEM_TYPES.filter((it) => v.inventory[it] > 0);
   for (let i = 0; i < 6; i++) {
     const sx = x + 64 + i * (slotS + 4);
-    drawSlot(ctx, sx, y + breakdownH + 150, slotS);
+    drawSlot(ctx, sx, y + breakdownH + 168, slotS);
     const item = held[i];
     if (!item) continue;
-    drawItemIcon(ctx, item, sx + 3, y + breakdownH + 153, 20);
-    drawSlotCount(ctx, sx, y + breakdownH + 150, slotS, v.inventory[item]);
+    drawItemIcon(ctx, item, sx + 3, y + breakdownH + 171, 20);
+    drawSlotCount(ctx, sx, y + breakdownH + 168, slotS, v.inventory[item]);
   }
 
   // görev ataması iş panelinden (N) ve bina panellerinden yapılır
@@ -797,7 +811,7 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
       : v.child
       ? "Çocuklar 18 yaşında işe başlar."
       : "Görevler binalardan ve N menüsünden atanır.",
-    x + 10, y + breakdownH + 192, w - 20
+    x + 10, y + breakdownH + 210, w - 20
   );
 
   // Merak: yakaran köylüyü mikrofonla teskin etme düğmesi
@@ -1206,17 +1220,9 @@ export function drawBuildingPanel(
 // ---- Nüfus ve iş yönetim paneli (Banished tarzı: iş bazlı sayılar) ----
 
 const POP_JOB_ROW_H = 24;
-const POP_LIST_ROW_H = 22;
-const POP_MAX_ROWS = 10; // köylü listesinde aynı anda görünen satır
 const POP_W = 640;
-let popScroll = 0;
 let popRect = { x: 0, y: 0, w: POP_W, h: 0 };
 let popJobsY = 0;
-let popListY = 0;
-
-export function popScrollBy(n: number, count: number): void {
-  popScroll = Math.max(0, Math.min(Math.max(0, count - POP_MAX_ROWS), popScroll + n));
-}
 
 export function isOverPopPanel(sx: number, sy: number): boolean {
   return sx >= popRect.x && sx <= popRect.x + popRect.w &&
@@ -1243,14 +1249,12 @@ export type PopHit =
   | { kind: "close" }
   | { kind: "hire"; building: Building | null } // null = inşaatçı
   | { kind: "fire"; building: Building | null }
-  | { kind: "select"; index: number }
   | { kind: "panel" }
   | null;
 
 export function popPanelHitTest(
   sx: number,
   sy: number,
-  villagers: Villager[],
   buildings: Building[]
 ): PopHit {
   const cx = popRect.x + popRect.w - 26;
@@ -1271,16 +1275,6 @@ export function popPanelHitTest(
     }
   }
 
-  // köylü listesi: isme tıkla -> seç
-  const count = villagers.length;
-  const visible = Math.min(count, POP_MAX_ROWS);
-  if (sy >= popListY && sy < popListY + visible * POP_LIST_ROW_H) {
-    const row = Math.floor((sy - popListY) / POP_LIST_ROW_H);
-    const index = popScroll + row;
-    if (index < count && sx >= popRect.x + 10 && sx <= popRect.x + 190) {
-      return { kind: "select", index };
-    }
-  }
   if (isOverPopPanel(sx, sy)) return { kind: "panel" };
   return null;
 }
@@ -1291,16 +1285,13 @@ export function drawPopulationPanel(
   buildings: Building[]
 ): void {
   const count = villagers.length;
-  popScroll = Math.max(0, Math.min(Math.max(0, count - POP_MAX_ROWS), popScroll));
-  const visible = Math.min(count, POP_MAX_ROWS);
   const rows = employmentRows(buildings);
 
   const w = POP_W;
   const x = (ctx.canvas.width - w) / 2 + panelOffsets.pop.x;
   const y = 54 + panelOffsets.pop.y;
   popJobsY = y + 64;
-  popListY = popJobsY + rows.length * POP_JOB_ROW_H + 26;
-  const h = popListY - y + visible * POP_LIST_ROW_H + 12;
+  const h = popJobsY - y + rows.length * POP_JOB_ROW_H + 14;
   popRect = { x, y, w, h };
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.92)";
@@ -1314,7 +1305,7 @@ export function drawPopulationPanel(
   ctx.textAlign = "left";
   ctx.fillStyle = "#ffe296";
   ctx.font = "bold 15px monospace";
-  ctx.fillText("İş ve Nüfus Yönetimi", x + 12, y + 18);
+  ctx.fillText("İş Yönetimi", x + 12, y + 18);
 
   // özet: ortalık işçisi havuzu kalan herkes
   const babies = villagers.filter((v) => v.baby).length;
@@ -1375,40 +1366,147 @@ export function drawPopulationPanel(
     ctx.textAlign = "left";
   }
 
-  // köylü listesi başlığı
+}
+
+// ---- İnsanlar paneli: tüm köylüler özellik ve ekipmanlarıyla ----
+
+const PEOPLE_ROW_H = 24;
+const PEOPLE_MAX_ROWS = 12;
+const PEOPLE_W = 880;
+let peopleScroll = 0;
+let peopleRect = { x: 0, y: 0, w: PEOPLE_W, h: 0 };
+let peopleListY = 0;
+
+export function peopleScrollBy(n: number, count: number): void {
+  peopleScroll = Math.max(0, Math.min(Math.max(0, count - PEOPLE_MAX_ROWS), peopleScroll + n));
+}
+
+export function isOverPeoplePanel(sx: number, sy: number): boolean {
+  return sx >= peopleRect.x && sx <= peopleRect.x + peopleRect.w &&
+    sy >= peopleRect.y && sy <= peopleRect.y + peopleRect.h;
+}
+
+export type PeopleHit =
+  | { kind: "close" }
+  | { kind: "select"; index: number }
+  | { kind: "panel" }
+  | null;
+
+export function peoplePanelHitTest(sx: number, sy: number, villagers: Villager[]): PeopleHit {
+  const cx = peopleRect.x + peopleRect.w - 26;
+  const cy = peopleRect.y + 8;
+  if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
+  const count = villagers.length;
+  const visible = Math.min(count, PEOPLE_MAX_ROWS);
+  if (sy >= peopleListY && sy < peopleListY + visible * PEOPLE_ROW_H) {
+    const row = Math.floor((sy - peopleListY) / PEOPLE_ROW_H);
+    const index = peopleScroll + row;
+    if (index < count && sx >= peopleRect.x + 10 && sx <= peopleRect.x + 190) {
+      return { kind: "select", index };
+    }
+  }
+  if (isOverPeoplePanel(sx, sy)) return { kind: "panel" };
+  return null;
+}
+
+export function drawPeoplePanel(ctx: CanvasRenderingContext2D, villagers: Villager[]): void {
+  const count = villagers.length;
+  peopleScroll = Math.max(0, Math.min(Math.max(0, count - PEOPLE_MAX_ROWS), peopleScroll));
+  const visible = Math.min(count, PEOPLE_MAX_ROWS);
+
+  const w = Math.min(PEOPLE_W, ctx.canvas.width - 16);
+  const x = (ctx.canvas.width - w) / 2 + panelOffsets.people.x;
+  const y = 54 + panelOffsets.people.y;
+  peopleListY = y + 66;
+  const h = peopleListY - y + visible * PEOPLE_ROW_H + 12;
+  peopleRect = { x, y, w, h };
+
+  ctx.fillStyle = "rgba(10, 12, 16, 0.92)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#5a5f68";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  drawCloseButton(ctx, x + w - 26, y + 8);
+
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffe296";
+  ctx.font = "bold 15px monospace";
+  ctx.fillText("İnsanlar", x + 12, y + 18);
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
-  ctx.fillText("Köylüler (isme tıkla: profil)", x + 12, popListY - 12);
-  if (count > POP_MAX_ROWS) {
+  ctx.fillText(`Nüfus: ${count} (isme tıkla: profil)`, x + 110, y + 18);
+  if (count > PEOPLE_MAX_ROWS) {
     ctx.textAlign = "right";
-    ctx.fillText(`▲▼ kaydır (${popScroll + 1}-${popScroll + visible}/${count})`, x + w - 36, popListY - 12);
+    ctx.fillText(
+      `▲▼ kaydır (${peopleScroll + 1}-${peopleScroll + visible}/${count})`,
+      x + w - 36, y + 18
+    );
     ctx.textAlign = "left";
   }
 
+  // sütun başlıkları
+  const cols = {
+    name: x + 12, age: x + 180, sex: x + 214, job: x + 244,
+    gear: x + 430, morale: x + 590, hunger: x + 660, status: x + 726,
+  };
+  ctx.fillStyle = "#8a8478";
+  ctx.font = "bold 11px monospace";
+  const hy = y + 48;
+  ctx.fillText("Ad", cols.name, hy);
+  ctx.fillText("Yaş", cols.age, hy);
+  ctx.fillText("C", cols.sex, hy);
+  ctx.fillText("Görev", cols.job, hy);
+  ctx.fillText("Ekipman", cols.gear, hy);
+  ctx.fillText("Moral", cols.morale, hy);
+  ctx.fillText("Tokluk", cols.hunger, hy);
+  ctx.fillText("Durum", cols.status, hy);
+
   for (let row = 0; row < visible; row++) {
-    const v = villagers[popScroll + row];
-    const ry = popListY + row * POP_LIST_ROW_H;
+    const v = villagers[peopleScroll + row];
+    const ry = peopleListY + row * PEOPLE_ROW_H;
     if (row % 2 === 0) {
       ctx.fillStyle = "rgba(255,255,255,0.04)";
-      ctx.fillRect(x + 4, ry, w - 8, POP_LIST_ROW_H);
+      ctx.fillRect(x + 4, ry, w - 8, PEOPLE_ROW_H);
     }
+    // ad + rozetler (hamile/eğitimli)
     ctx.fillStyle = "#9ad0ff";
     ctx.font = "bold 12px monospace";
-    ctx.fillText(v.fullName, x + 12, ry + POP_LIST_ROW_H / 2, 170);
+    let name = v.fullName;
+    if (v.pregnant) name = `🤰 ${name}`;
+    if (v.educated) name = `🎓 ${name}`;
+    ctx.fillText(name, cols.name, ry + PEOPLE_ROW_H / 2, 162);
+    // yaş + cinsiyet
     ctx.fillStyle = "#8a8478";
     ctx.font = "11px monospace";
-    ctx.fillText(v.baby ? "👶" : `${v.age}`, x + 192, ry + POP_LIST_ROW_H / 2);
+    ctx.fillText(v.baby ? "👶" : `${v.age}`, cols.age, ry + PEOPLE_ROW_H / 2);
+    ctx.fillText(v.identity.female ? "♀" : "♂", cols.sex, ry + PEOPLE_ROW_H / 2);
+    // görev
     ctx.fillStyle = "#c9a35a";
-    const popJobLabel = v.baby ? "Bebek" : v.child ? "Çocuk" : assignmentLabel(v.assignment);
-    ctx.fillText(popJobLabel, x + 222, ry + POP_LIST_ROW_H / 2, 180);
-    ctx.fillStyle = "#c8c2b0";
-    ctx.fillText(v.statusText, x + 410, ry + POP_LIST_ROW_H / 2, 150);
+    const jobLabel = v.baby ? "Bebek" : v.child ? "Çocuk" : assignmentLabel(v.assignment);
+    ctx.fillText(jobLabel, cols.job, ry + PEOPLE_ROW_H / 2, 178);
+    // ekipman
+    ctx.fillStyle = "#c9d4dc";
+    const gear: string[] = [];
+    if (v.hasAxe) gear.push("🪓");
+    if (v.spears > 0) gear.push(`🗡×${v.spears}`);
+    if (v.hasClothes) gear.push("🧥");
+    ctx.fillText(gear.length > 0 ? gear.join(" ") : "—", cols.gear, ry + PEOPLE_ROW_H / 2, 150);
+    // moral mini bar
+    const m = v.morale / 100;
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillRect(cols.morale, ry + 8, 50, 8);
+    ctx.fillStyle = m > 0.5 ? "#7aa8e0" : m > 0.25 ? "#e0a83c" : "#d4453f";
+    ctx.fillRect(cols.morale + 1, ry + 9, 48 * m, 6);
     // tokluk mini bar
     const fullness = 1 - v.hunger / 100;
     ctx.fillStyle = "rgba(255,255,255,0.12)";
-    ctx.fillRect(x + w - 66, ry + 7, 50, 8);
+    ctx.fillRect(cols.hunger, ry + 8, 50, 8);
     ctx.fillStyle = fullness > 0.5 ? "#6fbf4a" : fullness > 0.2 ? "#e0a83c" : "#d4453f";
-    ctx.fillRect(x + w - 65, ry + 8, 48 * fullness, 6);
+    ctx.fillRect(cols.hunger + 1, ry + 9, 48 * fullness, 6);
+    // durum
+    ctx.fillStyle = "#c8c2b0";
+    ctx.fillText(v.statusText, cols.status, ry + PEOPLE_ROW_H / 2, w - (cols.status - x) - 12);
   }
 }
 
@@ -1609,7 +1707,13 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
 // ---- Üst bar, bildirimler, araç çubuğu ----
 
 let popButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+let peopleButtonRect = { x: 0, y: 0, w: 0, h: 0 };
 let techButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+
+export function peopleButtonHitTest(sx: number, sy: number): boolean {
+  return sx >= peopleButtonRect.x && sx <= peopleButtonRect.x + peopleButtonRect.w &&
+    sy >= peopleButtonRect.y && sy <= peopleButtonRect.y + peopleButtonRect.h;
+}
 
 export function popButtonHitTest(sx: number, sy: number): boolean {
   return sx >= popButtonRect.x && sx <= popButtonRect.x + popButtonRect.w &&
@@ -1661,9 +1765,9 @@ export function drawHud(
 
   // (kaynak stoğu artık alttaki envanter çubuğunda gösterilir)
 
-  // nüfus: tıklanabilir düğme (nüfus yönetim menüsünü açar)
+  // işler: tıklanabilir düğme (iş yönetim menüsünü açar)
   {
-    const label = `Nüfus: ${population} ▾`;
+    const label = `İşler ▾`;
     ctx.font = "15px monospace";
     const bw = 20 + ctx.measureText(label).width + 10;
     popButtonRect = { x: cx - 6, y: 4, w: bw, h: 26 };
@@ -1684,6 +1788,22 @@ export function drawHud(
     ctx.stroke();
     ctx.fillStyle = "#e8e2d0";
     ctx.fillText(label, cx + 20, 18);
+    cx += bw + 10;
+  }
+
+  // insanlar: nüfus listesi düğmesi
+  {
+    const label = `İnsanlar: ${population} ▾`;
+    ctx.font = "15px monospace";
+    const bw = ctx.measureText(label).width + 16;
+    peopleButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(peopleButtonRect.x, peopleButtonRect.y, peopleButtonRect.w, peopleButtonRect.h);
+    ctx.strokeStyle = "#4a4f58";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(peopleButtonRect.x + 0.5, peopleButtonRect.y + 0.5, peopleButtonRect.w - 1, peopleButtonRect.h - 1);
+    ctx.fillStyle = "#e8e2d0";
+    ctx.fillText(label, cx + 6, 18);
     cx += bw + 10;
   }
 
@@ -1816,7 +1936,7 @@ export function drawHud(
   // yardım metni yalnızca sığıyorsa
   ctx.textAlign = "right";
   ctx.font = "12px monospace";
-  const help = "N: nüfus • T: teknoloji • Space: durdur • X: hız";
+  const help = "N: işler • M: insanlar • T: teknoloji • Space: durdur • X: hız";
   if (w - 100 - ctx.measureText(help).width > cx + 16) {
     ctx.fillStyle = "#9a9488";
     ctx.fillText(help, w - 100, 18);
