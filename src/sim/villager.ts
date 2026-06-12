@@ -1,3 +1,4 @@
+import { sfxHit, sfxStep, sfxWhoosh } from "../engine/sound";
 import { addFloater, burst, throwSpearFx } from "../render/effects";
 import { foodItemOf, Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
@@ -211,6 +212,7 @@ export class Villager {
   private fleeDirX = 0;
   private fleeDirY = 0;
   private threatTimer = Math.random() * 0.4; // yırtıcı kontrol ritmi
+  private stepSoundTimer = Math.random() * 0.3;
   private screamCooldown = 0;
   private throwTimer = 0;
   assignment: Assignment = { kind: "laborer" };
@@ -1778,6 +1780,11 @@ export class Villager {
 
     if (dx !== 0) this.facing = dx > 0 ? 1 : -1;
     this.walkPhase += dt * 9;
+    this.stepSoundTimer -= dt;
+    if (this.stepSoundTimer <= 0) {
+      this.stepSoundTimer = 0.34 + Math.random() * 0.08;
+      sfxStep(this.x, this.y);
+    }
 
     if (dist <= step) {
       this.x = targetX;
@@ -2000,12 +2007,16 @@ export class Villager {
     if (gain < n) addFloater(fx, fy + 7, "Çanta dolu!", "#b8b2a0");
   }
 
-  // Vuruş ritmiyle parçacık saç (balta/kazma/çekiç efekti)
+  // Vuruş ritmiyle parçacık saç (balta/kazma/çekiç efekti) + ses
   private hitParticles(dt: number, x: number, y: number, color: string): void {
     this.hitTimer -= dt;
     if (this.hitTimer <= 0) {
       this.hitTimer = 0.45;
       burst(x, y, color, 4);
+      sfxHit(
+        x, y,
+        color === "#aab0b8" || color === "#c9d4dc" ? "stone" : "wood"
+      );
     }
   }
 
@@ -2205,6 +2216,7 @@ export class Villager {
       // mızrak uçuşu: varış anında saplanma efekti (hasar hemen işlenir)
       const tx = a.x;
       const ty = a.y - 4;
+      sfxWhoosh(this.x, this.y);
       throwSpearFx(this.x + this.facing * 3, this.y - 9, tx, ty, () => {
         burst(tx, ty, "#d4c49a", 4);
         burst(tx, ty, "#d44040", 3);

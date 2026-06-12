@@ -106,7 +106,7 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | B / "Defter" düğmesi | Savaş ve Tehlike Defteri |
 | T / "Teknoloji" düğmesi | Tam ekran teknoloji ağacı (sürükleyerek kaydır) |
 | 1-9, 0 | Araç çubuğundaki kilidi açık binalardan seç |
-| Esc / sağ tık | Seçimi iptal et |
+| Esc / sağ tık | Üstteki paneli kapat; panel yoksa Esc duraklatma menüsünü açar (Kaydet/Ses/Ana Menü) |
 | Space | Duraklat / devam et |
 | X | Oyun hızı (1x / 2x / 4x / 8x / 16x) |
 | WASD / Ok tuşları | Kamerayı kaydır |

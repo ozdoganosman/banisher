@@ -190,6 +190,16 @@ export function grantTech(id: TechId): void {
   purchased.add(id);
 }
 
+// Kaydet/Yükle
+export function purchasedList(): TechId[] {
+  return [...purchased];
+}
+
+export function restorePurchased(ids: TechId[]): void {
+  purchased.clear();
+  for (const id of ids) purchased.add(id);
+}
+
 // Araştırmayı satın al; başarılıysa true döner
 export function buyTech(id: TechId): boolean {
   const tech = TECHS.find((t) => t.id === id);

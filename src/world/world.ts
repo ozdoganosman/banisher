@@ -195,6 +195,48 @@ export class World {
     }
   }
 
+  // ---- Kaydet/Yükle ----
+
+  serialize(): unknown {
+    return {
+      tiles: Array.from(this.tiles),
+      heights: Array.from(this.heights),
+      markedTrees: [...this.markedTrees],
+      claimedTrees: [],
+      markedBushes: [...this.markedBushes],
+      markedStones: [...this.markedStones],
+      blocked: [...this.blocked],
+      saplings: this.saplings.map((x) => ({ ...x })),
+      prunedTrees: this.prunedTrees.map((x) => ({ ...x })),
+    };
+  }
+
+  restore(data: ReturnType<World["serialize"]>): void {
+    const d = data as {
+      tiles: number[]; heights: number[];
+      markedTrees: number[]; markedBushes: number[]; markedStones: number[];
+      blocked: number[];
+      saplings: { x: number; y: number; t: number; target: Tile }[];
+      prunedTrees: { x: number; y: number; t: number }[];
+    };
+    this.tiles.set(d.tiles);
+    this.heights.set(d.heights);
+    const fill = (set: Set<number>, arr: number[]) => {
+      set.clear();
+      for (const i of arr) set.add(i);
+    };
+    fill(this.markedTrees, d.markedTrees);
+    fill(this.markedBushes, d.markedBushes);
+    fill(this.markedStones, d.markedStones);
+    fill(this.blocked, d.blocked);
+    this.claimedTrees.clear();
+    this.claimedBushes.clear();
+    this.claimedStones.clear();
+    this.claimedPlants.clear();
+    this.saplings = d.saplings.map((x) => ({ ...x }));
+    this.prunedTrees = d.prunedTrees.map((x) => ({ ...x }));
+  }
+
   // Mantar türemesi için: rastgele bir budanmış ağaç konumu
   randomPrunedTree(): { x: number; y: number } | null {
     if (this.prunedTrees.length === 0) return null;

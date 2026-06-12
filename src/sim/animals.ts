@@ -1,6 +1,7 @@
 // Çiftlik hayvanları: çiftliğin etrafında dolanır, acıkınca çimende otlar,
 // ürünleri çiftçiler toplar. Aç hayvan üretmez; uzun süre aç kalan telef olur.
 
+import { sfxHowl } from "../engine/sound";
 import { burst } from "../render/effects";
 import { addJournal } from "./journal";
 import { Tile, TILE_SIZE } from "../world/tiles";
@@ -245,6 +246,7 @@ export class Animal {
         if (!this.aggroLogged) {
           this.aggroLogged = true;
           addJournal(`🐺 ${this.def.name} ${prey.fullName} adlı köylüye saldırıyor!`);
+          sfxHowl(this.x, this.y, this.type === "bear");
         }
         if (preyD <= PREDATOR_ATTACK_RANGE) {
           // ısır

@@ -46,7 +46,7 @@ import {
   panelRectOf,
   type PanelId,
 } from "./render/hud";
-import { buyTech, grantTech, hasTech, TECHS, type TechId } from "./sim/tech";
+import { buyTech, grantTech, hasTech, purchasedList, restorePurchased, TECHS, type TechId } from "./sim/tech";
 import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, type AnimalType } from "./sim/animals";
 import {
   AXE_STONE_COST,
@@ -66,7 +66,8 @@ import {
   ROLE_NAMES,
   isBuildingUnlocked,
 } from "./sim/buildings";
-import { gameTime, season, totalDays, tuning, updateTime } from "./sim/time";
+import { dateString, gameTime, season, totalDays, tuning, updateTime } from "./sim/time";
+import { initAudio, isMuted, setFireProximity, setListener, setMuted } from "./engine/sound";
 import { addFloater, burst } from "./render/effects";
 import {
   addItem,
@@ -78,7 +79,7 @@ import {
   type ItemType,
 } from "./sim/resources";
 import { DIFFICULTY_PRESETS, difficulty, type DifficultyLevel } from "./sim/difficulty";
-import { addJournal } from "./sim/journal";
+import { addJournal, journal } from "./sim/journal";
 import { screams, updateScreams, Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
 import { TILE_SIZE } from "./world/tiles";
@@ -159,40 +160,302 @@ let selecting:
 let paused = true; // zorluk seçilene kadar bekle
 let gameSpeed = 1;
 
-// ---- Zorluk seçim ekranı (oyun başlamadan önce) ----
-function showDifficultyScreen(): void {
+// ---- Kaydet / Yükle (localStorage) ----
+
+const SAVE_KEY = "banisher_save";
+
+function saveGame(): void {
+  const bIndex = (b: Building | null) => (b ? buildings.indexOf(b) : -1);
+  const vIndex = (v: Villager | null) => (v ? villagers.indexOf(v) : -1);
+  const data = {
+    version: 1,
+    seed,
+    time: gameTime.total,
+    tuning: { ...tuning },
+    difficulty: { ...difficulty },
+    resources: { ...resources },
+    tech: purchasedList(),
+    world: world.serialize(),
+    journal: journal.map((e) => ({ ...e })),
+    camera: { x: camera.x, y: camera.y, zoom: camera.zoom },
+    buildings: buildings.map((b) => ({
+      type: b.type, x: b.x, y: b.y, progress: b.progress,
+      orders: b.orders, toolStock: b.toolStock,
+      spearOrders: b.spearOrders, spearStock: b.spearStock,
+      clothOrders: b.clothOrders, clothStock: b.clothStock,
+      hasTorch: b.hasTorch, farmType: b.farmType,
+      worshipTimer: b.worshipTimer,
+    })),
+    villagers: villagers.map((v) => ({
+      x: v.x, y: v.y, identity: { ...v.identity },
+      hunger: v.hunger, morale: v.morale, hp: v.hp,
+      moraleLog: [...v.moraleLog],
+      birthDay: v.birthDay, pregnantSince: v.pregnantSince,
+      educated: v.educated, hasAxe: v.hasAxe, hasClothes: v.hasClothes,
+      spears: v.spears,
+      home: bIndex(v.home), mother: vIndex(v.mother),
+      assignment:
+        v.assignment.kind === "building"
+          ? { kind: "building" as const, index: bIndex(v.assignment.building) }
+          : { kind: v.assignment.kind },
+    })),
+    animals: animals.map((a) => ({
+      type: a.type, x: a.x, y: a.y, hunger: a.hunger, hp: a.hp,
+      hunted: a.hunted, tameMark: a.tameMark, produceTimer: a.produceTimer,
+      barn: bIndex(a.barn), owner: vIndex(a.owner),
+    })),
+  };
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    addMessage("💾 Oyun kaydedildi");
+  } catch {
+    addMessage("Kayıt başarısız (depolama dolu olabilir)");
+  }
+}
+
+function hasSave(): boolean {
+  return localStorage.getItem(SAVE_KEY) !== null;
+}
+
+function loadGame(): boolean {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) return false;
+  try {
+    const d = JSON.parse(raw);
+    // zaman ve ayarlar önce (köylü kurulumu totalDays okur)
+    gameTime.total = d.time;
+    Object.assign(tuning, d.tuning);
+    Object.assign(difficulty, d.difficulty);
+    Object.assign(resources, d.resources);
+    restorePurchased(d.tech);
+    world.restore(d.world);
+    journal.splice(0, journal.length, ...d.journal);
+    screams.splice(0, screams.length);
+
+    buildings.length = 0;
+    for (const bd of d.buildings) {
+      const b = new Building(bd.type, bd.x, bd.y);
+      b.progress = bd.progress;
+      b.orders = bd.orders;
+      b.toolStock = bd.toolStock;
+      b.spearOrders = bd.spearOrders;
+      b.spearStock = bd.spearStock;
+      b.clothOrders = bd.clothOrders;
+      b.clothStock = bd.clothStock;
+      b.hasTorch = bd.hasTorch;
+      b.farmType = bd.farmType;
+      b.worshipTimer = bd.worshipTimer;
+      b.effectApplied = true; // tamamlanma etkileri tekrar oynamasın
+      buildings.push(b);
+    }
+
+    villagers.length = 0;
+    for (const vd of d.villagers) {
+      const v = new Villager(0, 0);
+      v.x = vd.x;
+      v.y = vd.y;
+      Object.assign(v.identity, vd.identity);
+      v.hunger = vd.hunger;
+      v.morale = vd.morale;
+      v.hp = vd.hp;
+      v.moraleLog.clear();
+      for (const [k, val] of vd.moraleLog) v.moraleLog.set(k, val);
+      v.birthDay = vd.birthDay;
+      v.pregnantSince = vd.pregnantSince;
+      v.educated = vd.educated;
+      v.hasAxe = vd.hasAxe;
+      v.hasClothes = vd.hasClothes;
+      v.spears = vd.spears;
+      v.home = vd.home >= 0 ? buildings[vd.home] : null;
+      v.assignment =
+        vd.assignment.kind === "building" && vd.assignment.index >= 0
+          ? { kind: "building", building: buildings[vd.assignment.index] }
+          : vd.assignment.kind === "builder"
+          ? { kind: "builder" }
+          : { kind: "laborer" };
+      villagers.push(v);
+    }
+    // anneler (köylüler kurulduktan sonra çözülür)
+    d.villagers.forEach((vd: { mother: number }, i: number) => {
+      if (vd.mother >= 0) villagers[i].mother = villagers[vd.mother];
+    });
+
+    animals.length = 0;
+    for (const ad of d.animals) {
+      const a = new Animal(ad.type, ad.barn >= 0 ? buildings[ad.barn] : null,
+        Math.floor(ad.x / TILE_SIZE), Math.floor(ad.y / TILE_SIZE));
+      a.x = ad.x;
+      a.y = ad.y;
+      a.hunger = ad.hunger;
+      a.hp = ad.hp;
+      a.hunted = ad.hunted;
+      a.tameMark = ad.tameMark;
+      a.produceTimer = ad.produceTimer;
+      a.owner = ad.owner >= 0 ? villagers[ad.owner] : null;
+      animals.push(a);
+    }
+
+    camera.x = d.camera.x;
+    camera.y = d.camera.y;
+    camera.zoom = d.camera.zoom;
+    selected = null;
+    selectedVillager = null;
+    selectedBuilding = null;
+    selectedAnimal = null;
+    dangerFollow = null;
+    lastDayCount = totalDays();
+    renderer.repaintAll();
+    addMessage("💾 Kayıt yüklendi — hoş geldin!");
+    return true;
+  } catch (err) {
+    console.error("Yükleme hatası:", err);
+    addMessage("Kayıt yüklenemedi!");
+    return false;
+  }
+}
+
+// ---- Menü sistemi: giriş ekranı, zorluk seçimi, duraklatma menüsü ----
+
+let menuOverlay: HTMLDivElement | null = null;
+
+function closeMenu(): void {
+  menuOverlay?.remove();
+  menuOverlay = null;
+}
+
+function buildMenu(
+  title: string,
+  subtitle: string,
+  items: { label: string; desc?: string; onClick: () => void; disabled?: boolean }[]
+): void {
+  closeMenu();
   const overlay = document.createElement("div");
   overlay.style.cssText =
     "position:fixed;inset:0;background:rgba(8,10,14,0.92);display:flex;" +
     "flex-direction:column;align-items:center;justify-content:center;" +
-    "font-family:monospace;color:#e8e2d0;z-index:10;gap:14px";
-  const title = document.createElement("div");
-  title.textContent = "BANISHER";
-  title.style.cssText = "font-size:34px;font-weight:bold;color:#ffe296;letter-spacing:6px";
-  const sub = document.createElement("div");
-  sub.textContent = "Kabilen için bir kader seç:";
-  sub.style.cssText = "font-size:14px;color:#9a9488;margin-bottom:8px";
-  overlay.append(title, sub);
-  (Object.keys(DIFFICULTY_PRESETS) as DifficultyLevel[]).forEach((level) => {
-    const p = DIFFICULTY_PRESETS[level];
+    "font-family:monospace;color:#e8e2d0;z-index:10;gap:12px";
+  const t = document.createElement("div");
+  t.textContent = title;
+  t.style.cssText = "font-size:34px;font-weight:bold;color:#ffe296;letter-spacing:6px";
+  const st = document.createElement("div");
+  st.textContent = subtitle;
+  st.style.cssText = "font-size:13px;color:#9a9488;margin-bottom:10px";
+  overlay.append(t, st);
+  for (const item of items) {
     const btn = document.createElement("button");
-    btn.innerHTML = `<div style="font-size:17px;font-weight:bold">${p.name}</div>` +
-      `<div style="font-size:11px;color:#b8b2a4;margin-top:4px">${p.desc}</div>`;
+    btn.innerHTML =
+      `<div style="font-size:16px;font-weight:bold">${item.label}</div>` +
+      (item.desc
+        ? `<div style="font-size:11px;color:#b8b2a4;margin-top:4px">${item.desc}</div>`
+        : "");
     btn.style.cssText =
-      "width:380px;padding:12px 16px;background:rgba(255,255,255,0.06);" +
+      "width:380px;padding:11px 16px;background:rgba(255,255,255,0.06);" +
       "border:1px solid #5a5f68;color:#e8e2d0;font-family:monospace;" +
-      "cursor:pointer;text-align:left;border-radius:6px";
-    btn.onmouseenter = () => (btn.style.borderColor = "#8fd05e");
-    btn.onmouseleave = () => (btn.style.borderColor = "#5a5f68");
-    btn.onclick = () => {
-      p.apply();
-      applyDifficultyToColony();
-      overlay.remove();
-      paused = false;
-    };
+      "cursor:pointer;text-align:left;border-radius:6px" +
+      (item.disabled ? ";opacity:0.4;cursor:default" : "");
+    if (!item.disabled) {
+      btn.onmouseenter = () => (btn.style.borderColor = "#8fd05e");
+      btn.onmouseleave = () => (btn.style.borderColor = "#5a5f68");
+      btn.onclick = () => {
+        initAudio(); // ilk kullanıcı etkileşimi: sesi başlat
+        item.onClick();
+      };
+    }
     overlay.append(btn);
-  });
+  }
   document.body.append(overlay);
+  menuOverlay = overlay;
+}
+
+function sesLabel(): string {
+  return isMuted() ? "🔇 Ses: Kapalı" : "🔊 Ses: Açık";
+}
+
+// Giriş ekranı (oyun açılışı)
+function showMainMenu(): void {
+  paused = true;
+  buildMenu("BANISHER", "İnsanlığın yolculuğu seninle başlıyor", [
+    {
+      label: "▶ Yeni Oyun",
+      desc: "Yeni bir adada, yeni bir kabileyle başla",
+      onClick: showDifficultySelect,
+    },
+    {
+      label: "💾 Devam Et",
+      desc: hasSave() ? "Son kayıttan devam et" : "Kayıt bulunamadı",
+      disabled: !hasSave(),
+      onClick: () => {
+        if (loadGame()) {
+          closeMenu();
+          paused = false;
+        }
+      },
+    },
+    {
+      label: sesLabel(),
+      desc: "Adımlar, balta, kurt uluması, ateş çıtırtısı",
+      onClick: () => {
+        setMuted(!isMuted());
+        showMainMenu();
+      },
+    },
+  ]);
+}
+
+// Zorluk seçimi (Yeni Oyun akışı)
+function showDifficultySelect(): void {
+  const items = (Object.keys(DIFFICULTY_PRESETS) as DifficultyLevel[]).map((level) => {
+    const pr = DIFFICULTY_PRESETS[level];
+    return {
+      label: pr.name,
+      desc: pr.desc,
+      onClick: () => {
+        pr.apply();
+        applyDifficultyToColony();
+        closeMenu();
+        paused = false;
+      },
+    };
+  });
+  items.push({ label: "← Geri", desc: "", onClick: showMainMenu });
+  buildMenu("BANISHER", "Kabilen için bir kader seç:", items);
+}
+
+// Oyun içi duraklatma menüsü (Esc — açık panel yokken)
+function showPauseMenu(): void {
+  paused = true;
+  buildMenu("BANISHER", `${dateString()} — kabilen seni bekliyor`, [
+    {
+      label: "▶ Devam",
+      desc: "",
+      onClick: () => {
+        closeMenu();
+        paused = false;
+      },
+    },
+    {
+      label: "💾 Kaydet",
+      desc: "Oyunu tarayıcıya kaydet",
+      onClick: () => {
+        saveGame();
+        closeMenu();
+        paused = false;
+      },
+    },
+    {
+      label: sesLabel(),
+      desc: "",
+      onClick: () => {
+        setMuted(!isMuted());
+        showPauseMenu();
+      },
+    },
+    {
+      label: "🏠 Ana Menü",
+      desc: "Kaydedilmemiş ilerleme kaybolur!",
+      onClick: () => location.reload(),
+    },
+  ]);
 }
 
 // Seçilen zorluğu canlı koloniye uygula (köylü sayısı, erzak, moral)
@@ -911,7 +1174,13 @@ input.wheelInterceptor = (sx, sy, deltaY) => {
 
 window.addEventListener("keydown", (e) => {
   if (e.code === "Escape") {
-    closeTopmost(); // her basışta üstteki bir panel kapanır
+    if (menuOverlay) {
+      // menü açıkken Esc: kapat ve devam et
+      closeMenu();
+      paused = false;
+    } else if (!closeTopmost()) {
+      showPauseMenu(); // kapatacak panel kalmadı: menü
+    }
   } else if (e.code === "Space") {
     e.preventDefault();
     paused = !paused;
@@ -1540,7 +1809,7 @@ console.info(
   "color:#8fd05e;font-weight:bold"
 );
 
-showDifficultyScreen();
+showMainMenu();
 
 let last = performance.now();
 let accumulator = 0;
@@ -1569,6 +1838,17 @@ function frame(now: number) {
     accumulator -= FIXED_DT;
     steps++;
   }
+
+  // ses: dinleyici kamerada; ateş çıtırtısı en yakın ateşe göre
+  setListener(camera.x, camera.y);
+  let fireDist = Infinity;
+  for (const b of buildings) {
+    if (!b.done) continue;
+    if (!b.hasTorch && b.type !== BuildingType.Camp) continue;
+    const d = Math.hypot(b.centerX - camera.x, b.centerY - camera.y);
+    if (d < fireDist) fireDist = d;
+  }
+  setFireProximity(fireDist);
 
   const hover = camera.screenToWorld(input.mouseX, input.mouseY, canvas.width, canvas.height);
   const hoverTile = { x: Math.floor(hover.x / TILE_SIZE), y: Math.floor(hover.y / TILE_SIZE) };

@@ -135,6 +135,15 @@ export class Renderer {
   }
 
   // Tek bir bloğu offscreen zemine boya (4x4'lük alt karelerle pixel dokusu)
+  // Kayıt yüklendiğinde tüm zemini ve mini haritayı yeniden boya
+  repaintAll(): void {
+    for (let y = 0; y < this.world.height; y++) {
+      for (let x = 0; x < this.world.width; x++) {
+        this.paintTile(x, y);
+      }
+    }
+  }
+
   private paintTile(x: number, y: number): void {
     const t = this.world.get(x, y) as Tile;
     const px = x * TILE_SIZE;
