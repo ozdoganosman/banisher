@@ -29,6 +29,7 @@ import {
   WORSHIP_TIME,
 } from "./buildings";
 import { difficulty } from "./difficulty";
+import { coldSnapActive } from "./events";
 import { addJournal } from "./journal";
 import { babyIdentity, randomIdentity, type Identity } from "./names";
 import { hasTech } from "./tech";
@@ -80,7 +81,7 @@ const FOOD_TARGET = 14; // toplayıcının alanında hedef çalı/mantar/yemiş
 
 // Toplanabilir yemeklerin verimi (eşya başına)
 const GATHER_YIELD: Partial<Record<ItemType, number>> = {
-  berry: 6, mushroom: 2,
+  berry: 5, mushroom: 2,
 };
 
 // Teknolojiye göre değişen değerler
@@ -109,10 +110,12 @@ const EAT_TIME = 1.2;
 const STARVE_TIME = 45;
 const FAR_JOB_THRESHOLD = 25; // karolar cinsinden çok uzak iş mesafesi
 
-// Yaşam evreleri (1 yıl = 4 gün): bebek annesine/bakımevine muhtaçtır,
-// çocuk kendi gezer ama çalışamaz, 18'inde işe başlar
+// Yaşam evreleri: bebek annesine/bakımevine muhtaçtır,
+// çocuk kendi gezer ama çalışamaz, 18'inde işe başlar.
+// Büyüme çağı hızlı akar (günde 2 yaş); 18'den sonra normal takvim (1 yıl = 4 gün)
 export const BABY_UNTIL_AGE = 7;
 export const WORK_AGE = 18;
+const CHILD_YEARS_PER_DAY = 2;
 export const PREGNANCY_DAYS = 4; // karın 4 gün boyunca büyür, 4. günün sabahı doğum
 const PREGNANCY_MORALE = 12; // hamilelik boyunca toplam moral kaybı (doğumda geri gelir)
 
@@ -208,6 +211,7 @@ export class Villager {
   fleeTimer = 0; // yırtıcıdan kaçış
   pleadingTtl = 0; // Merak: oyuncuya yakarıyor (tıklanıp teskin edilebilir)
   shockTtl = 0; // teskin edildi: kısa süre şokta donar
+  sickUntilDay = -1; // hastalık olayı: bu güne dek halsiz (yavaş yürür/çalışır)
   private divineBuff: { untilDay: number; amount: number } | null = null;
   private fleeDirX = 0;
   private fleeDirY = 0;
@@ -249,9 +253,15 @@ export class Villager {
     this.lastStage = this.baby ? 0 : this.canWork ? 2 : 1;
   }
 
-  // Yaş: doğum yaşı + geçen yıllar (1 yıl = 4 gün)
+  // Yaş: büyüme çağındakiler günde CHILD_YEARS_PER_DAY yaş alır,
+  // yetişkinlikten sonra 1 yıl = 4 gün takvimi işler
   get age(): number {
-    return this.identity.age + Math.floor(this.ageDays / DAYS_PER_YEAR);
+    const start = this.identity.age;
+    const days = this.ageDays;
+    if (start >= WORK_AGE) return start + Math.floor(days / DAYS_PER_YEAR);
+    const growDays = Math.ceil((WORK_AGE - start) / CHILD_YEARS_PER_DAY);
+    if (days < growDays) return start + days * CHILD_YEARS_PER_DAY;
+    return WORK_AGE + Math.floor((days - growDays) / DAYS_PER_YEAR);
   }
 
   get baby(): boolean {
@@ -268,6 +278,10 @@ export class Villager {
 
   get pregnant(): boolean {
     return this.pregnantSince !== null;
+  }
+
+  get sick(): boolean {
+    return totalDays() < this.sickUntilDay;
   }
 
   // Hamilelik ilerlemesi 0..1 (karın adım adım büyür)
@@ -527,6 +541,7 @@ export class Villager {
     if (hasTech("motorskills")) f *= 1.2; // herkese %20 hız
     if (this.educated) f *= 1.2; // bakımevi eğitimi: ek %20
     if (season() === 3 && !this.hasClothes) f *= 0.75; // kışın giysisiz: %25 yavaş
+    if (this.sick) f *= 0.55; // hastalık: halsiz
     return f;
   }
 
@@ -741,12 +756,14 @@ export class Villager {
 
     // Kış: giysisi olmayan dışarıda üşür, morali erir.
     // Deri giysi VEYA ateş başında olmak (kamp ateşi/meşale ışığı) korur.
+    // Ayaz olayı sırasında üşüme çok daha keskindir.
     if (
       season() === 3 && !this.hasClothes && !this.baby &&
       this.state !== "sleeping" &&
       !isLit(buildings, this.x, this.y)
     ) {
-      this.changeMorale(-COLD_MORALE_RATE * dt, "Soğuk (giysisiz)");
+      const snap = coldSnapActive() ? 2.5 : 1;
+      this.changeMorale(-COLD_MORALE_RATE * snap * dt, "Soğuk (giysisiz)");
     }
 
     // Gece ateş başında olmak içi ısıtır: yavaşça moral kazandırır

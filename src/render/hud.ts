@@ -732,8 +732,9 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   const pregText = v.pregnant
     ? ` • Hamile (${Math.min(4, Math.floor(v.pregnancyProgress * 4) + 1)}/4 gün)`
     : "";
+  const sickText = v.sick ? " • 🤒 Hasta" : "";
   ctx.fillText(
-    `${ageText} • ${v.identity.female ? "Kadın" : "Erkek"}${eduText}${pregText}`,
+    `${ageText} • ${v.identity.female ? "Kadın" : "Erkek"}${eduText}${pregText}${sickText}`,
     tx, y + 46, w - 82 - 12
   );
   ctx.fillStyle = "#c9a35a";
@@ -1646,6 +1647,7 @@ export function drawPeoplePanel(ctx: CanvasRenderingContext2D, villagers: Villag
     let name = v.fullName;
     if (v.pregnant) name = `🤰 ${name}`;
     if (v.educated) name = `🎓 ${name}`;
+    if (v.sick) name = `🤒 ${name}`;
     ctx.fillText(name, cols.name, ry + PEOPLE_ROW_H / 2, 162);
     // yaş + cinsiyet
     ctx.fillStyle = "#8a8478";

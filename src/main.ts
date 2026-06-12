@@ -66,7 +66,7 @@ import {
   ROLE_NAMES,
   isBuildingUnlocked,
 } from "./sim/buildings";
-import { dateString, gameTime, season, totalDays, tuning, updateTime } from "./sim/time";
+import { dateString, dayFrac, gameTime, season, totalDays, tuning, updateTime } from "./sim/time";
 import { initAudio, isMuted, setFireProximity, setListener, setMuted } from "./engine/sound";
 import { addFloater, burst } from "./render/effects";
 import {
@@ -79,6 +79,7 @@ import {
   type ItemType,
 } from "./sim/resources";
 import { DIFFICULTY_PRESETS, difficulty, type DifficultyLevel } from "./sim/difficulty";
+import { eventFlags } from "./sim/events";
 import { addJournal, journal } from "./sim/journal";
 import { screams, updateScreams, Villager } from "./sim/villager";
 import { updateEffects } from "./render/effects";
@@ -175,6 +176,7 @@ function saveGame(): void {
     difficulty: { ...difficulty },
     resources: { ...resources },
     tech: purchasedList(),
+    events: { ...eventFlags },
     world: world.serialize(),
     journal: journal.map((e) => ({ ...e })),
     camera: { x: camera.x, y: camera.y, zoom: camera.zoom },
@@ -192,7 +194,7 @@ function saveGame(): void {
       moraleLog: [...v.moraleLog],
       birthDay: v.birthDay, pregnantSince: v.pregnantSince,
       educated: v.educated, hasAxe: v.hasAxe, hasClothes: v.hasClothes,
-      spears: v.spears,
+      spears: v.spears, sick: v.sickUntilDay,
       home: bIndex(v.home), mother: vIndex(v.mother),
       assignment:
         v.assignment.kind === "building"
@@ -228,6 +230,8 @@ function loadGame(): boolean {
     Object.assign(difficulty, d.difficulty);
     Object.assign(resources, d.resources);
     restorePurchased(d.tech);
+    eventFlags.coldSnapUntilDay = d.events?.coldSnapUntilDay ?? -1;
+    eventTimer = 0.5 * tuning.dayLength; // eski kayıtlarda olay sayacı tazelenir
     world.restore(d.world);
     journal.splice(0, journal.length, ...d.journal);
     screams.splice(0, screams.length);
@@ -262,6 +266,7 @@ function loadGame(): boolean {
       for (const [k, val] of vd.moraleLog) v.moraleLog.set(k, val);
       v.birthDay = vd.birthDay;
       v.pregnantSince = vd.pregnantSince;
+      v.sickUntilDay = vd.sick ?? -1;
       v.educated = vd.educated;
       v.hasAxe = vd.hasAxe;
       v.hasClothes = vd.hasClothes;
@@ -1225,7 +1230,7 @@ window.addEventListener("keydown", (e) => {
 
 // ---- Konutlar ve doğumlar ----
 
-const BIRTH_CHANCE = 0.35; // her gün dönümünde, boş yeri olan ev başına
+const BIRTH_CHANCE = 0.55; // her gün dönümünde, boş yeri olan ev başına
 let lastDayCount = 0;
 let homeTimer = 0;
 
@@ -1570,6 +1575,174 @@ function trySpawnWildMushroom(): void {
   }
 }
 
+// ---- Rastgele olaylar: oyunun ritmini kıran iyi/kötü sürprizler ----
+
+let eventTimer = 0.9 * tuning.dayLength; // ilk olay 1. günün sonlarına doğru
+
+// Kamp etrafında, verilen halka aralığında yürünebilir bir nokta bul
+function spawnPointNear(minR: number, maxR: number): { x: number; y: number } | null {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const ang = Math.random() * Math.PI * 2;
+    const r = minR + Math.random() * (maxR - minR);
+    const x = Math.round(campCenter.x + Math.cos(ang) * r);
+    const y = Math.round(campCenter.y + Math.sin(ang) * r);
+    if (world.inBounds(x, y) && world.walkableAt(x, y)) return { x, y };
+  }
+  return null;
+}
+
+interface RandomEvent {
+  id: string;
+  weight: number;
+  ok: () => boolean;
+  run: () => boolean; // false dönerse (yer bulunamadı vb.) başka olay denenir
+}
+
+const RANDOM_EVENTS: RandomEvent[] = [
+  {
+    // Kurt sürüsü baskını: normal türemeden farklı olarak kampa yakın gelirler
+    id: "kurt_baskini",
+    weight: 3,
+    ok: () => totalDays() >= difficulty.wolfDay,
+    run: () => {
+      const p = spawnPointNear(16, 24);
+      if (!p) return false;
+      const n = 2 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < n; i++) {
+        // sürü bir arada doğar: küçük kaymalarla yan yana
+        const ox = p.x + (i % 2);
+        const oy = p.y + Math.floor(i / 2);
+        const walkable = world.walkableAt(ox, oy);
+        animals.push(new Animal("wolf", null, walkable ? ox : p.x, walkable ? oy : p.y));
+      }
+      addMessage(`🐺 Kurt sürüsü kampın kokusunu aldı! (${n} kurt yaklaşıyor)`);
+      addJournal(`🐺 ${n} kurtluk bir sürü yerleşkeye sokuldu`);
+      return true;
+    },
+  },
+  {
+    id: "ayi",
+    weight: 1,
+    ok: () => totalDays() >= difficulty.bearDay,
+    run: () => {
+      const p = spawnPointNear(18, 26);
+      if (!p) return false;
+      animals.push(new Animal("bear", null, p.x, p.y));
+      addMessage("🐻 Aç bir ayı yerleşkenin çevresinde dolanıyor!");
+      addJournal("🐻 Aç bir ayı yerleşke çevresinde görüldü");
+      return true;
+    },
+  },
+  {
+    // Bereket: ilkbahar/yaz aylarında orman cömertleşir
+    id: "bereket",
+    weight: 2,
+    ok: () => season() <= 1,
+    run: () => {
+      let bushes = 0;
+      for (let attempt = 0; attempt < 60 && bushes < 4; attempt++) {
+        const p = spawnPointNear(8, 22);
+        if (!p || world.get(p.x, p.y) !== Tile.Grass) continue;
+        world.set(p.x, p.y, Tile.Bush);
+        bushes++;
+      }
+      for (let i = 0; i < 6; i++) trySpawnWildMushroom();
+      if (bushes === 0) return false;
+      addMessage("🌳 Orman cömert davrandı: yeni yemiş çalıları ve mantarlar bitti!");
+      addJournal("🌳 Bereketli günler: orman yemiş ve mantar verdi");
+      renderer.repaintAll();
+      return true;
+    },
+  },
+  {
+    // Ayaz: kışın bir gün boyunca üşüme 2.5 kat keskin
+    id: "ayaz",
+    weight: 2.5,
+    ok: () => season() === 3,
+    run: () => {
+      eventFlags.coldSnapUntilDay = totalDays() + 1;
+      addMessage("🥶 Buz gibi bir ayaz çöktü — herkes ateşin başına, giysisi olan giyinsin!");
+      addJournal("🥶 Ayaz bastırdı: gün boyu soğuk iki buçuk kat keskin");
+      return true;
+    },
+  },
+  {
+    id: "hastalik",
+    weight: 2,
+    ok: () => villagers.filter((v) => v.canWork && !v.sick).length >= 5,
+    run: () => {
+      const adults = villagers.filter((v) => v.canWork && !v.sick);
+      const v = adults[Math.floor(Math.random() * adults.length)];
+      v.sickUntilDay = totalDays() + 1;
+      v.changeMorale(-8, "Hastalık");
+      addMessage(`🤒 ${v.fullName} hastalandı — bir gün boyunca halsiz çalışacak`);
+      addJournal(`🤒 ${v.fullName} hastalandı`);
+      return true;
+    },
+  },
+  {
+    id: "yildiz_yagmuru",
+    weight: 1.5,
+    ok: () => true,
+    run: () => {
+      for (const v of villagers) v.changeMorale(8, "Yıldız yağmuru");
+      resources.knowledge += 3;
+      addMessage("🌠 Gökten yıldızlar kaydı — kabile büyülendi! (+8 moral, +3 bilgi)");
+      addJournal("🌠 Yıldız yağmuru kabileyi mest etti");
+      return true;
+    },
+  },
+  {
+    // Göçmen: kalabalık hem güç hem boğaz demektir
+    id: "gocmen",
+    weight: 1.5,
+    ok: () => villagers.length > 0 && villagers.length < 40,
+    run: () => {
+      const p = spawnPointNear(10, 16);
+      if (!p) return false;
+      const v = new Villager(p.x, p.y);
+      if (hasTech("humanity")) v.changeMorale(10, "Tanrı inancı");
+      villagers.push(v);
+      addMessage(`🧍 Gezgin ${v.fullName} kampa sığındı — kabileye katıldı!`);
+      addJournal(`🧍 Gezgin ${v.fullName} kabileye katıldı`);
+      return true;
+    },
+  },
+];
+
+// Uygun olaylardan ağırlıklı seçim yap; seçilen olay başarısız olursa diğerlerini dene
+function rollRandomEvent(): void {
+  const pool = RANDOM_EVENTS.filter((e) => e.ok());
+  while (pool.length > 0) {
+    let total = 0;
+    for (const e of pool) total += e.weight;
+    let r = Math.random() * total;
+    let pick = pool[0];
+    for (const e of pool) {
+      r -= e.weight;
+      if (r <= 0) {
+        pick = e;
+        break;
+      }
+    }
+    if (pick.run()) return;
+    pool.splice(pool.indexOf(pick), 1);
+  }
+}
+
+function tickRandomEvents(dt: number): void {
+  eventTimer -= dt;
+  if (eventTimer > 0) return;
+  // gece olay patlatma: sabaha ertele
+  const f = dayFrac();
+  if (f < 0.12 || f > 0.85) {
+    eventTimer = 0.05 * tuning.dayLength;
+    return;
+  }
+  eventTimer = (0.8 + Math.random() * 0.9) * tuning.dayLength; // kabaca her 1-1.5 günde bir
+  rollRandomEvent();
+}
+
 function step(dt: number) {
   updateTime(dt);
   world.update(dt);
@@ -1581,6 +1754,7 @@ function step(dt: number) {
   updateScreams(dt);
 
   tickWildSpawns(dt);
+  tickRandomEvents(dt);
 
   // yabani mantar türemesi
   mushroomTimer -= dt;
@@ -1730,6 +1904,7 @@ const hile = {
   hile.kurt() / hile.ayi()  kamp yakınına yırtıcı sal
   hile.gun(2)             takvimi N gün ileri sar
   hile.hiz(8)             oyun hızı (1/2/4/8/16)
+  hile.olay()             rastgele olay tetikle; hile.olay("kurt_baskini") belirli olay
   __game.tuning           dayLength / timeScale / moveSpeed canlı ayar
 Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
     );
@@ -1798,6 +1973,18 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
   },
   hiz(n = 1): void {
     if ([1, 2, 4, 8, 16].includes(n)) gameSpeed = n;
+  },
+  olay(id?: string): void {
+    if (id) {
+      const e = RANDOM_EVENTS.find((e) => e.id === id);
+      if (!e) {
+        addMessage(`Hile: olay yok. Olaylar: ${RANDOM_EVENTS.map((e) => e.id).join(", ")}`);
+        return;
+      }
+      if (!e.run()) addMessage("Hile: olay tetiklenemedi (koşul/yer bulunamadı)");
+      return;
+    }
+    rollRandomEvent();
   },
 };
 

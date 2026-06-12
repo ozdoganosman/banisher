@@ -120,7 +120,39 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v1.8)
+## Şu anki özellikler (v2.0)
+
+### v2.0: Rastgele olaylar ve yaşayan denge
+
+- **Rastgele olaylar** (kabaca her 1-1.5 günde bir, gündüz düşer): 🐺
+  kurt sürüsü baskını (2-3 kurt kampa sokulur), 🐻 aç ayı, 🌳 bereket
+  (yeni yemiş çalıları + mantar patlaması), 🥶 ayaz (kışın üşüme 2.5
+  kat keskinleşir), 🤒 hastalık (bir köylü 1 gün halsiz: %45 yavaş),
+  🌠 yıldız yağmuru (+8 moral, +3 bilgi), 🧍 göçmen (kabileye yeni
+  yetişkin katılır); hepsi Deftere (B) işlenir
+- **Hızlı büyüme**: büyüme çağındakiler günde 2 yaş alır — yeni doğan
+  4 günde çocuk, 9 günde işçi olur; 18'den sonra normal takvim işler
+  (1 yıl = 4 gün)
+- **Daha sık hamilelik**: gün dönümünde gebe kalma şansı %35 → %55
+- **Yemek daha kıymetli**: günlük açlık 40→44 (zorda 52→56), yemiş
+  toplama verimi 6→5, başlangıç yemişi 45→40
+- Hastalar profilde ve İnsanlar panelinde 🤒 rozetiyle görünür;
+  `hile.olay()` rastgele, `hile.olay("kurt_baskini")` belirli olayı
+  tetikler
+
+### v1.9: Ses, kayıt ve ana menü
+
+- **Prosedürel ses**: adımlar, balta/taş vuruşları, mızrak vınlaması,
+  kurt uluması ve mesafeyle sönümlenen ateş çıtırtısı; menüden açılıp
+  kapatılır
+- **Kaydet/Yükle**: dünya, kaynaklar, araştırmalar, binalar, köylüler,
+  hayvanlar ve defter localStorage'a yazılır; "Devam Et" ile kaldığın
+  yerden sürer
+- **Ana menü ve duraklatma menüsü**: BANISHER giriş ekranı (Yeni Oyun →
+  zorluk seçimi, Devam Et, Ses); oyun içinde Esc → Devam / Kaydet /
+  Ses / Ana Menü
+- **3 zorluk seviyesi**: Kolay / Normal / Zor — açlık hızı, yırtıcı
+  takvimi, başlangıç erzakı ve moral farklılaşır
 
 ### v1.8: Taş yol, tam ekran araştırma ve arayüz
 

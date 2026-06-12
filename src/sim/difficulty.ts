@@ -4,10 +4,10 @@ export type DifficultyLevel = "easy" | "normal" | "hard";
 
 export const difficulty = {
   level: "normal" as DifficultyLevel,
-  hungerPerDay: 40, // günlük açlık artışı
+  hungerPerDay: 44, // günlük açlık artışı
   wolfDay: 7, // kurtların türemeye başladığı gün
   bearDay: 11, // ayıların türemeye başladığı gün
-  startBerry: 45,
+  startBerry: 40,
   startVillagers: 10,
   startMoraleBonus: 0, // başlangıç moraline eklenir
 };
@@ -40,10 +40,10 @@ export const DIFFICULTY_PRESETS: Record<
     desc: "Az erzak, hızlı açlık, yırtıcılar ilk kıştan saldırır",
     apply: () => {
       difficulty.level = "hard";
-      difficulty.hungerPerDay = 52;
+      difficulty.hungerPerDay = 56;
       difficulty.wolfDay = 3; // Kış/0!
       difficulty.bearDay = 7; // Kış/1
-      difficulty.startBerry = 25;
+      difficulty.startBerry = 22;
       difficulty.startVillagers = 8;
       difficulty.startMoraleBonus = -5;
     },
