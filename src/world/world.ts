@@ -195,6 +195,13 @@ export class World {
     }
   }
 
+  // Mantar türemesi için: rastgele bir budanmış ağaç konumu
+  randomPrunedTree(): { x: number; y: number } | null {
+    if (this.prunedTrees.length === 0) return null;
+    const p = this.prunedTrees[Math.floor(Math.random() * this.prunedTrees.length)];
+    return { x: p.x, y: p.y };
+  }
+
   plantSapling(x: number, y: number, target: Tile): void {
     this.claimedPlants.delete(this.index(x, y));
     if (this.get(x, y) !== Tile.Grass || this.blocked.has(this.index(x, y))) return;

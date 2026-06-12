@@ -53,7 +53,7 @@ import {
   isBuildingUnlocked,
 } from "./sim/buildings";
 import { gameTime, season, totalDays, tuning, updateTime } from "./sim/time";
-import { addFloater } from "./render/effects";
+import { addFloater, burst } from "./render/effects";
 import {
   addItem,
   foodTotal,
@@ -1028,6 +1028,20 @@ function trySpawnWildMushroom(): void {
     if (world.tiles[i] === Tile.Mushroom) count++;
   }
   if (count >= MUSHROOM_WILD_CAP) return;
+  // 1) budanmış ağaçların dibi: çürüyen dallar mantar bitirir ("pıt")
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const pt = world.randomPrunedTree();
+    if (!pt) break;
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
+    const [dx, dy] = dirs[Math.floor(Math.random() * 4)];
+    const x = pt.x + dx;
+    const y = pt.y + dy;
+    if (!world.inBounds(x, y) || world.get(x, y) !== Tile.Grass || !world.walkableAt(x, y)) continue;
+    world.set(x, y, Tile.Mushroom);
+    burst((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE, "#c43030", 7);
+    return;
+  }
+  // 2) binalardan uzak yabani türeme
   for (let attempt = 0; attempt < 12; attempt++) {
     const x = 1 + Math.floor(Math.random() * (MAP_W - 2));
     const y = 1 + Math.floor(Math.random() * (MAP_H - 2));
