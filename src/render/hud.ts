@@ -38,6 +38,83 @@ import { drawVillagerJobAccessories } from "./renderer";
 
 export const TOOLBAR_HEIGHT = 76;
 
+// ============================================================
+//  Arayüz tasarım sistemi: tutarlı palet + yeniden kullanılan
+//  panel/çip/düğme çizimleri (yuvarlak köşe, degrade, gölge, vurgu)
+// ============================================================
+const UI = {
+  gold: "#ffe296",
+  goldDim: "#c9a35a",
+  text: "#e8e2d0",
+  muted: "#9a9488",
+  green: "#8fd05e",
+  purple: "#b08fe0",
+  brown: "#c79a5a",
+  blue: "#6fb0e0",
+  danger: "#e07a68",
+};
+
+// Yuvarlatılmış dikdörtgen yolu
+function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+}
+
+// Cilalı panel gövdesi: düşük gölge + dikey degrade + ince çerçeve + sol vurgu şeridi.
+// Düzeni bozmamak için panellerin x/y/w/h değerleri korunur; yalnızca "kabuk" değişir.
+function panelChrome(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  accent: string = UI.gold,
+  radius = 9
+): void {
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.55)";
+  ctx.shadowBlur = 22;
+  ctx.shadowOffsetY = 7;
+  rrect(ctx, x, y, w, h, radius);
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, "rgba(31, 35, 47, 0.97)");
+  g.addColorStop(1, "rgba(13, 15, 21, 0.98)");
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.restore();
+  // ince üst parlama
+  rrect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, radius);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.14)";
+  ctx.stroke();
+  // sol vurgu şeridi (panel ailesini renkle ayırır)
+  ctx.save();
+  rrect(ctx, x + 2, y + 7, 3, h - 14, 1.5);
+  ctx.fillStyle = accent;
+  ctx.globalAlpha = 0.9;
+  ctx.fill();
+  ctx.restore();
+}
+
+// Yuvarlatılmış küçük düğme/çip arka planı (üst bar, filtreler)
+function chipBg(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  active: boolean, accent: string = UI.gold
+): void {
+  rrect(ctx, x, y, w, h, 6);
+  if (active) {
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, accent + "44");
+    g.addColorStop(1, accent + "22");
+    ctx.fillStyle = g;
+  } else {
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+  }
+  ctx.fill();
+  rrect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 6);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = active ? accent : "rgba(255,255,255,0.14)";
+  ctx.stroke();
+}
+
 // ---- Sol üst hedef kartı (tutorial görev zinciri) ----
 
 // Aktif hedefi çizer; kapladığı yüksekliği döndürür (görev listesi altına kayar)
@@ -55,12 +132,8 @@ export function drawGoalCard(ctx: CanvasRenderingContext2D, gctx: GoalCtx): numb
   const prog = goal.progress?.(gctx) ?? null;
   const H = 22 + 18 + hintLines.length * 14 + (prog ? 16 : 0) + PAD;
 
-  // arka plan + altın çerçeve
-  ctx.fillStyle = "rgba(10, 12, 16, 0.82)";
-  ctx.fillRect(x, y, W, H);
-  ctx.strokeStyle = "rgba(255, 214, 110, 0.45)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, W - 1, H - 1);
+  // cilalı panel + altın vurgu
+  panelChrome(ctx, x, y, W, H, UI.gold);
 
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
@@ -128,11 +201,7 @@ export function drawTaskList(ctx: CanvasRenderingContext2D, tasks: TaskCounts, y
   const H = entries.length * ROW_H + PAD;
 
   // arka plan
-  ctx.fillStyle = "rgba(10, 12, 16, 0.78)";
-  ctx.fillRect(x, y, W, H);
-  ctx.strokeStyle = "rgba(255,255,255,0.10)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, W - 1, H - 1);
+  panelChrome(ctx, x, y, W, H, UI.goldDim);
 
   ctx.font = "bold 12px monospace";
   ctx.textBaseline = "middle";
@@ -421,8 +490,12 @@ function drawInventoryBar(ctx: CanvasRenderingContext2D): void {
   const x0 = (ctx.canvas.width - total) / 2;
   const y0 = ctx.canvas.height - TOOLBAR_HEIGHT - slotS - 10;
 
-  ctx.fillStyle = "rgba(10, 12, 16, 0.6)";
-  ctx.fillRect(x0 - 6, y0 - 14, total + 12, slotS + 20);
+  rrect(ctx, x0 - 8, y0 - 15, total + 16, slotS + 22, 8);
+  ctx.fillStyle = "rgba(12, 14, 20, 0.72)";
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.stroke();
 
   for (let i = 0; i < numSlots; i++) {
     const x = x0 + i * (slotS + gap);
@@ -612,26 +685,21 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
   ctx.font = "11px monospace";
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
-  ctx.fillStyle = "rgba(10, 12, 16, 0.7)";
   const visibleFilters = MARK_FILTERS.filter(
     (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
   );
   const totalW = 64 + visibleFilters.reduce(
     (s, f) => s + ctx.measureText(f.label).width + 22 + 14, 0
   );
-  ctx.fillRect(x - 6, y - 4, totalW, 28);
-  ctx.fillStyle = "#9a9488";
-  ctx.fillText("İşaretle:", x, y + 10);
+  panelChrome(ctx, x - 8, y - 6, totalW, 32, UI.green);
+  ctx.fillStyle = "#b8b2a2";
+  ctx.fillText("İşaretle:", x + 4, y + 10);
   x += 60;
   filterRects = [];
   for (const f of visibleFilters) {
     const w = ctx.measureText(f.label).width + 16 + 14;
     const active = current === f.id;
-    ctx.fillStyle = active ? "rgba(90, 143, 60, 0.45)" : "rgba(255,255,255,0.07)";
-    ctx.fillRect(x, y, w, 20);
-    ctx.strokeStyle = active ? "#8fd05e" : "#4a4f58";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 19);
+    chipBg(ctx, x, y, w, 20, active, f.id === "cancel" ? UI.danger : UI.green);
     // tuş kapağı: çipin başında küçük harf kutusu
     ctx.fillStyle = active ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.12)";
     ctx.fillRect(x + 3, y + 4, 12, 12);
@@ -810,11 +878,7 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
   const h = PROFILE.h + breakdownH + calmH;
   profileDrawnH = h;
   profileCalmRect = null;
-  ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#5a5f68";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  panelChrome(ctx, x, y, w, h, UI.blue);
 
   // portre kutusu
   ctx.fillStyle = "rgba(255,255,255,0.06)";
@@ -1000,11 +1064,7 @@ export function drawAnimalPanel(
   apanelAttack = null;
   apanelTame = null;
 
-  ctx.fillStyle = "rgba(10, 12, 16, 0.88)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#5a5f68";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  panelChrome(ctx, x, y, w, h, UI.green);
   drawCloseButton(ctx, x + w - 24, y + 6);
 
   ctx.textBaseline = "middle";
@@ -1137,15 +1197,21 @@ export function buildingPanelHitTest(
 }
 
 function drawCloseButton(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  ctx.fillRect(x, y, 18, 18);
-  ctx.strokeStyle = "#9a9488";
-  ctx.lineWidth = 1;
+  // yuvarlak kapatma düğmesi (kırmızımsı vurgu)
   ctx.beginPath();
-  ctx.moveTo(x + 5, y + 5);
-  ctx.lineTo(x + 13, y + 13);
-  ctx.moveTo(x + 13, y + 5);
-  ctx.lineTo(x + 5, y + 13);
+  ctx.arc(x + 9, y + 9, 9, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(200, 80, 60, 0.22)";
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(224, 122, 104, 0.7)";
+  ctx.stroke();
+  ctx.strokeStyle = "#f0b0a4";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y + 6);
+  ctx.lineTo(x + 12, y + 12);
+  ctx.moveTo(x + 12, y + 6);
+  ctx.lineTo(x + 6, y + 12);
   ctx.stroke();
 }
 
@@ -1226,11 +1292,7 @@ export function drawBuildingPanel(
   bpanelTorch = null;
   bpanelFuel = null;
 
-  ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#5a5f68";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  panelChrome(ctx, x, y, w, h, UI.goldDim);
   drawCloseButton(ctx, x + w - 24, y + 6);
 
   ctx.textBaseline = "middle";
@@ -1626,11 +1688,7 @@ export function drawPopulationPanel(
   const h = popJobsY - y + rows.length * POP_JOB_ROW_H + 14;
   popRect = { x, y, w, h };
 
-  ctx.fillStyle = "rgba(10, 12, 16, 0.92)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#5a5f68";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  panelChrome(ctx, x, y, w, h, UI.green);
   drawCloseButton(ctx, x + w - 26, y + 8);
 
   ctx.textBaseline = "middle";
@@ -1766,11 +1824,7 @@ export function drawPeoplePanel(ctx: CanvasRenderingContext2D, villagers: Villag
   const h = peopleListY - y + visible * PEOPLE_ROW_H + 12;
   peopleRect = { x, y, w, h };
 
-  ctx.fillStyle = "rgba(10, 12, 16, 0.92)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#5a5f68";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  panelChrome(ctx, x, y, w, h, UI.blue);
   drawCloseButton(ctx, x + w - 26, y + 8);
 
   ctx.textBaseline = "middle";
@@ -1894,14 +1948,11 @@ export function drawJournalPanel(ctx: CanvasRenderingContext2D): void {
   journalRect = { x, y, w, h };
 
   // deri kaplı defter görünümü
-  ctx.fillStyle = "rgba(28, 20, 12, 0.94)";
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "#8a6a43";
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  panelChrome(ctx, x, y, w, h, UI.brown);
+  ctx.strokeStyle = "rgba(180, 140, 90, 0.25)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(x + 4.5, y + 4.5, w - 9, h - 9);
+  rrect(ctx, x + 5.5, y + 5.5, w - 11, h - 11, 6);
+  ctx.stroke();
   drawCloseButton(ctx, x + w - 26, y + 8);
 
   ctx.textBaseline = "middle";
@@ -2294,8 +2345,14 @@ export function drawHud(
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
 
-  ctx.fillStyle = "rgba(10, 12, 16, 0.7)";
+  // üst bar: yumuşak degrade + ince altın alt çizgi
+  const topGrad = ctx.createLinearGradient(0, 0, 0, 36);
+  topGrad.addColorStop(0, "rgba(22, 25, 33, 0.95)");
+  topGrad.addColorStop(1, "rgba(10, 12, 17, 0.88)");
+  ctx.fillStyle = topGrad;
   ctx.fillRect(0, 0, w, 34);
+  ctx.fillStyle = "rgba(255, 210, 110, 0.22)";
+  ctx.fillRect(0, 34, w, 1.5);
   ctx.font = "15px monospace";
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
@@ -2317,11 +2374,7 @@ export function drawHud(
     ctx.font = "15px monospace";
     const bw = 20 + ctx.measureText(label).width + 10;
     popButtonRect = { x: cx - 6, y: 4, w: bw, h: 26 };
-    ctx.fillStyle = "rgba(255,255,255,0.08)";
-    ctx.fillRect(popButtonRect.x, popButtonRect.y, popButtonRect.w, popButtonRect.h);
-    ctx.strokeStyle = "#4a4f58";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(popButtonRect.x + 0.5, popButtonRect.y + 0.5, popButtonRect.w - 1, popButtonRect.h - 1);
+    chipBg(ctx, popButtonRect.x, popButtonRect.y, popButtonRect.w, popButtonRect.h, false, UI.green);
     ctx.strokeStyle = "#e8e2d0";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -2345,11 +2398,7 @@ export function drawHud(
     let bw = ctx.measureText(label).width + 16;
     if (warn) { ctx.font = "bold 13px monospace"; bw += ctx.measureText(warn).width; ctx.font = "15px monospace"; }
     peopleButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
-    ctx.fillStyle = homeless > 0 ? "rgba(200, 70, 50, 0.2)" : "rgba(255,255,255,0.08)";
-    ctx.fillRect(peopleButtonRect.x, peopleButtonRect.y, peopleButtonRect.w, peopleButtonRect.h);
-    ctx.strokeStyle = homeless > 0 ? "#c0563f" : "#4a4f58";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(peopleButtonRect.x + 0.5, peopleButtonRect.y + 0.5, peopleButtonRect.w - 1, peopleButtonRect.h - 1);
+    chipBg(ctx, peopleButtonRect.x, peopleButtonRect.y, peopleButtonRect.w, peopleButtonRect.h, homeless > 0, homeless > 0 ? UI.danger : UI.blue);
     ctx.fillStyle = "#e8e2d0";
     ctx.fillText(label, cx + 6, 18);
     if (warn) {
@@ -2367,11 +2416,7 @@ export function drawHud(
     ctx.font = "15px monospace";
     const bw = ctx.measureText(label).width + 16;
     journalButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
-    ctx.fillStyle = "rgba(138, 106, 67, 0.2)";
-    ctx.fillRect(journalButtonRect.x, journalButtonRect.y, journalButtonRect.w, journalButtonRect.h);
-    ctx.strokeStyle = "#8a6a43";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(journalButtonRect.x + 0.5, journalButtonRect.y + 0.5, journalButtonRect.w - 1, journalButtonRect.h - 1);
+    chipBg(ctx, journalButtonRect.x, journalButtonRect.y, journalButtonRect.w, journalButtonRect.h, false, UI.brown);
     ctx.fillStyle = "#e8c87a";
     ctx.fillText(label, cx + 6, 18);
     cx += bw + 10;
@@ -2383,11 +2428,7 @@ export function drawHud(
     ctx.font = "15px monospace";
     const bw = 20 + ctx.measureText(label).width + 10;
     techButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
-    ctx.fillStyle = "rgba(138, 108, 192, 0.18)";
-    ctx.fillRect(techButtonRect.x, techButtonRect.y, techButtonRect.w, techButtonRect.h);
-    ctx.strokeStyle = "#8a6cc0";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(techButtonRect.x + 0.5, techButtonRect.y + 0.5, techButtonRect.w - 1, techButtonRect.h - 1);
+    chipBg(ctx, techButtonRect.x, techButtonRect.y, techButtonRect.w, techButtonRect.h, true, UI.purple);
     drawItemIcon(ctx, "knowledge", cx + 2, 7, 18);
     ctx.fillStyle = "#d8c8f0";
     ctx.fillText(label, cx + 22, 18);
@@ -2474,11 +2515,7 @@ export function drawHud(
   pauseButtonRect = { x: w - 92, y: 4, w: 26, h: 26 };
   speedButtonRect = { x: w - 60, y: 4, w: 48, h: 26 };
   // duraklat / devam
-  ctx.fillStyle = paused ? "rgba(255, 210, 60, 0.25)" : "rgba(255,255,255,0.08)";
-  ctx.fillRect(pauseButtonRect.x, pauseButtonRect.y, pauseButtonRect.w, pauseButtonRect.h);
-  ctx.strokeStyle = paused ? "#ffd23c" : "#4a4f58";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(pauseButtonRect.x + 0.5, pauseButtonRect.y + 0.5, pauseButtonRect.w - 1, pauseButtonRect.h - 1);
+  chipBg(ctx, pauseButtonRect.x, pauseButtonRect.y, pauseButtonRect.w, pauseButtonRect.h, paused, UI.gold);
   ctx.fillStyle = paused ? "#ffd23c" : "#e8e2d0";
   if (paused) {
     // oynat üçgeni
@@ -2493,10 +2530,7 @@ export function drawHud(
     ctx.fillRect(pauseButtonRect.x + 14.5, pauseButtonRect.y + 7, 3.5, 12);
   }
   // hız
-  ctx.fillStyle = speed > 1 ? "rgba(255, 210, 60, 0.18)" : "rgba(255,255,255,0.08)";
-  ctx.fillRect(speedButtonRect.x, speedButtonRect.y, speedButtonRect.w, speedButtonRect.h);
-  ctx.strokeStyle = speed > 1 ? "#ffd23c" : "#4a4f58";
-  ctx.strokeRect(speedButtonRect.x + 0.5, speedButtonRect.y + 0.5, speedButtonRect.w - 1, speedButtonRect.h - 1);
+  chipBg(ctx, speedButtonRect.x, speedButtonRect.y, speedButtonRect.w, speedButtonRect.h, speed > 1, UI.gold);
   ctx.fillStyle = speed > 1 ? "#ffd23c" : "#e8e2d0";
   ctx.font = "bold 13px monospace";
   ctx.textAlign = "center";
@@ -2536,9 +2570,13 @@ export function drawHud(
     ctx.textAlign = "center";
     ctx.font = "bold 16px monospace";
     const text = "❚❚ DURAKLATILDI (Space)";
-    const tw = ctx.measureText(text).width + 30;
-    ctx.fillStyle = "rgba(10, 12, 16, 0.8)";
-    ctx.fillRect(w / 2 - tw / 2, 90, tw, 30);
+    const tw = ctx.measureText(text).width + 36;
+    rrect(ctx, w / 2 - tw / 2, 90, tw, 30, 8);
+    ctx.fillStyle = "rgba(12, 14, 20, 0.85)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 210, 60, 0.5)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.fillStyle = "#ffd23c";
     ctx.fillText(text, w / 2, 105);
     ctx.textAlign = "left";
@@ -2564,15 +2602,15 @@ export function drawHud(
     const label = repeated ? `${m.text}  ×${m.count}` : m.text;
     const tw = ctx.measureText(label).width + (m.level === "important" ? 40 : 24);
     const bx = w / 2 - tw / 2;
-    ctx.fillStyle = `rgba(10, 12, 16, ${bg * alpha})`;
-    ctx.fillRect(bx, my, tw, rowH - 2);
+    const rh = rowH - 2;
+    rrect(ctx, bx, my, tw, rh, rh / 2); // hap şeklinde
+    ctx.fillStyle = `rgba(12, 14, 20, ${bg * alpha})`;
+    ctx.fill();
     if (m.level === "important") {
-      // altın çerçeve + sol vurgu şeridi
+      rrect(ctx, bx + 0.5, my + 0.5, tw - 1, rh - 1, rh / 2);
       ctx.strokeStyle = `rgba(255, 210, 60, ${alpha})`;
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(bx + 0.5, my + 0.5, tw - 1, rowH - 3);
-      ctx.fillStyle = `rgba(255, 210, 60, ${alpha})`;
-      ctx.fillRect(bx, my, 3, rowH - 2);
+      ctx.stroke();
     }
     ctx.fillStyle = `rgba(${fg}, ${alpha})`;
     ctx.fillText(label, w / 2, my + (rowH - 2) / 2);

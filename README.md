@@ -120,7 +120,25 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.5)
+## Şu anki özellikler (v2.6)
+
+### v2.6: Arayüz tasarım sistemi — baştan cila
+
+- **Tutarlı tasarım dili**: tüm paneller artık yuvarlatılmış köşeli,
+  dikey degradeli, gölgeli ve sol kenarında **kategori renkli vurgu
+  şeridi** olan ortak bir "kabuk" kullanır (profil=mavi, çiftlik/hayvan=
+  yeşil, defter=kahve, teknoloji=mor, hedef=altın)
+- **Üst bar**: yumuşak degrade + altın alt çizgi; düğmeler yuvarlatılmış
+  çiplere dönüştü, her biri kendi vurgu renginde; evsiz uyarısı kırmızı
+- **Yuvarlak kapatma düğmesi** (kırmızımsı) tüm panellerde
+- **Hap şeklinde bildirimler**: önemli = altın çerçeveli büyük, sıradan =
+  küçük; hepsi yuvarlatılmış
+- **İşaret filtresi çipleri**, envanter çubuğu ve duraklatma göstergesi
+  de aynı yuvarlak/gölgeli dile çekildi
+- Tüm bunlar düzeni/tıklama alanlarını bozmadan yapıldı (mevcut
+  etkileşimler korundu)
+
+### v2.5: Ses motoru elden geçti
 
 ### v2.5: Ses motoru elden geçti
 
