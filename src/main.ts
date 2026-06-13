@@ -24,6 +24,9 @@ import {
   isOverPeoplePanel,
   drawJournalPanel,
   journalPanelHitTest,
+  drawPolicyPanel,
+  policyPanelHitTest,
+  policyButtonHitTest,
   drawAnimalPanel,
   animalPanelHitTest,
   journalButtonHitTest,
@@ -84,6 +87,7 @@ import {
 } from "./sim/resources";
 import { DIFFICULTY_PRESETS, difficulty, type DifficultyLevel } from "./sim/difficulty";
 import { eventFlags } from "./sim/events";
+import { policy, POLICY_INFO } from "./sim/policy";
 import { currentGoal, goalState, tickGoals } from "./sim/goals";
 import { addJournal, journal } from "./sim/journal";
 import { screams, updateScreams, Villager } from "./sim/villager";
@@ -154,6 +158,7 @@ let showPopulation = false;
 let showPeople = false;
 let showJournal = false;
 let showTech = false;
+let showPolicy = false;
 let markFilter: MarkFilter = "all";
 // sol tuş sürükleme: alan seçimi veya mini harita gezdirme
 let selecting:
@@ -179,7 +184,7 @@ function saveGame(): void {
     difficulty: { ...difficulty },
     resources: { ...resources },
     tech: purchasedList(),
-    autoResearch,
+    policy: { ...policy },
     events: { ...eventFlags },
     goal: goalState.index,
     world: world.serialize(),
@@ -236,7 +241,7 @@ function loadGame(): boolean {
     Object.assign(difficulty, d.difficulty);
     Object.assign(resources, d.resources);
     restorePurchased(d.tech);
-    autoResearch = d.autoResearch ?? true;
+    Object.assign(policy, d.policy ?? (d.autoResearch !== undefined ? { research: d.autoResearch } : {}));
     eventFlags.coldSnapUntilDay = d.events?.coldSnapUntilDay ?? -1;
     goalState.index = d.goal ?? 0; // eski kayıtlar: karşılanan hedefler peş peşe tamamlanır
     eventTimer = 0.5 * tuning.dayLength; // eski kayıtlarda olay sayacı tazelenir
@@ -904,6 +909,10 @@ input.onClick = (wx, wy, sx, sy) => {
     showTech = !showTech;
     return;
   }
+  if (policyButtonHitTest(sx, sy)) {
+    showPolicy = !showPolicy;
+    return;
+  }
   if (pauseButtonHitTest(sx, sy)) {
     paused = !paused;
     return;
@@ -920,8 +929,8 @@ input.onClick = (wx, wy, sx, sy) => {
     if (hit) {
       if (hit.kind === "close") showTech = false;
       else if (hit.kind === "autoToggle") {
-        autoResearch = !autoResearch;
-        addMessage(autoResearch
+        policy.research = !policy.research;
+        addMessage(policy.research
           ? "🔄 Oto-araştırma açıldı: bilgi yettikçe kabile kendi ilerler"
           : "Oto-araştırma kapatıldı: bilgi birikecek, dilediğini elle araştır");
       }
@@ -956,6 +965,20 @@ input.onClick = (wx, wy, sx, sy) => {
     const hit = journalPanelHitTest(sx, sy);
     if (hit) {
       if (hit === "close") showJournal = false;
+      return;
+    }
+  }
+
+  // otomasyon (politika) paneli
+  if (showPolicy) {
+    const hit = policyPanelHitTest(sx, sy);
+    if (hit) {
+      if (hit.kind === "close") showPolicy = false;
+      else if (hit.kind === "toggle") {
+        policy[hit.key] = !policy[hit.key];
+        const info = POLICY_INFO.find((p) => p.key === hit.key);
+        addMessage(`${info?.name}: ${policy[hit.key] ? "AÇIK" : "KAPALI"}`);
+      }
       return;
     }
   }
@@ -1175,6 +1198,7 @@ input.onClick = (wx, wy, sx, sy) => {
 // Açık olan en üstteki şeyi kapat; her çağrıda yalnızca bir tane
 function closeTopmost(): boolean {
   if (selected !== null) { selected = null; return true; }
+  if (showPolicy) { showPolicy = false; return true; }
   if (showTech) { showTech = false; return true; }
   if (showJournal) { showJournal = false; return true; }
   if (showPeople) { showPeople = false; return true; }
@@ -1378,6 +1402,8 @@ window.addEventListener("keydown", (e) => {
     showJournal = !showJournal;
   } else if (e.code === "KeyT") {
     showTech = !showTech;
+  } else if (e.code === "KeyP") {
+    showPolicy = !showPolicy;
   } else if (e.code === "KeyF") {
     const visibleFilters = MARK_FILTERS.filter(
       (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
@@ -1417,9 +1443,56 @@ let homelessWarnTimer = 0;
 
 // Oto-araştırma: açıkken bilgi yettikçe en ucuz uygun araştırmayı kendi yapar
 // (oyuncu kapatıp bilgi biriktirebilir ya da dilediğini elle araştırabilir)
-let autoResearch = true;
+// Otomatik alet siparişi: balta (oduncular) ve mızrak (avcılar) stoğu düşükse
+// atölyeye kendiliğinden sipariş açılır
+function autoToolsTick(): void {
+  if (!policy.tools) return;
+  const shop = buildings.find((b) => b.type === BuildingType.ToolWorkshop && b.done);
+  if (!shop) return;
+  const woodcutters = villagers.filter(
+    (v) => v.assignment.kind === "building" && v.assignment.building.type === BuildingType.Woodcutter
+  ).length;
+  if (woodcutters > 0) {
+    const axesOut = villagers.filter((v) => v.hasAxe).length + shop.toolStock;
+    const deficit = woodcutters - axesOut;
+    if (deficit > 0) shop.orders = Math.max(shop.orders, deficit);
+  }
+  if (hasTech("kan")) {
+    const hunters = villagers.filter(
+      (v) => v.assignment.kind === "building" && v.assignment.building.type === BuildingType.HunterLodge
+    );
+    if (hunters.length > 0) {
+      const carried = hunters.reduce((s, h) => s + h.spears, 0);
+      const desired = hunters.length * 5;
+      const have = carried + shop.spearStock;
+      if (have < desired) shop.spearOrders = Math.max(shop.spearOrders, Math.min(desired - have, 10));
+    }
+  }
+}
+
+// Otomatik işçi dağıtımı: kadrosuz (yeni) binalar boştaki işçilerle doldurulur;
+// en az bir işçi toplama/esneklik için boşta bırakılır
+function autoStaffTick(): void {
+  if (!policy.staff) return;
+  const idle = villagers.filter(
+    (v) => v.canWork && !v.caringBaby && !v.dead && v.assignment.kind === "laborer"
+  );
+  let free = idle.length;
+  for (const b of buildings) {
+    if (!b.done || b.def.maxWorkers <= 0 || b.type === BuildingType.Camp) continue;
+    if (workersOf(b) > 0) continue; // yalnız kadrosuz (yeni) binaları doldur
+    let cur = 0;
+    while (cur < b.def.maxWorkers && free > 1) {
+      const v = idle.pop()!;
+      v.assignment = { kind: "building", building: b };
+      free--;
+      cur++;
+    }
+  }
+}
+
 function autoResearchTick(): void {
-  if (!autoResearch) return;
+  if (!policy.research) return;
   let pick: Tech | null = null;
   for (const t of TECHS) {
     if (hasTech(t.id) || !prereqsMet(t) || resources.knowledge < t.cost) continue;
@@ -2106,6 +2179,8 @@ function step(dt: number) {
     ).length;
     worshipState.yield = worshipYieldFor(priests);
     autoResearchTick();
+    autoToolsTick();
+    autoStaffTick();
   }
 
   // evsiz uyarısı: ara ara hatırlat (ev yapımına teşvik)
@@ -2338,7 +2413,7 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
 };
 
 // tuning: konsoldan canlı ayar (__game.tuning.dayLength / timeScale / moveSpeed)
-window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, worship: worshipState, goals: { state: goalState, current: currentGoal }, get follow() { return followVillager ? followVillager.fullName : null; }, get autoResearch() { return autoResearch; } };
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, worship: worshipState, goals: { state: goalState, current: currentGoal }, get follow() { return followVillager ? followVillager.fullName : null; }, policy };
 (window as unknown as { hile: typeof hile }).hile = hile;
 console.info(
   "%cBanisher debug: konsola hile.yardim() yaz",
@@ -2485,8 +2560,9 @@ function frame(now: number) {
     if (showPopulation) drawPopulationPanel(ctx, villagers, buildings);
     if (showPeople) drawPeoplePanel(ctx, villagers);
     if (showJournal) drawJournalPanel(ctx);
+    if (showPolicy) drawPolicyPanel(ctx);
     if (selectedAnimal) drawAnimalPanel(ctx, selectedAnimal, canTameAnimal(selectedAnimal));
-    if (showTech) drawTechPanel(ctx, autoResearch);
+    if (showTech) drawTechPanel(ctx, policy.research);
   }
 
   // araştırma kutlaması her şeyin üstünde

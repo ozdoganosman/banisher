@@ -21,6 +21,7 @@ import {
 } from "../sim/resources";
 import { ANIMAL_DEFS, BARN_CAPACITY, TAME_TARGET, type Animal } from "../sim/animals";
 import { journal } from "../sim/journal";
+import { policy, POLICY_INFO, type PolicyKey } from "../sim/policy";
 import { currentGoal, type GoalCtx } from "../sim/goals";
 import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
@@ -2054,6 +2055,78 @@ export function techPanelHitTest(sx: number, sy: number): TechHit {
   return null;
 }
 
+// ---- Otomasyon (Politika) paneli ----
+
+let policyRect = { x: 0, y: 0, w: 0, h: 0 };
+let policyRows: { key: PolicyKey; x: number; y: number; w: number; h: number }[] = [];
+
+export type PolicyHit = { kind: "close" } | { kind: "toggle"; key: PolicyKey } | { kind: "panel" } | null;
+
+export function policyPanelHitTest(sx: number, sy: number): PolicyHit {
+  const cx = policyRect.x + policyRect.w - 26;
+  const cy = policyRect.y + 8;
+  if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
+  for (const r of policyRows) {
+    if (sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h) return { kind: "toggle", key: r.key };
+  }
+  if (sx >= policyRect.x && sx <= policyRect.x + policyRect.w &&
+      sy >= policyRect.y && sy <= policyRect.y + policyRect.h) return { kind: "panel" };
+  return null;
+}
+
+export function isOverPolicyPanel(sx: number, sy: number): boolean {
+  return sx >= policyRect.x && sx <= policyRect.x + policyRect.w &&
+    sy >= policyRect.y && sy <= policyRect.y + policyRect.h;
+}
+
+export function drawPolicyPanel(ctx: CanvasRenderingContext2D): void {
+  const w = 420;
+  const rowH = 46;
+  const h = 52 + POLICY_INFO.length * rowH + 12;
+  const x = (ctx.canvas.width - w) / 2;
+  const y = 80;
+  policyRect = { x, y, w, h };
+  policyRows = [];
+
+  panelChrome(ctx, x, y, w, h, UI.gold);
+  drawCloseButton(ctx, x + w - 26, y + 8);
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffe296";
+  ctx.font = "bold 15px monospace";
+  ctx.fillText("⚙ Otomasyon", x + 14, y + 20);
+  ctx.fillStyle = "#9a9488";
+  ctx.font = "11px monospace";
+  ctx.fillText("Angarya işler otomatik — sen yalnızca yön ver", x + 150, y + 20);
+
+  let ry = y + 44;
+  for (const info of POLICY_INFO) {
+    const on = policy[info.key];
+    // satır arka planı
+    rrect(ctx, x + 10, ry, w - 20, rowH - 6, 6);
+    ctx.fillStyle = "rgba(255,255,255,0.03)";
+    ctx.fill();
+    // metin
+    ctx.fillStyle = on ? "#e8e2d0" : "#8a8478";
+    ctx.font = "bold 13px monospace";
+    ctx.fillText(info.name, x + 22, ry + 14);
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "10px monospace";
+    ctx.fillText(info.desc, x + 22, ry + 30, w - 140);
+    // aç/kapa anahtarı (sağda)
+    const tw = 78, th = 24;
+    const tx = x + w - tw - 16, ty = ry + (rowH - 6 - th) / 2;
+    chipBg(ctx, tx, ty, tw, th, on, on ? UI.green : UI.muted);
+    ctx.fillStyle = on ? "#bfe89a" : "#9a9488";
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(on ? "AÇIK" : "KAPALI", tx + tw / 2, ry + (rowH - 6) / 2);
+    ctx.textAlign = "left";
+    policyRows.push({ key: info.key, x: tx, y: ty, w: tw, h: th });
+    ry += rowH;
+  }
+}
+
 export function drawTechPanel(ctx: CanvasRenderingContext2D, autoResearch = false): void {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height - TECH_TOP;
@@ -2318,6 +2391,12 @@ export function journalButtonHitTest(sx: number, sy: number): boolean {
     sy >= journalButtonRect.y && sy <= journalButtonRect.y + journalButtonRect.h;
 }
 let techButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+let policyButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+
+export function policyButtonHitTest(sx: number, sy: number): boolean {
+  return sx >= policyButtonRect.x && sx <= policyButtonRect.x + policyButtonRect.w &&
+    sy >= policyButtonRect.y && sy <= policyButtonRect.y + policyButtonRect.h;
+}
 
 export function peopleButtonHitTest(sx: number, sy: number): boolean {
   return sx >= peopleButtonRect.x && sx <= peopleButtonRect.x + peopleButtonRect.w &&
@@ -2446,6 +2525,19 @@ export function drawHud(
     ctx.fillStyle = "#d8c8f0";
     ctx.fillText(label, cx + 22, 18);
     cx += bw + 12;
+  }
+
+  // otomasyon (politika) düğmesi — dişli
+  {
+    const bw = 30;
+    policyButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
+    chipBg(ctx, policyButtonRect.x, policyButtonRect.y, bw, 26, false, UI.gold);
+    ctx.fillStyle = "#ffe296";
+    ctx.font = "15px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("⚙", cx + bw / 2 - 2, 18);
+    ctx.textAlign = "left";
+    cx += bw + 10;
   }
 
   // tarih (takvim ikonu) — sağdaki düğmelere sığıyorsa

@@ -120,7 +120,21 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.8)
+## Şu anki özellikler (v2.9)
+
+### v2.9: Otomasyon (Politika) paneli
+
+- **⚙ Otomasyon paneli** (P tuşu ya da üst bardaki dişli): tek yerden tüm
+  otomasyonları aç/kapa
+- **Otomatik alet siparişi**: oduncu/avcı varken balta ve mızrak stoğu
+  düşükse atölyeye kendiliğinden sipariş açılır
+- **Otomatik işçi dağıtımı**: kadrosuz (yeni kurulan) binalar boştaki
+  işçilerle otomatik doldurulur (en az bir işçi esneklik için boşta kalır)
+- **Otomatik toplama** ve **otomatik araştırma** anahtarları da bu panelde
+  toplandı; hepsi kaydedilir
+- Felsefe sürüyor: angarya otomatik, sen sadece müdahale et
+
+### v2.8: Kendi kendini yöneten koloni — sen sadece müdahale et
 
 ### v2.8: Kendi kendini yöneten koloni — sen sadece müdahale et
 

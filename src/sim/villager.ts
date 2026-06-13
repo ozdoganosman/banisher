@@ -29,6 +29,7 @@ import {
 } from "./buildings";
 import { difficulty } from "./difficulty";
 import { coldSnapActive } from "./events";
+import { policy } from "./policy";
 import { addJournal } from "./journal";
 import { babyIdentity, randomIdentity, type Identity } from "./names";
 import { hasTech } from "./tech";
@@ -1526,7 +1527,7 @@ export class Villager {
     // Boştaki ortalık işçisi: işaretli iş yoksa eksik kalan kaynağı (dal/odun/
     // yemiş/mantar/taş) kendiliğinden toplamaya gider. Düşük öncelik: oyuncunun
     // işaretlediği işler ve emirler her zaman önce gelir.
-    if (a.kind === "laborer") {
+    if (a.kind === "laborer" && policy.gather) {
       const AUTO = 1000;
       if (!isFull("wood") && !bagFull) {
         this.pushAutoCandidate(world, candidates, AUTO,
