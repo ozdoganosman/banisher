@@ -1507,6 +1507,68 @@ function autoStaffTick(): void {
   }
 }
 
+// Otomatik inşaat: koloni ihtiyaç duydukça uygun bir binayı kampın yakınına diker.
+// Aynı anda en çok 2 şantiye; bittikçe yenisi planlanır. Dalı tamamen tüketmez.
+function bCount(t: BuildingType): number {
+  return buildings.filter((b) => b.type === t && !b.removed).length;
+}
+function tryAutoPlace(type: BuildingType): boolean {
+  const def = BUILDING_DEFS[type];
+  const size = def.size;
+  for (let r = 3; r <= 20; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = campCenter.x + dx, y = campCenter.y + dy;
+        if (!canPlace(world, x, y, size)) continue;
+        if (def.needsWater && !world.hasAdjacentWater(x, y, size)) continue;
+        if (type === BuildingType.Barn && !pastureClearOfWater(x, y)) continue;
+        const b = new Building(type, x, y);
+        placeBuilding(world, b);
+        buildings.push(b);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+const AUTO_BUILD_BUFFER = 6; // bu kadar dal her zaman elde kalsın
+function autoBuildTick(): void {
+  if (!policy.build) return;
+  const pending = buildings.filter((b) => !b.done && !b.removed).length;
+  if (pending >= 2) return; // şantiyeler bitsin, sonra yenisi
+  const pop = villagers.length;
+  const wishlist: BuildingType[] = [];
+  // 1) konut: nüfus için yeterli yatak yoksa
+  if (pop > bCount(BuildingType.House) * HOUSE_CAPACITY) wishlist.push(BuildingType.House);
+  // 2) tapınak: bilgi/araştırma motoru
+  if (bCount(BuildingType.Temple) < 1) wishlist.push(BuildingType.Temple);
+  // 3) yemek: toplayıcı (kilidi açıksa), nüfusa göre 1-2 tane
+  if (isBuildingUnlocked(BuildingType.Gatherer) && bCount(BuildingType.Gatherer) < Math.min(2, Math.ceil(pop / 8))) wishlist.push(BuildingType.Gatherer);
+  // 4) balıkçı (su kenarı)
+  if (isBuildingUnlocked(BuildingType.Fisher) && bCount(BuildingType.Fisher) < 1) wishlist.push(BuildingType.Fisher);
+  // 5) atölye
+  if (isBuildingUnlocked(BuildingType.ToolWorkshop) && bCount(BuildingType.ToolWorkshop) < 1) wishlist.push(BuildingType.ToolWorkshop);
+  // 6) avcı kulübesi
+  if (isBuildingUnlocked(BuildingType.HunterLodge) && bCount(BuildingType.HunterLodge) < 1) wishlist.push(BuildingType.HunterLodge);
+  // 7) bakımevi (bebek varsa)
+  if (isBuildingUnlocked(BuildingType.Nursery) && bCount(BuildingType.Nursery) < 1 && villagers.some((v) => v.baby)) wishlist.push(BuildingType.Nursery);
+  // 8) depo (nüfus arttıkça)
+  if (isBuildingUnlocked(BuildingType.Depot) && bCount(BuildingType.Depot) < Math.floor(pop / 12)) wishlist.push(BuildingType.Depot);
+  // 9) çiftlik
+  if (isBuildingUnlocked(BuildingType.Barn) && bCount(BuildingType.Barn) < 1) wishlist.push(BuildingType.Barn);
+
+  for (const type of wishlist) {
+    const def = BUILDING_DEFS[type];
+    if (resources.wood < def.cost + AUTO_BUILD_BUFFER) continue;
+    if (tryAutoPlace(type)) {
+      resources.wood -= def.cost;
+      addMessage(`🏗 ${def.name} şantiyesi kuruldu (otomatik)`);
+      return; // bir tur bir bina yeter
+    }
+  }
+}
+
 function autoResearchTick(): void {
   if (!policy.research) return;
   const pick = cheapestAvailable();
@@ -2195,6 +2257,7 @@ function step(dt: number) {
     ).length;
     worshipState.yield = worshipYieldFor(priests);
     autoResearchTick();
+    autoBuildTick();
     autoToolsTick();
     autoStaffTick();
   }

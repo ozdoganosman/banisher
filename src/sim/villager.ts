@@ -1524,6 +1524,27 @@ export class Villager {
       }
     }
 
+    // ortalık işçisi de boştaki şantiyeleri inşa eder (ayrı inşaatçı atamaya gerek yok)
+    if (a.kind === "laborer") {
+      for (const b of this.lastBuildings ?? []) {
+        if (b.done || b.claimed || b.removed || !lit(b.centerX, b.centerY)) continue;
+        const bb = b;
+        const d = Math.abs(b.x + 1 - this.tileX) + Math.abs(b.y + 1 - this.tileY);
+        candidates.push({
+          dist: d,
+          start: () => {
+            const path = findPathAdjacentRect(world, this.tileX, this.tileY, bb.x, bb.y, bb.size);
+            if (!path) return false;
+            bb.claimed = true;
+            this.job = { kind: "build", building: bb };
+            this.takeFoodForWork();
+            this.startPath(path);
+            return true;
+          },
+        });
+      }
+    }
+
     // ortalık işçisi: elle/kulübece işaretlenmiş her kaynağa gider
     if (!isFull("wood") && !bagFull && !gathererBlocksWood) {
       this.pushTileJobCandidate(

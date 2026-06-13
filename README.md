@@ -120,7 +120,25 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v3.0)
+## Şu anki özellikler (v3.2)
+
+### v3.2: Kendi kendini kuran koloni
+
+- **Otomatik inşaat** (⚙ Otomasyon → Otomatik inşaat): koloni ihtiyaç
+  duydukça kampın yakınına uygun binayı (önce konut, sonra tapınak,
+  toplayıcı, balıkçı, atölye, avcı, bakımevi, depo, çiftlik) kendiliğinden
+  diker; aynı anda en çok 2 şantiye, dalı tamamen tüketmez
+- **İşçiler şantiyeleri kendiliğinden kurar**: ayrı "inşaatçı" atamaya
+  gerek yok — boştaki işçiler en yakın şantiyeyi inşa eder
+- **Katlamalı araştırma maliyeti**: her araştırma sonrakileri ~%16
+  pahalılaştırır (kabile geliştikçe ilerleme daha büyük yatırım ister)
+- **Sıradaki araştırma göstergesi**: oto-araştırma açıkken Teknoloji
+  düğmesi altında sıradaki araştırma, bilgi/ihtiyaç ve tahmini süre
+- **Çiftlik oto-evcilleştirme**: çiftçiler ağıl türüne dönüşecek yabanileri
+  görünce kendiliğinden evcilleştirir (ağıl dolu değilse)
+- Artık koloni büyük ölçüde kendini yönetiyor; sen yön verir, müdahale edersin
+
+### v3.0: Taş yalnız çakıldan + daha güçlü otomasyon
 
 ### v3.0: Taş yalnız çakıldan + daha güçlü otomasyon
 
