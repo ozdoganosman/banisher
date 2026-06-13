@@ -120,7 +120,18 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.6)
+## Şu anki özellikler (v2.7)
+
+### v2.7: Çiftlik ağılı gerçek bir engel oldu
+
+- **Çiftliğe yalnız çiftçiler girer**: çitle çevrili padok artık çiftçi
+  olmayan köylüler için yol bulmada engeldir — başkaları ağılın etrafından
+  dolaşır (içeride kalan biri çıkabilir, ama dışarıdan giremez)
+- **Çiftlik suya kurulamaz**: ağıl alanı su veya harita kenarı içeriyorsa
+  yerleştirme reddedilir; yerleştirme önizlemesi (hayalet) kırmızı yanar
+  ("çiftlik denizin üstünde" sorunu giderildi)
+
+### v2.6: Arayüz tasarım sistemi — baştan cila
 
 ### v2.6: Arayüz tasarım sistemi — baştan cila
 

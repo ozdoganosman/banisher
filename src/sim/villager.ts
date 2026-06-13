@@ -594,6 +594,14 @@ export class Villager {
 
   update(dt: number, world: World, buildings: Building[], animals: Animal[]): void {
     this.lastBuildings = buildings;
+    // Yalnız çiftçiler çitli ağıla girebilir; yol bulma bunu okur (sıralı sim).
+    // İçeride kalan (örn. inşaatı biten) çiftçi olmayan da çıkabilsin diye
+    // halihazırda padok karosunda duranlara da izin verilir.
+    const isFarmer =
+      this.assignment.kind === "building" &&
+      this.assignment.building.type === BuildingType.Barn;
+    world.allowPastureEntry =
+      isFarmer || world.pastureTiles.has(world.index(this.tileX, this.tileY));
     // Yaş evresi geçişleri: bebek (0-7) -> çocuk (7-18) -> işçi (18+)
     const stage = this.baby ? 0 : this.canWork ? 2 : 1;
     if (stage !== this.lastStage) {

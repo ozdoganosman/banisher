@@ -14,7 +14,7 @@ export function findPath(
   tx: number,
   ty: number
 ): PathNode[] | null {
-  if (!world.walkableAt(tx, ty)) return null;
+  if (world.pathBlocked(tx, ty)) return null;
   if (sx === tx && sy === ty) return [{ x: tx, y: ty }];
 
   const w = world.width;
@@ -97,7 +97,7 @@ export function findPath(
       if (next < 0 || next >= size) continue;
       const nx = next % w;
       const ny = Math.floor(next / w);
-      if (!world.walkableAt(nx, ny) || closed[next]) continue;
+      if (world.pathBlocked(nx, ny) || closed[next]) continue;
       const stepCost = world.get(nx, ny) === Tile.Road ? ROAD_COST : 1;
       const g = gScore[cur] + stepCost;
       if (g < gScore[next]) {
@@ -117,7 +117,7 @@ function tryCandidates(
   sy: number,
   candidates: PathNode[]
 ): PathNode[] | null {
-  const walkable = candidates.filter((c) => world.walkableAt(c.x, c.y));
+  const walkable = candidates.filter((c) => !world.pathBlocked(c.x, c.y));
   // en yakın adaydan başlayarak dene
   walkable.sort(
     (a, b) =>

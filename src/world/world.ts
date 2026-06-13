@@ -27,6 +27,12 @@ export class World {
   // Bina kaplayan bloklar: yürünemez
   readonly blocked = new Set<number>();
 
+  // Çiftlik padoğuna (çit içine) ait bloklar; yalnız çiftçiler girebilir.
+  // main her saniye yeniden hesaplar. allowPastureEntry: o an yol arayan
+  // köylünün çiftçi olup olmadığını belirtir (sıralı simülasyonda güvenli).
+  readonly pastureTiles = new Set<number>();
+  allowPastureEntry = true;
+
   // Bir blok değiştiğinde (örn. ağaç kesildi) renderer'ın haberi olsun
   onTileChange: ((x: number, y: number) => void) | null = null;
 
@@ -68,6 +74,13 @@ export class World {
       isWalkable(this.get(x, y)) &&
       !this.blocked.has(this.index(x, y))
     );
+  }
+
+  // Yol bulma için engel mi? Yürünemez VEYA (çiftçi değilse) çiftlik padoğu.
+  pathBlocked(x: number, y: number): boolean {
+    if (!this.walkableAt(x, y)) return true;
+    if (!this.allowPastureEntry && this.pastureTiles.has(this.index(x, y))) return true;
+    return false;
   }
 
   private generate(seed: number): void {

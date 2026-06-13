@@ -48,7 +48,7 @@ import {
   type PanelId,
 } from "./render/hud";
 import { buyTech, grantTech, hasTech, purchasedList, restorePurchased, TECHS, type Tech, type TechId } from "./sim/tech";
-import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, BARN_CAPACITY, BREED_INTERVAL, type AnimalType } from "./sim/animals";
+import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, BARN_CAPACITY, BREED_INTERVAL, PASTURE_RADIUS, pastureBounds, type AnimalType } from "./sim/animals";
 import {
   AXE_STONE_COST,
   AXE_WOOD_COST,
@@ -319,6 +319,7 @@ function loadGame(): boolean {
     dangerFollow = null;
     followVillager = null;
     lastDayCount = totalDays();
+    rebuildPastures();
     renderer.repaintAll();
     addMessage("💾 Kayıt yüklendi — hoş geldin!");
     return true;
@@ -674,6 +675,33 @@ function spawnAnimal(barn: Building, type: AnimalType, baby = false): void {
   }
 }
 const b2t = (px: number) => Math.floor(px / TILE_SIZE);
+
+// Çiftlik padoğu (çit) açık karada mı? Size-2 ahır için merkez (tx+1, ty+1).
+// Su veya harita kenarı varsa kurulamaz (çiftlik denizin üstünde kalmasın).
+function pastureClearOfWater(tx: number, ty: number): boolean {
+  const cx = tx + 1, cy = ty + 1;
+  for (let yy = cy - PASTURE_RADIUS; yy <= cy + PASTURE_RADIUS; yy++) {
+    for (let xx = cx - PASTURE_RADIUS; xx <= cx + PASTURE_RADIUS; xx++) {
+      if (!world.inBounds(xx, yy)) return false;
+      if (world.get(xx, yy) === Tile.Water) return false;
+    }
+  }
+  return true;
+}
+
+// Çitli ağıl karolarını binalardan yeniden hesapla (yalnız çiftçiler girebilir)
+function rebuildPastures(): void {
+  world.pastureTiles.clear();
+  for (const b of buildings) {
+    if (b.type !== BuildingType.Barn || !b.done) continue;
+    const pen = pastureBounds(b);
+    for (let yy = pen.y0; yy <= pen.y1; yy++) {
+      for (let xx = pen.x0; xx <= pen.x1; xx++) {
+        if (world.inBounds(xx, yy)) world.pastureTiles.add(world.index(xx, yy));
+      }
+    }
+  }
+}
 
 // Ocak: kışın yakıtı açık evler dal yakar (ısı/ışık verir), stoktan dal tüketir
 let fuelDebt = 0; // kesirli tüketim biriktirici
@@ -1076,6 +1104,10 @@ input.onClick = (wx, wy, sx, sy) => {
     }
     if (def.needsWater && !world.hasAdjacentWater(tx, ty, def.size)) {
       addMessage(`${def.name} su kenarına kurulmalı!`);
+      return;
+    }
+    if (selected === BuildingType.Barn && !pastureClearOfWater(tx, ty)) {
+      addMessage("Çiftlik ağılı açık kara ister — su/harita kenarına kurulamaz!");
       return;
     }
     if (resources.wood < def.cost) {
@@ -2042,6 +2074,7 @@ function step(dt: number) {
     assignHomes();
     assignChildcare();
     assignDogs();
+    rebuildPastures();
     // ayin verimi rahip sayısıyla üstel artar (toplam birikim ~ rahip²/3)
     const priests = villagers.filter(
       (v) => v.assignment.kind === "building" && v.assignment.building.type === BuildingType.Temple
@@ -2341,7 +2374,8 @@ function frame(now: number) {
     const gy = Math.min(Math.max(hoverTile.y, 0), MAP_H - size);
     const valid =
       canPlace(world, gx, gy, size) &&
-      (!def.needsWater || world.hasAdjacentWater(gx, gy, size));
+      (!def.needsWater || world.hasAdjacentWater(gx, gy, size)) &&
+      (selected !== BuildingType.Barn || pastureClearOfWater(gx, gy));
     ghost = { type: selected, tileX: gx, tileY: gy, size, valid };
   }
 
