@@ -66,6 +66,12 @@ export function initAudio(): void {
 
     startFireLoop();
     scheduleCrackle();
+    // hata ayıklama/test kancası: ses grafiğini dışarıdan ölçebilmek için
+    (window as unknown as { __audio?: unknown }).__audio = {
+      ctx: actx,
+      master,
+      fire: () => currentFire,
+    };
   } catch {
     actx = null;
   }
