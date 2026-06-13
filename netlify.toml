@@ -1,0 +1,4 @@
+# Netlify: depoyu bağla, gerisi otomatik (build + yayın)
+[build]
+  command = "npm run build"
+  publish = "dist"
