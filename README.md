@@ -120,7 +120,23 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.7)
+## Şu anki özellikler (v2.8)
+
+### v2.8: Kendi kendini yöneten koloni — sen sadece müdahale et
+
+- **Ürün başına depo sınırı**: her eşya tipi kendi sınırına ayrı ulaşır
+  (odun dolunca yemiş yeri kapanmaz); depo binası sınırı +120 artırır
+- **Boştaki işçiler kendiliğinden toplar**: işaretli iş yoksa ortalık
+  işçileri en yakın işaretsiz ağaç/çalı/mantar/taşı bulup eksik kalan
+  kaynağı toplar (deponun o ürün sınırına ulaşınca durur) — sürekli
+  işaretlemeye gerek yok
+- **Oto-araştırma**: bilgi yettikçe kabile en ucuz uygun araştırmayı
+  kendi yapar (Teknoloji panelindeki anahtarla kapatıp bilgi biriktirip
+  dilediğini elle araştırabilirsin)
+- Felsefe: en çok tıkladığın angarya işler otomatik; sen yalnızca
+  yön verir, kritik kararları alırsın
+
+### v2.7: Çiftlik ağılı gerçek bir engel oldu
 
 ### v2.7: Çiftlik ağılı gerçek bir engel oldu
 

@@ -2011,8 +2011,11 @@ export function techScrollBy(dx: number): void {
 export type TechHit =
   | { kind: "close" }
   | { kind: "buy"; id: TechId }
+  | { kind: "autoToggle" }
   | { kind: "panel" }
   | null;
+
+let techAutoRect = { x: 0, y: 0, w: 0, h: 0 };
 
 function getTechPos(tech: Tech, panelX: number, panelY: number) {
   const startX = panelX + 60 - techScrollX;
@@ -2027,6 +2030,8 @@ export function techPanelHitTest(sx: number, sy: number): TechHit {
   const cx = techRect.x + techRect.w - 26;
   const cy = techRect.y + 8;
   if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
+  if (sx >= techAutoRect.x && sx <= techAutoRect.x + techAutoRect.w &&
+      sy >= techAutoRect.y && sy <= techAutoRect.y + techAutoRect.h) return { kind: "autoToggle" };
 
   const cardW = TECH_CARD_W;
   const cardH = TECH_CARD_H;
@@ -2049,7 +2054,7 @@ export function techPanelHitTest(sx: number, sy: number): TechHit {
   return null;
 }
 
-export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
+export function drawTechPanel(ctx: CanvasRenderingContext2D, autoResearch = false): void {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height - TECH_TOP;
   const x = 0;
@@ -2103,6 +2108,15 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
   ctx.fillText("(rahipler tapınakta üretir)  •  ◀ ▶ sürükleyerek/tekerlekle kaydır", x + 300, y + 18);
+
+  // Oto-araştırma anahtarı (kapatınca bilgi birikir, dilediğini elle araştırırsın)
+  const tw = 220, th = 22;
+  techAutoRect = { x: x + w - 30 - tw - 6, y: y + 7, w: tw, h: th };
+  chipBg(ctx, techAutoRect.x, techAutoRect.y, tw, th, autoResearch, UI.purple);
+  ctx.fillStyle = autoResearch ? "#d8c0ff" : "#9a9488";
+  ctx.font = "bold 11px monospace";
+  ctx.textAlign = "left";
+  ctx.fillText(`🔄 Oto-araştırma: ${autoResearch ? "AÇIK" : "Kapalı"}`, techAutoRect.x + 10, y + 18);
 
   const cardW = TECH_CARD_W;
   const cardH = TECH_CARD_H;

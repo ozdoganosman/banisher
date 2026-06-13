@@ -47,7 +47,7 @@ import {
   panelRectOf,
   type PanelId,
 } from "./render/hud";
-import { buyTech, grantTech, hasTech, purchasedList, restorePurchased, TECHS, type Tech, type TechId } from "./sim/tech";
+import { buyTech, grantTech, hasTech, prereqsMet, purchasedList, restorePurchased, TECHS, type Tech, type TechId } from "./sim/tech";
 import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, BARN_CAPACITY, BREED_INTERVAL, PASTURE_RADIUS, pastureBounds, type AnimalType } from "./sim/animals";
 import {
   AXE_STONE_COST,
@@ -179,6 +179,7 @@ function saveGame(): void {
     difficulty: { ...difficulty },
     resources: { ...resources },
     tech: purchasedList(),
+    autoResearch,
     events: { ...eventFlags },
     goal: goalState.index,
     world: world.serialize(),
@@ -235,6 +236,7 @@ function loadGame(): boolean {
     Object.assign(difficulty, d.difficulty);
     Object.assign(resources, d.resources);
     restorePurchased(d.tech);
+    autoResearch = d.autoResearch ?? true;
     eventFlags.coldSnapUntilDay = d.events?.coldSnapUntilDay ?? -1;
     goalState.index = d.goal ?? 0; // eski kayıtlar: karşılanan hedefler peş peşe tamamlanır
     eventTimer = 0.5 * tuning.dayLength; // eski kayıtlarda olay sayacı tazelenir
@@ -917,6 +919,12 @@ input.onClick = (wx, wy, sx, sy) => {
     const hit = techPanelHitTest(sx, sy);
     if (hit) {
       if (hit.kind === "close") showTech = false;
+      else if (hit.kind === "autoToggle") {
+        autoResearch = !autoResearch;
+        addMessage(autoResearch
+          ? "🔄 Oto-araştırma açıldı: bilgi yettikçe kabile kendi ilerler"
+          : "Oto-araştırma kapatıldı: bilgi birikecek, dilediğini elle araştır");
+      }
       else if (hit.kind === "buy") {
         if (!buyTech(hit.id)) {
           addMessage("Yetersiz bilgi!");
@@ -1406,6 +1414,23 @@ let lastDayCount = 0;
 let homeTimer = 0;
 let homelessCount = 0;
 let homelessWarnTimer = 0;
+
+// Oto-araştırma: açıkken bilgi yettikçe en ucuz uygun araştırmayı kendi yapar
+// (oyuncu kapatıp bilgi biriktirebilir ya da dilediğini elle araştırabilir)
+let autoResearch = true;
+function autoResearchTick(): void {
+  if (!autoResearch) return;
+  let pick: Tech | null = null;
+  for (const t of TECHS) {
+    if (hasTech(t.id) || !prereqsMet(t) || resources.knowledge < t.cost) continue;
+    if (!pick || t.cost < pick.cost) pick = t;
+  }
+  if (!pick) return;
+  if (buyTech(pick.id)) {
+    if (pick.id === "humanity") for (const v of villagers) v.changeMorale(10, "Tanrı inancı");
+    celebrateTech(pick.id);
+  }
+}
 
 // Araştırma kutlaması: ekranın ortasında kısa süreli görkemli bant
 let techCelebration: { tech: Tech; ttl: number; total: number } | null = null;
@@ -2080,6 +2105,7 @@ function step(dt: number) {
       (v) => v.assignment.kind === "building" && v.assignment.building.type === BuildingType.Temple
     ).length;
     worshipState.yield = worshipYieldFor(priests);
+    autoResearchTick();
   }
 
   // evsiz uyarısı: ara ara hatırlat (ev yapımına teşvik)
@@ -2312,7 +2338,7 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
 };
 
 // tuning: konsoldan canlı ayar (__game.tuning.dayLength / timeScale / moveSpeed)
-window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, worship: worshipState, goals: { state: goalState, current: currentGoal }, get follow() { return followVillager ? followVillager.fullName : null; } };
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, worship: worshipState, goals: { state: goalState, current: currentGoal }, get follow() { return followVillager ? followVillager.fullName : null; }, get autoResearch() { return autoResearch; } };
 (window as unknown as { hile: typeof hile }).hile = hile;
 console.info(
   "%cBanisher debug: konsola hile.yardim() yaz",
@@ -2460,7 +2486,7 @@ function frame(now: number) {
     if (showPeople) drawPeoplePanel(ctx, villagers);
     if (showJournal) drawJournalPanel(ctx);
     if (selectedAnimal) drawAnimalPanel(ctx, selectedAnimal, canTameAnimal(selectedAnimal));
-    if (showTech) drawTechPanel(ctx);
+    if (showTech) drawTechPanel(ctx, autoResearch);
   }
 
   // araştırma kutlaması her şeyin üstünde
