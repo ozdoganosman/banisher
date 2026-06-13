@@ -686,7 +686,7 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   const visibleFilters = MARK_FILTERS.filter(
-    (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
+    (f) => f.id !== "stone" || hasTech("hardobjects")
   );
   const totalW = 64 + visibleFilters.reduce(
     (s, f) => s + ctx.measureText(f.label).width + 22 + 14, 0

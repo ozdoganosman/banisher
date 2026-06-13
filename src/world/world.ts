@@ -118,10 +118,13 @@ export class World {
           } else if (hash2(x, y, seed + 47) > 0.992) {
             // açık alanda tek tük çalı
             t = Tile.Bush;
-          } else if (hash2(x, y, seed + 53) > 0.99) {
-            // yerde çakıl kümeleri (Sert Cisimler ile toplanır)
+          } else if (hash2(x, y, seed + 53) > 0.965) {
+            // yerde çakıl kümeleri: taşın tek kaynağı (Sert Cisimler ile toplanır)
             t = Tile.Pebbles;
           }
+        } else if (t === Tile.Dirt && hash2(x, y, seed + 71) > 0.82) {
+          // kayalık (toprak) kuşağında bol çakıl: taş madeni buralarda
+          t = Tile.Pebbles;
         }
         this.tiles[this.index(x, y)] = t;
       }
@@ -143,7 +146,8 @@ export class World {
     };
     if (t === Tile.Tree) toggle(this.markedTrees, this.claimedTrees);
     else if (foodItemOf(t)) toggle(this.markedBushes, this.claimedBushes);
-    else if (t === Tile.Stone || t === Tile.Pebbles) toggle(this.markedStones, this.claimedStones);
+    else if (t === Tile.Pebbles) toggle(this.markedStones, this.claimedStones);
+    // büyük taş blokları (Tile.Stone) kırılamaz — ileride (maden çağında) eklenecek
   }
 
   markTree(x: number, y: number): void {
@@ -156,8 +160,8 @@ export class World {
   }
 
   markStone(x: number, y: number): void {
-    const t = this.get(x, y);
-    if (t === Tile.Stone || t === Tile.Pebbles) {
+    // yalnız çakıl toplanır; büyük taş blokları henüz kırılamaz
+    if (this.get(x, y) === Tile.Pebbles) {
       this.markedStones.add(this.index(x, y));
     }
   }

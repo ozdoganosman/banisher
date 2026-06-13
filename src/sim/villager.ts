@@ -1514,7 +1514,7 @@ export class Villager {
       );
     }
 
-    if (!isFull("stone") && !bagFull && hasTech("humanity")) {
+    if (!isFull("stone") && !bagFull && hasTech("hardobjects")) {
       this.pushTileJobCandidate(
         world, candidates, world.markedStones, world.claimedStones, litTile,
         (i) => {
@@ -1555,7 +1555,7 @@ export class Villager {
       if (!isFull("stone") && !bagFull && hasTech("hardobjects")) {
         this.pushAutoCandidate(world, candidates, AUTO,
           (x, y) =>
-            (world.get(x, y) === Tile.Stone || world.get(x, y) === Tile.Pebbles) &&
+            world.get(x, y) === Tile.Pebbles &&
             !world.claimedStones.has(world.index(x, y)) && litTile(x, y),
           (i) => {
             world.claimedStones.add(i);
@@ -1797,7 +1797,7 @@ export class Villager {
         const p = tileOf(this.job.tile);
         const t = world.get(p.x, p.y);
         const exists = this.job.auto
-          ? t === Tile.Stone || t === Tile.Pebbles
+          ? t === Tile.Pebbles
           : world.markedStones.has(this.job.tile);
         return exists && !isFull("stone") && tileLit(this.job.tile);
       }
@@ -2423,7 +2423,7 @@ export class Villager {
     const mineable =
       job?.kind === "mine" &&
       (job.auto
-        ? world.get(txm, tym) === Tile.Stone || world.get(txm, tym) === Tile.Pebbles
+        ? world.get(txm, tym) === Tile.Pebbles
         : world.markedStones.has(job.tile));
     if (!job || job.kind !== "mine" || !mineable) {
       this.releaseJob(world);

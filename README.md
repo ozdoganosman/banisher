@@ -120,7 +120,20 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.9)
+## Şu anki özellikler (v3.0)
+
+### v3.0: Taş yalnız çakıldan + daha güçlü otomasyon
+
+- **Büyük taş blokları artık kırılamaz** (ileride maden çağında gelecek);
+  taş yalnızca yerdeki **çakıl** kümelerinden toplanır
+- **Çakıl bollaştı**: kayalık (toprak) kuşağında ve çimende çok daha sık
+  bulunur — taşın sürdürülebilir kaynağı çakıl madenleridir
+- **Daha güçlü otomatik işçi dağıtımı**: kadrosu eksik tüm binalar
+  (yiyecek → av → bakım → bilgi önceliğiyle) azami kadroya kadar
+  boştaki işçilerle doldurulur; nüfusa göre birkaç işçi toplama için
+  boşta kalır (elle yönetmek için ⚙ Otomasyon'dan kapat)
+
+### v2.9: Otomasyon (Politika) paneli
 
 ### v2.9: Otomasyon (Politika) paneli
 

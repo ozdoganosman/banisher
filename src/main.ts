@@ -1406,7 +1406,7 @@ window.addEventListener("keydown", (e) => {
     showPolicy = !showPolicy;
   } else if (e.code === "KeyF") {
     const visibleFilters = MARK_FILTERS.filter(
-      (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
+      (f) => f.id !== "stone" || hasTech("hardobjects")
     );
     const i = visibleFilters.findIndex((f) => f.id === markFilter);
     markFilter = visibleFilters[(i + 1) % visibleFilters.length].id;
@@ -1416,7 +1416,7 @@ window.addEventListener("keydown", (e) => {
   ) {
     // işaret filtreleri: yan yana tuşlar (G H J K L)
     const f = MARK_FILTERS.find((f) => f.key === e.code.slice(3));
-    if (f && (f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects"))) {
+    if (f && (f.id !== "stone" || hasTech("hardobjects"))) {
       markFilter = f.id;
     }
   }
@@ -1470,23 +1470,37 @@ function autoToolsTick(): void {
   }
 }
 
-// Otomatik işçi dağıtımı: kadrosuz (yeni) binalar boştaki işçilerle doldurulur;
-// en az bir işçi toplama/esneklik için boşta bırakılır
+// Otomatik işçi dağıtımı: kadrosu eksik binalar boştaki işçilerle azami kadroya
+// dek doldurulur (yiyecek/bilgi öncelikli). Esneklik için birkaç işçi boşta kalır.
+// (Elle yönetmek istersen ⚙ Otomasyon panelinden kapat.)
+function staffPriority(b: Building): number {
+  switch (b.type) {
+    case BuildingType.Gatherer:
+    case BuildingType.Fisher: return 0; // yiyecek üreten binalar önce
+    case BuildingType.HunterLodge: return 1;
+    case BuildingType.Nursery: return 2;
+    case BuildingType.Temple: return 3; // bilgi
+    default: return 4;
+  }
+}
 function autoStaffTick(): void {
   if (!policy.staff) return;
   const idle = villagers.filter(
     (v) => v.canWork && !v.caringBaby && !v.dead && v.assignment.kind === "laborer"
   );
+  // nüfusa göre esnek rezerv: küçük kolonide 1, büyükte 2-3 boşta (toplama için)
+  const reserve = Math.min(3, Math.max(1, Math.floor(villagers.length / 8)));
   let free = idle.length;
-  for (const b of buildings) {
-    if (!b.done || b.def.maxWorkers <= 0 || b.type === BuildingType.Camp) continue;
-    if (workersOf(b) > 0) continue; // yalnız kadrosuz (yeni) binaları doldur
-    let cur = 0;
-    while (cur < b.def.maxWorkers && free > 1) {
-      const v = idle.pop()!;
+  if (free <= reserve) return;
+  const targets = buildings
+    .filter((b) => b.done && b.def.maxWorkers > 0 && b.type !== BuildingType.Camp && workersOf(b) < b.def.maxWorkers)
+    .sort((a, b) => staffPriority(a) - staffPriority(b));
+  for (const b of targets) {
+    while (workersOf(b) < b.def.maxWorkers && free > reserve) {
+      const v = idle.pop();
+      if (!v) return;
       v.assignment = { kind: "building", building: b };
       free--;
-      cur++;
     }
   }
 }
