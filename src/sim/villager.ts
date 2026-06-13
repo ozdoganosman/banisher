@@ -17,15 +17,14 @@ import {
   BuildingType,
   isDepositPoint,
   isLit,
+  lightRadiusOf,
   KNOWLEDGE_PER_WORSHIP,
-  LIGHT_RADIUS,
   MAX_CARRIED_SPEARS,
   ROLE_NAMES,
   SPEAR_CRAFT_TIME,
   SPEAR_LOG_COST,
   SPEAR_STONE_COST,
   SPEAR_WOOD_COST,
-  TORCH_LIGHT_RADIUS,
   WORSHIP_TIME,
 } from "./buildings";
 import { difficulty } from "./difficulty";
@@ -767,14 +766,10 @@ export class Villager {
     }
 
     // Gece ateş başında olmak içi ısıtır: yavaşça moral kazandırır
+    // (kamp ateşi, meşale ya da kışın dal yakan ev)
     if (isNight() && this.state !== "sleeping" && !this.baby) {
       for (const b of buildings) {
-        if (!b.done) continue;
-        const r = b.hasTorch
-          ? TORCH_LIGHT_RADIUS
-          : b.type === BuildingType.Camp
-          ? LIGHT_RADIUS[BuildingType.Camp] ?? 0
-          : 0;
+        const r = lightRadiusOf(b);
         if (!r) continue;
         const dx = this.x - b.centerX;
         const dy = this.y - b.centerY;

@@ -482,16 +482,35 @@ const BTN_H = 48;
 const BTN_GAP = 4;
 
 // Geçici bildirimler ("Yetersiz odun!", "Yeni köylüler geldi" vb.)
-const messages: { text: string; ttl: number }[] = [];
+// level: önemli olanlar büyük/parlak; sık tekrarlananlar tek satırda "×N" ile birikir
+export type MsgLevel = "low" | "info" | "important";
+interface Msg { text: string; ttl: number; level: MsgLevel; count: number; pop: number }
+const messages: Msg[] = [];
 
-export function addMessage(text: string): void {
-  messages.push({ text, ttl: 4 });
-  if (messages.length > 4) messages.shift();
+const MSG_TTL: Record<MsgLevel, number> = { low: 2.6, info: 4, important: 6.5 };
+
+export function addMessage(text: string, level: MsgLevel = "info"): void {
+  // aynı metin hâlâ ekrandaysa yeni satır açma: say ve süreyi tazele (spam önlenir)
+  const existing = messages.find((m) => m.text === text);
+  if (existing) {
+    existing.count++;
+    if (level === "important") existing.level = "important";
+    existing.ttl = Math.max(existing.ttl, MSG_TTL[level]);
+    existing.pop = 0.25;
+    return;
+  }
+  messages.push({ text, ttl: MSG_TTL[level], level, count: 1, pop: 0.25 });
+  // önemli bildirimleri koru, en eski sıradanı at
+  if (messages.length > 6) {
+    const idx = messages.findIndex((m) => m.level !== "important");
+    messages.splice(idx >= 0 ? idx : 0, 1);
+  }
 }
 
 export function updateMessages(dt: number): void {
   for (let i = messages.length - 1; i >= 0; i--) {
     messages[i].ttl -= dt;
+    if (messages[i].pop > 0) messages[i].pop = Math.max(0, messages[i].pop - dt);
     if (messages[i].ttl <= 0) messages.splice(i, 1);
   }
 }
@@ -1050,13 +1069,15 @@ let bpanelClothMinus: { x: number; y: number; w: number; h: number } | null = nu
 let bpanelFarmBtns: { kind: "farmCow" | "farmChicken" | "farmSheep" | "farmPig"; x: number; y: number; w: number; h: number }[] = [];
 // Meşale takma düğmesi (Doğa araştırıldıysa, meşalesiz binalarda)
 let bpanelTorch: { x: number; y: number; w: number; h: number } | null = null;
+// Ev ocağı (yakıt) aç/kapa düğmesi
+let bpanelFuel: { x: number; y: number; w: number; h: number } | null = null;
 
 export function buildingPanelHitTest(
   sx: number,
   sy: number
 ):
   | "close" | "hire" | "fire" | "demolish" | "orderPlus" | "orderMinus"
-  | "spearPlus" | "spearMinus" | "clothPlus" | "clothMinus" | "torch"
+  | "spearPlus" | "spearMinus" | "clothPlus" | "clothMinus" | "torch" | "fuel"
   | "farmCow" | "farmChicken" | "farmSheep" | "farmPig" | "panel" | null {
   const cx = bpanel.x + bpanel.w - 24;
   const cy = bpanel.y + 6;
@@ -1075,6 +1096,7 @@ export function buildingPanelHitTest(
     if (inRect(fb)) return fb.kind;
   }
   if (inRect(bpanelTorch)) return "torch";
+  if (inRect(bpanelFuel)) return "fuel";
   if (inRect(bpanelDemolish)) return "demolish";
   if (sx >= bpanel.x && sx <= bpanel.x + bpanel.w && sy >= bpanel.y && sy <= bpanel.y + bpanel.h) {
     return "panel";
@@ -1132,7 +1154,7 @@ export function drawBuildingPanel(
   let h = 40 + descLines.length * 14 + 10;
   if (!b.done) h += 34;
   else {
-    if (isHousing(b)) h += 20;
+    if (isHousing(b)) h += 20 + (hasTech("nature") ? 28 : 18);
     if (b.def.maxWorkers > 0) h += 26;
     if (isDepositPoint(b)) {
       const itemCount = ITEM_TYPES.filter(isItemVisible).length;
@@ -1170,6 +1192,7 @@ export function drawBuildingPanel(
   bpanelClothMinus = null;
   bpanelFarmBtns = [];
   bpanelTorch = null;
+  bpanelFuel = null;
 
   ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
   ctx.fillRect(x, y, w, h);
@@ -1255,6 +1278,29 @@ export function drawBuildingPanel(
     ctx.fillStyle = n >= HOUSE_CAPACITY ? "#e0a83c" : "#8fd05e";
     ctx.fillText(`Sakinler: ${n}/${HOUSE_CAPACITY}`, x + 12, ly);
     ly += 20;
+
+    // yakıt: kışın evde dal yakma açık/kapalı (Doğa gerekir)
+    if (hasTech("nature")) {
+      bpanelFuel = { x: x + 12, y: ly - 2, w: w - 24, h: 22 };
+      const on = b.fueled;
+      ctx.fillStyle = on ? "rgba(240, 140, 50, 0.22)" : "rgba(255,255,255,0.06)";
+      ctx.fillRect(bpanelFuel.x, bpanelFuel.y, bpanelFuel.w, bpanelFuel.h);
+      ctx.strokeStyle = on ? "#e88030" : "#5a5f68";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bpanelFuel.x + 0.5, bpanelFuel.y + 0.5, bpanelFuel.w - 1, 21);
+      ctx.fillStyle = on ? "#ffb060" : "#c9c4b6";
+      ctx.font = "bold 12px monospace";
+      ctx.textAlign = "center";
+      const lit = b.burning ? " 🔥" : "";
+      ctx.fillText(`Ocak: ${on ? "Açık" : "Kapalı"}${lit}  (kışın dal yakar)`, x + w / 2, ly + 9);
+      ctx.textAlign = "left";
+      ly += 28;
+    } else {
+      ctx.fillStyle = "#8a8478";
+      ctx.font = "11px monospace";
+      ctx.fillText("🔥 Ocak için önce Doğa araştırılmalı", x + 12, ly + 6, w - 24);
+      ly += 18;
+    }
   }
 
   // istihdam: çalışan sayısı ve işçi al/çıkar düğmeleri
@@ -1540,7 +1586,7 @@ export function drawPopulationPanel(
   const w = POP_W;
   const x = (ctx.canvas.width - w) / 2 + panelOffsets.pop.x;
   const y = 54 + panelOffsets.pop.y;
-  popJobsY = y + 64;
+  popJobsY = y + 82;
   const h = popJobsY - y + rows.length * POP_JOB_ROW_H + 14;
   popRect = { x, y, w, h };
 
@@ -1569,11 +1615,24 @@ export function drawPopulationPanel(
   ctx.fillText(`Ortalık işleri: ${laborers}`, x + 12, y + 44);
   ctx.fillStyle = "#9a9488";
   ctx.font = "11px monospace";
+  // ev doluluğu ve evsiz sayısı
+  const houses = buildings.filter((b) => b.type === BuildingType.House && b.done);
+  const occupiedHouses = houses.filter((hb) => villagers.some((v) => v.home === hb)).length;
+  const homeless = villagers.filter((v) => !v.home).length;
   ctx.fillText(
     `•  Nüfus: ${count}  •  Bebek: ${babies}  •  Çocuk: ${children}` +
       (caring > 0 ? `  •  Bebeğe bakan anne: ${caring}` : ""),
     x + 160, y + 44
   );
+  ctx.fillStyle = "#c9a35a";
+  ctx.fillText(`🏠 Evler: ${occupiedHouses}/${houses.length} dolu`, x + 12, y + 60);
+  if (homeless > 0) {
+    ctx.fillStyle = "#ff8a6a";
+    ctx.fillText(`⚠ Evsiz: ${homeless} — yeni ev yapın!`, x + 200, y + 60);
+  } else {
+    ctx.fillStyle = "#6a9a5a";
+    ctx.fillText("✓ Herkesin bir evi var", x + 200, y + 60);
+  }
 
   // iş satırları
   for (let i = 0; i < rows.length; i++) {
@@ -2035,17 +2094,43 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
     ctx.lineWidth = owned || (!locked && affordable) ? 1.6 : 1;
     ctx.stroke();
 
-    // İsim (uzun adlar iki satıra sarılır)
+    // Amblem rozeti (sol üst köşe): araştırmayı bir bakışta tanıt
+    const badgeR = 15;
+    const bcx = pos.x + 10 + badgeR;
+    const bcy = pos.y + 12 + badgeR;
+    ctx.beginPath();
+    ctx.arc(bcx, bcy, badgeR, 0, Math.PI * 2);
+    ctx.fillStyle = owned
+      ? "rgba(90, 143, 60, 0.5)"
+      : locked
+      ? "rgba(40, 40, 46, 0.8)"
+      : "rgba(138, 108, 192, 0.45)";
+    ctx.fill();
+    ctx.strokeStyle = owned ? "#8fd05e" : locked ? "#4a4d52" : "#b08fe0";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.globalAlpha = locked ? 0.5 : 1;
+    ctx.font = "18px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(tech.icon, bcx, bcy + 1);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
+
+    // İsim (uzun adlar iki satıra sarılır) — rozetin sağında
+    const nameX = pos.x + 10 + badgeR * 2 + 8;
+    const nameW = cardW - (badgeR * 2 + 8) - 18;
     ctx.font = "bold 13px monospace";
     if (owned) ctx.fillStyle = "#8fd05e";
     else if (locked) ctx.fillStyle = "#6a6458";
     else ctx.fillStyle = "#e8e2d0";
-    const nameLines = wrapText(ctx, tech.name, cardW - 20).slice(0, 2);
-    let cy2 = pos.y + 16;
+    const nameLines = wrapText(ctx, tech.name, nameW).slice(0, 2);
+    let cy2 = pos.y + (nameLines.length === 1 ? 22 : 15);
     for (const line of nameLines) {
-      ctx.fillText(line, pos.x + 10, cy2, cardW - 20);
+      ctx.fillText(line, nameX, cy2, nameW);
       cy2 += 15;
     }
+    // amblem alt sınırının altına in (metin gövdesi rozetle çakışmasın)
+    cy2 = Math.max(cy2, pos.y + 12 + badgeR * 2 + 4);
 
     // Maliyet / Durum (çoklu ön koşullar madde madde listelenir)
     ctx.font = "12px monospace";
@@ -2166,7 +2251,8 @@ export function drawHud(
   population: number,
   selected: BuildingType | null,
   paused: boolean,
-  speed: number
+  speed: number,
+  homeless = 0
 ): void {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
@@ -2214,19 +2300,27 @@ export function drawHud(
     cx += bw + 10;
   }
 
-  // insanlar: nüfus listesi düğmesi
+  // insanlar: nüfus listesi düğmesi (evsiz varsa kırmızı uyarı rozeti)
   {
     const label = `İnsanlar: ${population} ▾`;
     ctx.font = "15px monospace";
-    const bw = ctx.measureText(label).width + 16;
+    const warn = homeless > 0 ? `  ⚠${homeless}` : "";
+    let bw = ctx.measureText(label).width + 16;
+    if (warn) { ctx.font = "bold 13px monospace"; bw += ctx.measureText(warn).width; ctx.font = "15px monospace"; }
     peopleButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
-    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillStyle = homeless > 0 ? "rgba(200, 70, 50, 0.2)" : "rgba(255,255,255,0.08)";
     ctx.fillRect(peopleButtonRect.x, peopleButtonRect.y, peopleButtonRect.w, peopleButtonRect.h);
-    ctx.strokeStyle = "#4a4f58";
+    ctx.strokeStyle = homeless > 0 ? "#c0563f" : "#4a4f58";
     ctx.lineWidth = 1;
     ctx.strokeRect(peopleButtonRect.x + 0.5, peopleButtonRect.y + 0.5, peopleButtonRect.w - 1, peopleButtonRect.h - 1);
     ctx.fillStyle = "#e8e2d0";
     ctx.fillText(label, cx + 6, 18);
+    if (warn) {
+      ctx.fillStyle = "#ff8a6a";
+      ctx.font = "bold 13px monospace";
+      ctx.fillText(warn, cx + 6 + ctx.measureText(label).width, 18);
+      ctx.font = "15px monospace";
+    }
     cx += bw + 10;
   }
 
@@ -2413,18 +2507,71 @@ export function drawHud(
     ctx.textAlign = "left";
   }
 
-  // bildirimler
+  // bildirimler: önem düzeyine göre boy/renk; sık tekrarlanan küçülüp "×N" alır
   ctx.textAlign = "center";
-  ctx.font = "14px monospace";
-  messages.forEach((m, i) => {
+  let my = 44;
+  for (const m of messages) {
     const alpha = Math.min(1, m.ttl);
-    ctx.fillStyle = `rgba(10, 12, 16, ${0.7 * alpha})`;
-    const tw = ctx.measureText(m.text).width + 24;
-    ctx.fillRect(w / 2 - tw / 2, 44 + i * 26, tw, 22);
-    ctx.fillStyle = `rgba(255, 226, 150, ${alpha})`;
-    ctx.fillText(m.text, w / 2, 55 + i * 26);
-  });
+    const repeated = m.count > 1;
+    // sık tekrarlanan sıradan bildirimler küçülür; önemliler büyür
+    let size: number, rowH: number, bg: number, fg: string;
+    if (m.level === "important") {
+      size = 18; rowH = 30; bg = 0.82; fg = "255, 232, 150";
+    } else if (m.level === "low" || (repeated && m.count >= 3)) {
+      size = 11; rowH = 18; bg = 0.5; fg = "180, 200, 180";
+    } else {
+      size = 14; rowH = 24; bg = 0.7; fg = "230, 224, 200";
+    }
+    const pop = 1 + m.pop * 1.6; // yeni gelince hafif büyüyüp oturur
+    ctx.font = `${m.level === "important" ? "bold " : ""}${Math.round(size * pop)}px monospace`;
+    const label = repeated ? `${m.text}  ×${m.count}` : m.text;
+    const tw = ctx.measureText(label).width + (m.level === "important" ? 40 : 24);
+    const bx = w / 2 - tw / 2;
+    ctx.fillStyle = `rgba(10, 12, 16, ${bg * alpha})`;
+    ctx.fillRect(bx, my, tw, rowH - 2);
+    if (m.level === "important") {
+      // altın çerçeve + sol vurgu şeridi
+      ctx.strokeStyle = `rgba(255, 210, 60, ${alpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(bx + 0.5, my + 0.5, tw - 1, rowH - 3);
+      ctx.fillStyle = `rgba(255, 210, 60, ${alpha})`;
+      ctx.fillRect(bx, my, 3, rowH - 2);
+    }
+    ctx.fillStyle = `rgba(${fg}, ${alpha})`;
+    ctx.fillText(label, w / 2, my + (rowH - 2) / 2);
+    my += rowH;
+  }
   ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+
+  // seçili bina varken belirgin yerleştirme bandı: ne kurulduğunu ve nasıl yapılacağını söyler
+  if (selected !== null) {
+    const def = BUILDING_DEFS[selected];
+    const affordable = resources.wood >= def.cost;
+    ctx.font = "bold 14px monospace";
+    const main = `📐 ${def.name} — ${def.cost} dal ${affordable ? "✓" : "✗ yetersiz!"}`;
+    const sub = "Sol tık: yerleştir   •   Sağ tık / Esc: iptal";
+    ctx.font = "12px monospace";
+    const subW = ctx.measureText(sub).width;
+    ctx.font = "bold 14px monospace";
+    const mainW = ctx.measureText(main).width;
+    const bw = Math.max(mainW, subW) + 28;
+    const bx = (w - bw) / 2;
+    const by = h - TOOLBAR_HEIGHT - 132; // envanter çubuğunun üstünde kalsın
+    ctx.fillStyle = "rgba(10, 14, 10, 0.9)";
+    ctx.fillRect(bx, by, bw, 44);
+    ctx.strokeStyle = affordable ? "#8fd05e" : "#c0563f";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, 43);
+    ctx.textAlign = "center";
+    ctx.fillStyle = affordable ? "#bfe89a" : "#f0a090";
+    ctx.font = "bold 14px monospace";
+    ctx.fillText(main, w / 2, by + 15);
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "12px monospace";
+    ctx.fillText(sub, w / 2, by + 32);
+    ctx.textAlign = "left";
+  }
 
   // alt araç çubuğu
   ctx.fillStyle = "rgba(10, 12, 16, 0.8)";
@@ -2438,8 +2585,15 @@ export function drawHud(
     const isSelected = selected === type;
     const affordable = resources.wood >= def.cost;
 
-    ctx.fillStyle = isSelected ? "rgba(90, 143, 60, 0.45)" : "rgba(255,255,255,0.06)";
+    if (isSelected) {
+      // seçili düğme: yeşil ışıltı
+      ctx.save();
+      ctx.shadowColor = "rgba(143, 208, 94, 0.9)";
+      ctx.shadowBlur = 12;
+    }
+    ctx.fillStyle = isSelected ? "rgba(90, 143, 60, 0.5)" : "rgba(255,255,255,0.06)";
     ctx.fillRect(r.x, r.y, r.w, r.h);
+    if (isSelected) ctx.restore();
     ctx.strokeStyle = isSelected ? "#8fd05e" : affordable ? "#5a5f68" : "#7a3b2e";
     ctx.lineWidth = isSelected ? 2 : 1;
     ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
@@ -2447,9 +2601,10 @@ export function drawHud(
     ctx.fillStyle = affordable ? "#e8e2d0" : "#8a8478";
     ctx.font = "bold 13px monospace";
     ctx.fillText(`${(i + 1) % 10}. ${def.name}`, r.x + 8, r.y + 14, r.w - 14);
+    // maliyet + uygunluk işareti
     ctx.font = "12px monospace";
-    ctx.fillStyle = affordable ? "#c9a35a" : "#9a6055";
-    ctx.fillText(`${def.cost} dal`, r.x + 10, r.y + 30);
+    ctx.fillStyle = affordable ? "#c9a35a" : "#d06a55";
+    ctx.fillText(`${def.cost} dal ${affordable ? "✓" : "✗"}`, r.x + 10, r.y + 30);
     ctx.fillStyle = "#9a9488";
     ctx.font = "10px monospace";
     ctx.fillText(def.desc, r.x + 10, r.y + 43, r.w - 20);

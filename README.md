@@ -120,7 +120,28 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.2)
+## Şu anki özellikler (v2.3)
+
+### v2.3: Arayüz cilası — bildirimler, araştırma hissi, ev ocağı
+
+- **Ev ocağı**: ev panelinden açılan yakıt; kışın evdekiler dal yakar
+  (günde ~3 dal), ev ısı/ışık yayar — soğuk moral kaybını önler
+- **Evsiz uyarısı**: üst bardaki İnsanlar düğmesinde kırmızı ⚠ rozeti,
+  İş Yönetimi panelinde `🏠 Evler: X/Y dolu` ve evsiz sayısı, ara ara
+  belirgin hatırlatma
+- **Araştırma kutlaması**: araştırma bitince ekranın ortasında dönen
+  amblem-halkalı görkemli bant ("ARAŞTIRMA TAMAMLANDI" + ne açıldığı),
+  yükselen ışıltılı ses ve deftere kayıt
+- **Teknoloji ağacı amblemleri**: her araştırma kartında ikon rozeti
+  (🙏🔥📦🪓🐄…) — ne olduğu bir bakışta anlaşılır
+- **Daha akıllı bildirimler**: önemliler büyük ve altın çerçeveli;
+  sık tekrarlanan tip tek satırda `×N` ile birikip küçülür (ekran
+  dağılmaz)
+- **İnşaat bandı**: bina seçilince envanterin üstünde "📐 {bina} —
+  {maliyet} ✓/✗ • Sol tık: yerleştir • Sağ tık/Esc: iptal"; seçili
+  düğme yeşil ışıltıyla belirir, maliyet uygunluk işaretli
+- **Erken nüfus patlaması**: ilk kabilede gebe kalma şansı yüksek,
+  nüfus büyüdükçe yavaşlar; ev veya doğurgan kadın yetmezse durur
 
 ### v2.2: Hayvancılık — çitli ağıl, üreme ve süt/yumurta
 

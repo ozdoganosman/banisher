@@ -47,7 +47,7 @@ import {
   panelRectOf,
   type PanelId,
 } from "./render/hud";
-import { buyTech, grantTech, hasTech, purchasedList, restorePurchased, TECHS, type TechId } from "./sim/tech";
+import { buyTech, grantTech, hasTech, purchasedList, restorePurchased, TECHS, type Tech, type TechId } from "./sim/tech";
 import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, BARN_CAPACITY, BREED_INTERVAL, type AnimalType } from "./sim/animals";
 import {
   AXE_STONE_COST,
@@ -57,6 +57,7 @@ import {
   SPEAR_STONE_COST,
   SPEAR_WOOD_COST,
   TORCH_ATTACH_COST,
+  HOUSE_FUEL_PER_DAY,
   Building,
   BUILDING_DEFS,
   BuildingType,
@@ -68,7 +69,7 @@ import {
   isBuildingUnlocked,
 } from "./sim/buildings";
 import { dateString, dayFrac, gameTime, season, totalDays, tuning, updateTime } from "./sim/time";
-import { initAudio, isMuted, setFireProximity, setListener, setMuted } from "./engine/sound";
+import { initAudio, isMuted, setFireProximity, setListener, setMuted, sfxResearch } from "./engine/sound";
 import { addFloater, burst } from "./render/effects";
 import {
   addItem,
@@ -186,7 +187,7 @@ function saveGame(): void {
       orders: b.orders, toolStock: b.toolStock,
       spearOrders: b.spearOrders, spearStock: b.spearStock,
       clothOrders: b.clothOrders, clothStock: b.clothStock,
-      hasTorch: b.hasTorch, farmType: b.farmType,
+      hasTorch: b.hasTorch, farmType: b.farmType, fueled: b.fueled,
       worshipTimer: b.worshipTimer,
     })),
     villagers: villagers.map((v) => ({
@@ -251,6 +252,7 @@ function loadGame(): boolean {
       b.clothStock = bd.clothStock;
       b.hasTorch = bd.hasTorch;
       b.farmType = bd.farmType;
+      b.fueled = bd.fueled ?? false;
       b.worshipTimer = bd.worshipTimer;
       b.effectApplied = true; // tamamlanma etkileri tekrar oynamasın
       buildings.push(b);
@@ -617,6 +619,25 @@ function spawnAnimal(barn: Building, type: AnimalType, baby = false): void {
 }
 const b2t = (px: number) => Math.floor(px / TILE_SIZE);
 
+// Ocak: kışın yakıtı açık evler dal yakar (ısı/ışık verir), stoktan dal tüketir
+let fuelDebt = 0; // kesirli tüketim biriktirici
+function tickHouseFuel(dt: number): void {
+  const winter = season() === 3;
+  let burningCount = 0;
+  for (const b of buildings) {
+    if (b.type !== BuildingType.House || !b.done) continue;
+    b.burning = winter && b.fueled && resources.wood > 0;
+    if (b.burning) burningCount++;
+  }
+  if (burningCount > 0) {
+    fuelDebt += burningCount * (HOUSE_FUEL_PER_DAY / tuning.dayLength) * dt;
+    while (fuelDebt >= 1 && resources.wood > 0) {
+      fuelDebt -= 1;
+      resources.wood -= 1;
+    }
+  }
+}
+
 // Çiftlik döngüsü: yetişkin dişi+erkek çift yavru yapar; ağıl dolunca en yaşlı kesilir
 function tickBarns(dt: number): void {
   for (const barn of buildings) {
@@ -814,10 +835,12 @@ input.onClick = (wx, wy, sx, sy) => {
       else if (hit.kind === "buy") {
         if (!buyTech(hit.id)) {
           addMessage("Yetersiz bilgi!");
-        } else if (hit.id === "humanity") {
-          // Tanrı inancı: yaşayan herkese kalıcı +10 moral
-          for (const v of villagers) v.changeMorale(10, "Tanrı inancı");
-          addMessage("Tanrı inancı doğdu: herkese +10 moral!");
+        } else {
+          if (hit.id === "humanity") {
+            // Tanrı inancı: yaşayan herkese kalıcı +10 moral
+            for (const v of villagers) v.changeMorale(10, "Tanrı inancı");
+          }
+          celebrateTech(hit.id);
         }
       }
       return;
@@ -948,6 +971,13 @@ input.onClick = (wx, wy, sx, sy) => {
         } else {
           addMessage(`Yetersiz dal! (meşale: ${TORCH_ATTACH_COST} dal)`);
         }
+      } else if (hit === "fuel") {
+        selectedBuilding.fueled = !selectedBuilding.fueled;
+        addMessage(
+          selectedBuilding.fueled
+            ? "🔥 Ocak açıldı: kışın evde dal yakılacak"
+            : "Ocak kapatıldı"
+        );
       } else if (hit === "demolish") demolishBuilding(selectedBuilding);
       return;
     }
@@ -1284,6 +1314,93 @@ window.addEventListener("keydown", (e) => {
 const BIRTH_CHANCE = 0.55; // her gün dönümünde, boş yeri olan ev başına
 let lastDayCount = 0;
 let homeTimer = 0;
+let homelessCount = 0;
+let homelessWarnTimer = 0;
+
+// Araştırma kutlaması: ekranın ortasında kısa süreli görkemli bant
+let techCelebration: { tech: Tech; ttl: number; total: number } | null = null;
+function celebrateTech(id: TechId): void {
+  const tech = TECHS.find((t) => t.id === id);
+  if (!tech) return;
+  techCelebration = { tech, ttl: 3.4, total: 3.4 };
+  sfxResearch();
+  addMessage(`🔬 Araştırıldı: ${tech.name}!`, "important");
+  if (tech.unlocks) addMessage(`✨ Açıldı: ${tech.unlocks}`, "important");
+  addJournal(`🔬 Yeni araştırma: ${tech.name}${tech.unlocks ? ` — ${tech.unlocks}` : ""}`);
+}
+
+// Kutlama bandını çiz (ölçek-giriş, bekle, sön)
+function drawTechCelebration(dt: number): void {
+  if (!techCelebration) return;
+  techCelebration.ttl -= dt;
+  if (techCelebration.ttl <= 0) {
+    techCelebration = null;
+    return;
+  }
+  const { tech, ttl, total } = techCelebration;
+  const w = canvas.width;
+  const cxc = w / 2;
+  const cyc = canvas.height * 0.26;
+  const age = total - ttl;
+  const inT = Math.min(1, age / 0.3); // giriş
+  const outT = Math.min(1, ttl / 0.6); // çıkış
+  const appear = Math.min(inT, outT);
+  const scale = 0.7 + 0.3 * inT;
+  ctx.save();
+  ctx.globalAlpha = appear;
+  ctx.translate(cxc, cyc);
+  ctx.scale(scale, scale);
+
+  // ışıltılı kart
+  const bw = 420, bh = 96;
+  ctx.fillStyle = "rgba(18, 14, 28, 0.95)";
+  ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+  ctx.shadowColor = "rgba(176, 143, 224, 0.9)";
+  ctx.shadowBlur = 24;
+  ctx.strokeStyle = "#b08fe0";
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(-bw / 2 + 1, -bh / 2 + 1, bw - 2, bh - 2);
+  ctx.shadowBlur = 0;
+
+  // dönen ışık halkalı amblem
+  const icx = -bw / 2 + 50;
+  ctx.save();
+  ctx.translate(icx, 0);
+  ctx.rotate(age * 1.5);
+  ctx.strokeStyle = "rgba(216, 192, 255, 0.7)";
+  ctx.lineWidth = 2;
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 26, Math.sin(a) * 26);
+    ctx.lineTo(Math.cos(a) * 34, Math.sin(a) * 34);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.beginPath();
+  ctx.arc(icx, 0, 24, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(138, 108, 192, 0.5)";
+  ctx.fill();
+  ctx.font = "30px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(tech.icon, icx, 1);
+
+  // metinler
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#d8c0ff";
+  ctx.font = "bold 13px monospace";
+  ctx.fillText("🔬 ARAŞTIRMA TAMAMLANDI", icx + 40, -28);
+  ctx.fillStyle = "#ffe296";
+  ctx.font = "bold 20px monospace";
+  ctx.fillText(tech.name, icx + 40, -4);
+  if (tech.unlocks) {
+    ctx.fillStyle = "#8fd05e";
+    ctx.font = "13px monospace";
+    ctx.fillText(`✨ ${tech.unlocks}`, icx + 40, 22);
+  }
+  ctx.restore();
+}
 
 function occupants(b: Building): number {
   let n = 0;
@@ -1305,19 +1422,26 @@ function assignHomes(): void {
 }
 
 // Gün dönümü: boş yeri olan her konutta orada yaşayan bir kadının hamile
-// kalma şansı; bebek 4 günlük hamileliğin ardından 4. günün sabahı doğar
+// kalma şansı; bebek 4 günlük hamileliğin ardından 4. günün sabahı doğar.
+// Büyüme erken hızlıdır; ev veya doğurgan kadın yetmezse kendiliğinden durur.
 function nightlyConceptions(): void {
   const adults = villagers.filter((v) => v.canWork).length;
   if (adults < 2) return; // çoğalmak için en az 2 yetişkin
+  // erken kabilede daha yüksek şans, nüfus büyüdükçe yavaşlar
+  const pop = villagers.length;
+  const boost = pop < 12 ? 1.6 : pop < 20 ? 1.15 : 0.7;
+  const chance = Math.min(0.92, BIRTH_CHANCE * boost);
   for (const b of buildings) {
     if (!isHousing(b) || occupants(b) >= HOUSE_CAPACITY) continue;
-    if (Math.random() > BIRTH_CHANCE) continue;
+    if (Math.random() > chance) continue;
+    // bu evde doğurgan (gebe olmayan yetişkin kadın) yoksa atla:
+    // kadın/ev sayısı yetersizse büyüme kendiliğinden durur
     const candidate = villagers.find(
       (v) => v.home === b && v.canWork && v.identity.female && !v.pregnant
     );
     if (!candidate) continue;
     candidate.pregnantSince = totalDays();
-    addMessage(`🤰 ${candidate.fullName} hamile kaldı`);
+    addMessage(`🤰 ${candidate.fullName} hamile kaldı`, "important");
   }
 }
 
@@ -1849,6 +1973,15 @@ function step(dt: number) {
     assignDogs();
   }
 
+  // evsiz uyarısı: ara ara hatırlat (ev yapımına teşvik)
+  homelessCount = villagers.filter((v) => !v.home && !v.baby).length;
+  homelessWarnTimer -= dt;
+  if (homelessCount > 0 && homelessWarnTimer <= 0) {
+    homelessWarnTimer = 12;
+    addMessage(`⚠ ${homelessCount} köylü evsiz — yeni ev yapın!`, "important");
+  }
+
+  tickHouseFuel(dt);
   for (const v of villagers) v.update(dt, world, buildings, animals);
   updateDangerCamera(dt);
 
@@ -1979,6 +2112,7 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
     if (id === "humanity" && !had) {
       for (const v of villagers) v.changeMorale(10, "Tanrı inancı");
     }
+    celebrateTech(id);
   },
   hepsiniArastir(): void {
     for (const t of TECHS) this.arastir(t.id);
@@ -2179,7 +2313,7 @@ function frame(now: number) {
   }
 
   renderer.drawMinimap(ctx, camera, villagers, buildings, TOOLBAR_HEIGHT);
-  drawHud(ctx, villagers.length, selected, paused, gameSpeed);
+  drawHud(ctx, villagers.length, selected, paused, gameSpeed, homelessCount);
   if (villagers.length > 0) drawMarkFilters(ctx, markFilter);
   let taskListY = 42;
   if (villagers.length > 0) {
@@ -2217,6 +2351,9 @@ function frame(now: number) {
     if (selectedAnimal) drawAnimalPanel(ctx, selectedAnimal, canTameAnimal(selectedAnimal));
     if (showTech) drawTechPanel(ctx);
   }
+
+  // araştırma kutlaması her şeyin üstünde
+  drawTechCelebration(elapsed);
 
   requestAnimationFrame(frame);
 }

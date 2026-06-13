@@ -97,6 +97,26 @@ export function sfxStep(x: number, y: number): void {
   noiseHit(x, y, 900, 1, 0.04, 0.16);
 }
 
+// Araştırma tamamlandı: yükselen ışıltılı üç nota (konuma bağlı değil, hep duyulur)
+export function sfxResearch(): void {
+  if (!actx || !master) return;
+  const t0 = actx.currentTime;
+  const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6 arpej
+  notes.forEach((freq, i) => {
+    const osc = actx!.createOscillator();
+    osc.type = "triangle";
+    const start = t0 + i * 0.09;
+    osc.frequency.setValueAtTime(freq, start);
+    const env = actx!.createGain();
+    env.gain.setValueAtTime(0.0001, start);
+    env.gain.exponentialRampToValueAtTime(0.22, start + 0.02);
+    env.gain.exponentialRampToValueAtTime(0.0001, start + 0.5);
+    osc.connect(env).connect(master!);
+    osc.start(start);
+    osc.stop(start + 0.55);
+  });
+}
+
 // Mızrak vınlaması
 export function sfxWhoosh(x: number, y: number): void {
   if (!actx || !master) return;

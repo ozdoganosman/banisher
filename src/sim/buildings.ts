@@ -182,6 +182,8 @@ export const CLOTH_CRAFT_TIME = 8;
 // Binaya meşale takma bedeli (Doğa araştırması gerekir)
 export const TORCH_ATTACH_COST = 5; // dal
 export const TORCH_LIGHT_RADIUS = 88;
+export const HOUSE_FIRE_RADIUS = 70; // kışın dal yakan evin ısı/ışık yarıçapı
+export const HOUSE_FUEL_PER_DAY = 3; // yanan ev günde bu kadar dal tüketir
 
 // ---- Konut sistemi ----
 
@@ -211,11 +213,18 @@ export const LIGHT_RADIUS: Partial<Record<BuildingType, number>> = {
   [BuildingType.Camp]: 72,
 };
 
+// Bir binanın o anki ışık/ısı yarıçapı (0 = ışıksız)
+export function lightRadiusOf(b: Building): number {
+  if (!b.done) return 0;
+  if (b.burning) return HOUSE_FIRE_RADIUS; // kışın dal yakan ev
+  if (b.hasTorch) return TORCH_LIGHT_RADIUS;
+  return LIGHT_RADIUS[b.type] ?? 0;
+}
+
 // Bu nokta gece çalışılabilecek kadar aydınlık mı?
 export function isLit(buildings: Building[], wx: number, wy: number): boolean {
   for (const b of buildings) {
-    if (!b.done) continue;
-    const r = b.hasTorch ? TORCH_LIGHT_RADIUS : LIGHT_RADIUS[b.type];
+    const r = lightRadiusOf(b);
     if (!r) continue;
     const dx = wx - b.centerX;
     const dy = wy - b.centerY;
@@ -259,6 +268,9 @@ export class Building {
   clothReserved = 0;
   // Binaya meşale takıldı: geceyi aydınlatır (5 dal, Doğa gerekir)
   hasTorch = false;
+  // Ev: kışın dal yakmak açık mı (panelden); burning = o an gerçekten yanıyor mu
+  fueled = false;
+  burning = false;
   // Çiftlik: beslediği tür (kurulduktan sonra panelden seçilir)
   farmType: import("./animals").AnimalType | null = null;
   // Çiftlik: yeni yavru için üreme sayacı (saniye)
