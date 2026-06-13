@@ -17,7 +17,6 @@ import {
   ITEM_INFO,
   ITEM_TYPES,
   resources,
-  totalStored,
   type ItemType,
 } from "../sim/resources";
 import { ANIMAL_DEFS, BARN_CAPACITY, TAME_TARGET, type Animal } from "../sim/animals";
@@ -1425,17 +1424,10 @@ export function drawBuildingPanel(
   }
 
   if (isDepositPoint(b)) {
-    // depo içeriği: her ürün ayrı satır, dolanlar kırmızı "DOLU" etiketli
+    // depo içeriği: her ürün ayrı satır + kendi sınırı; dolu olan kırmızı "DOLU"
     ctx.font = "bold 12px monospace";
-    ctx.fillStyle = "#e8e2d0";
-    ctx.fillText(
-      `Toplam: ${totalStored()}/${resources.cap}`,
-      x + 12, ly
-    );
-    if (totalStored() >= resources.cap) {
-      ctx.fillStyle = "#ff6655";
-      ctx.fillText("DOLU!", x + 186, ly);
-    }
+    ctx.fillStyle = "#b8b2a2";
+    ctx.fillText(`Ürün başına sınır: ${resources.cap}`, x + 12, ly);
     ly += 20;
 
     const visibleItems = ITEM_TYPES.filter(isItemVisible);
@@ -1446,11 +1438,18 @@ export function drawBuildingPanel(
       ctx.strokeStyle = "#3a3f48";
       ctx.strokeRect(x + 12.5, ly - 4.5, 9, 9);
       const name = ITEM_INFO[item].name;
-      ctx.fillStyle = "#e8e2d0";
+      const full = resources[item] >= resources.cap;
+      ctx.fillStyle = full ? "#ff8a6a" : "#e8e2d0";
       ctx.fillText(
-        `${name[0].toUpperCase()}${name.slice(1)}: ${resources[item]}`,
+        `${name[0].toUpperCase()}${name.slice(1)}: ${resources[item]}/${resources.cap}`,
         x + 30, ly
       );
+      if (full) {
+        ctx.fillStyle = "#ff6655";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("DOLU", x + w - 52, ly);
+        ctx.font = "12px monospace";
+      }
       ly += 17;
     }
   } else if (

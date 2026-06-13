@@ -46,7 +46,6 @@ import {
   ITEM_INFO,
   ITEM_TYPES,
   resources,
-  totalStored,
   type ItemType,
   FOOD_TYPES,
   FOOD_NUTRITION,
@@ -167,9 +166,9 @@ type VillagerState =
   | "eating";
 
 type Job =
-  | { kind: "chop"; tile: number }
-  | { kind: "gather"; tile: number; item: ItemType }
-  | { kind: "mine"; tile: number }
+  | { kind: "chop"; tile: number; auto?: boolean }
+  | { kind: "gather"; tile: number; item: ItemType; auto?: boolean }
+  | { kind: "mine"; tile: number; auto?: boolean }
   | { kind: "fish"; tile: number }
   | { kind: "plant"; tile: number; target: Tile }
   | { kind: "tend"; animal: Animal }
@@ -1148,8 +1147,8 @@ export class Villager {
           });
         }
       } else if (hut.type === BuildingType.Splitter) {
-        // Kırıcı: stokta odun varsa ve dallara yer varsa kütük yarar
-        const space = resources.cap - totalStored();
+        // Kırıcı: stokta odun varsa ve dala (wood) yer varsa kütük yarar
+        const space = resources.cap - resources.wood;
         if (
           resources.log >= SPLIT_LOG_COST &&
           space >= SPLIT_BRANCH_YIELD - SPLIT_LOG_COST &&
@@ -1523,6 +1522,71 @@ export class Villager {
         }
       );
     }
+
+    // Boştaki ortalık işçisi: işaretli iş yoksa eksik kalan kaynağı (dal/odun/
+    // yemiş/mantar/taş) kendiliğinden toplamaya gider. Düşük öncelik: oyuncunun
+    // işaretlediği işler ve emirler her zaman önce gelir.
+    if (a.kind === "laborer") {
+      const AUTO = 1000;
+      if (!isFull("wood") && !bagFull) {
+        this.pushAutoCandidate(world, candidates, AUTO,
+          (x, y) =>
+            world.get(x, y) === Tile.Tree &&
+            !world.claimedTrees.has(world.index(x, y)) && litTile(x, y),
+          (i) => {
+            world.claimedTrees.add(i);
+            this.job = { kind: "chop", tile: i, auto: true };
+          });
+      }
+      if (!bagFull && (!isFull("berry") || !isFull("mushroom"))) {
+        this.pushAutoCandidate(world, candidates, AUTO,
+          (x, y) => {
+            const item = foodItemOf(world.get(x, y));
+            return (item === "berry" || item === "mushroom") &&
+              !isFull(item) && !world.claimedBushes.has(world.index(x, y)) && litTile(x, y);
+          },
+          (i, x, y) => {
+            world.claimedBushes.add(i);
+            const item = foodItemOf(world.get(x, y)) ?? "berry";
+            this.job = { kind: "gather", tile: i, item, auto: true };
+          });
+      }
+      if (!isFull("stone") && !bagFull && hasTech("hardobjects")) {
+        this.pushAutoCandidate(world, candidates, AUTO,
+          (x, y) =>
+            (world.get(x, y) === Tile.Stone || world.get(x, y) === Tile.Pebbles) &&
+            !world.claimedStones.has(world.index(x, y)) && litTile(x, y),
+          (i) => {
+            world.claimedStones.add(i);
+            this.job = { kind: "mine", tile: i, auto: true };
+          });
+      }
+    }
+  }
+
+  // İşaretsiz bir kaynak karosunu kendiliğinden hedefle (boştaki işçi için)
+  private pushAutoCandidate(
+    world: World,
+    candidates: { dist: number; start: () => boolean }[],
+    penalty: number,
+    accept: (x: number, y: number) => boolean,
+    claim: (index: number, x: number, y: number) => void
+  ): void {
+    const first = world.findNearestTile(this.x, this.y, accept, 40);
+    if (!first) return;
+    candidates.push({
+      dist: first.dist + penalty,
+      start: () => {
+        const t = world.findNearestTile(this.x, this.y, accept, 40);
+        if (!t) return false;
+        const path = findPathAdjacent(world, this.tileX, this.tileY, t.x, t.y);
+        if (!path) return false;
+        claim(world.index(t.x, t.y), t.x, t.y);
+        this.takeFoodForWork();
+        this.startPath(path);
+        return true;
+      },
+    });
   }
 
   private startTileJob(
@@ -1712,13 +1776,30 @@ export class Villager {
         (tile % world.width + 0.5) * TILE_SIZE,
         (Math.floor(tile / world.width) + 0.5) * TILE_SIZE
       );
+    const tileOf = (t: number) => ({ x: t % world.width, y: Math.floor(t / world.width) });
     switch (this.job.kind) {
-      case "chop":
-        return world.markedTrees.has(this.job.tile) && !isFull("wood") && tileLit(this.job.tile);
-      case "gather":
-        return world.markedBushes.has(this.job.tile) && !isFull(this.job.item) && tileLit(this.job.tile);
-      case "mine":
-        return world.markedStones.has(this.job.tile) && !isFull("stone") && tileLit(this.job.tile);
+      case "chop": {
+        const p = tileOf(this.job.tile);
+        const exists = this.job.auto
+          ? world.get(p.x, p.y) === Tile.Tree
+          : world.markedTrees.has(this.job.tile);
+        return exists && !isFull("wood") && tileLit(this.job.tile);
+      }
+      case "gather": {
+        const p = tileOf(this.job.tile);
+        const exists = this.job.auto
+          ? foodItemOf(world.get(p.x, p.y)) === this.job.item
+          : world.markedBushes.has(this.job.tile);
+        return exists && !isFull(this.job.item) && tileLit(this.job.tile);
+      }
+      case "mine": {
+        const p = tileOf(this.job.tile);
+        const t = world.get(p.x, p.y);
+        const exists = this.job.auto
+          ? t === Tile.Stone || t === Tile.Pebbles
+          : world.markedStones.has(this.job.tile);
+        return exists && !isFull("stone") && tileLit(this.job.tile);
+      }
       case "fish":
         return !isFull("fish") && tileLit(this.job.tile);
       case "plant": {
@@ -2050,7 +2131,12 @@ export class Villager {
 
   private chop(dt: number, world: World): void {
     const job = this.job;
-    if (!job || job.kind !== "chop" || !world.markedTrees.has(job.tile)) {
+    const choppable =
+      job?.kind === "chop" &&
+      (job.auto
+        ? world.get(job.tile % world.width, Math.floor(job.tile / world.width)) === Tile.Tree
+        : world.markedTrees.has(job.tile));
+    if (!job || job.kind !== "chop" || !choppable) {
       this.releaseJob(world);
       this.toIdle();
       return;
@@ -2306,7 +2392,12 @@ export class Villager {
 
   private gather(dt: number, world: World): void {
     const job = this.job;
-    if (!job || job.kind !== "gather" || !world.markedBushes.has(job.tile)) {
+    const gatherable =
+      job?.kind === "gather" &&
+      (job.auto
+        ? foodItemOf(world.get(job.tile % world.width, Math.floor(job.tile / world.width))) === job.item
+        : world.markedBushes.has(job.tile));
+    if (!job || job.kind !== "gather" || !gatherable) {
       this.releaseJob(world);
       this.toIdle();
       return;
@@ -2326,7 +2417,14 @@ export class Villager {
 
   private mine(dt: number, world: World): void {
     const job = this.job;
-    if (!job || job.kind !== "mine" || !world.markedStones.has(job.tile)) {
+    const txm = job && job.kind === "mine" ? job.tile % world.width : 0;
+    const tym = job && job.kind === "mine" ? Math.floor(job.tile / world.width) : 0;
+    const mineable =
+      job?.kind === "mine" &&
+      (job.auto
+        ? world.get(txm, tym) === Tile.Stone || world.get(txm, tym) === Tile.Pebbles
+        : world.markedStones.has(job.tile));
+    if (!job || job.kind !== "mine" || !mineable) {
       this.releaseJob(world);
       this.toIdle();
       return;

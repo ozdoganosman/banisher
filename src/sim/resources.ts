@@ -51,11 +51,11 @@ export const resources: Record<ItemType, number> & { cap: number; knowledge: num
   ...(Object.fromEntries(ITEM_TYPES.map((t) => [t, 0])) as Record<ItemType, number>),
   wood: 20,
   berry: 45, // 10 kişilik kabilenin ilk gün erzağı
-  cap: 500, // temel çadır (kamp) stoğu
+  cap: 200, // ÜRÜN BAŞINA depo sınırı (her eşya tipi ayrı ayrı bu kadar tutar; depolar artırır)
   knowledge: 0, // tapınaklarda üretilir; depo kapasitesine tabi değildir
 };
 
-// Toplam depolanmış kaynak miktarı
+// Toplam depolanmış kaynak miktarı (bilgi hariç)
 export function totalStored(): number {
   let total = 0;
   for (const item of ITEM_TYPES) {
@@ -64,18 +64,17 @@ export function totalStored(): number {
   return total;
 }
 
-// Stoğa ekle (kapasiteyle sınırlı); gerçekten eklenen miktarı döndürür
+// Stoğa ekle (ürün başına sınırla); gerçekten eklenen miktarı döndürür
 export function addItem(item: ItemType, n: number): number {
-  const space = resources.cap - totalStored();
+  const space = resources.cap - resources[item];
   const added = Math.max(0, Math.min(space, n));
   resources[item] += added;
   return added;
 }
 
-// Bu ürünün deposu dolu mu? Doluysa köylüler onu toplamayı bırakır
+// Bu ürünün deposu dolu mu? Her ürün kendi sınırına ayrı ulaşır
 export function isFull(item: ItemType): boolean {
-  void item;
-  return totalStored() >= resources.cap;
+  return resources[item] >= resources.cap;
 }
 
 // Yenebilir toplam

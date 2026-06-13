@@ -95,7 +95,7 @@ const MAP_W = 128;
 const MAP_H = 128;
 const VILLAGER_COUNT = 10;
 const FIXED_DT = 1 / 60;
-const DEPOT_CAP_BONUS = 80;
+const DEPOT_CAP_BONUS = 120; // depo: ürün başına sınırı bu kadar artırır
 
 // İşaretli görev sayaçlarını hesapla
 function getTaskCounts(): TaskCounts {
@@ -770,7 +770,7 @@ function demolishBuilding(b: Building): void {
   if (b.type === BuildingType.Camp) return;
   b.removed = true;
   if (b.type === BuildingType.Depot && b.done) {
-    resources.cap = Math.max(500, resources.cap - DEPOT_CAP_BONUS);
+    resources.cap = Math.max(200, resources.cap - DEPOT_CAP_BONUS);
   }
   // çiftlik yıkılırsa hayvanları da gider
   for (let i = animals.length - 1; i >= 0; i--) {
@@ -2154,7 +2154,7 @@ function step(dt: number) {
         addMessage(`Ev tamamlandı: ${HOUSE_CAPACITY} kişilik konut`);
       } else if (b.type === BuildingType.Depot) {
         resources.cap += DEPOT_CAP_BONUS;
-        addMessage(`Depo tamamlandı: kapasite +${DEPOT_CAP_BONUS}`);
+        addMessage(`Depo tamamlandı: ürün başına sınır +${DEPOT_CAP_BONUS}`);
       } else {
         addMessage(`${def.name} tamamlandı`);
       }

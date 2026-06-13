@@ -360,6 +360,33 @@ export class World {
     return best;
   }
 
+  // (px,py)'ye en yakın, kabul edilen karoyu halka halka tara (işaretsiz de olur).
+  // Boştaki ortalık işçilerinin kendiliğinden kaynak toplaması için kullanılır.
+  findNearestTile(
+    px: number,
+    py: number,
+    accept: (x: number, y: number) => boolean,
+    maxR = 40
+  ): { x: number; y: number; dist: number } | null {
+    const tx = Math.floor(px / TILE_SIZE);
+    const ty = Math.floor(py / TILE_SIZE);
+    if (this.inBounds(tx, ty) && accept(tx, ty)) return { x: tx, y: ty, dist: 0 };
+    for (let r = 1; r <= maxR; r++) {
+      let best: { x: number; y: number; dist: number } | null = null;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // yalnız halka
+          const x = tx + dx, y = ty + dy;
+          if (!this.inBounds(x, y) || !accept(x, y)) continue;
+          const d = Math.abs(dx) + Math.abs(dy);
+          if (!best || d < best.dist) best = { x, y, dist: d };
+        }
+      }
+      if (best) return best;
+    }
+    return null;
+  }
+
   // Bir merkez etrafındaki karede (yarıçap r) verilen tipte blok say / en yakını bul
   countMarkedNear(marked: Set<number>, cx: number, cy: number, r: number): number {
     let n = 0;
