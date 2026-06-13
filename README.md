@@ -120,7 +120,22 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.4)
+## Şu anki özellikler (v2.5)
+
+### v2.5: Ses motoru elden geçti
+
+- **"Helikopter" sesi giderildi**: ateş çıtırtısını biçen 13 Hz kare-dalga
+  LFO kaldırıldı (sürekli rotor uğultusunun sebebi buydu)
+- **Gerçekçi ateş**: sıcak kahverengi-gürültü yatağı + iki yavaş sinüs
+  titremesi (0.5/1.7 Hz) + seyrek rastgele çıtırtı patlamaları
+- **Master zinciri**: limiter (çatırtı/taşma önler) + sentetik reverb ile
+  tüm sesler daha dolu ve mekânlı
+- **Sesler yeniden sentezlendi**: katmanlı balta/taş/inşaat vuruşları,
+  yumuşak ve kalabalıkta uğuldamayan adımlar (küresel bütçeyle kısıtlı),
+  süzülmüş mızrak vınlaması, zengin/yankılı kurt-ayı uluması, çan benzeri
+  araştırma arpeji; yanan ev ocağı da çıtırtı verir
+
+### v2.4: Kutsal metin, masterpiece inşaat menüsü ve cila
 
 ### v2.4: Kutsal metin, masterpiece inşaat menüsü ve cila
 

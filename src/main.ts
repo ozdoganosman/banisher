@@ -2322,7 +2322,7 @@ function frame(now: number) {
   let fireDist = Infinity;
   for (const b of buildings) {
     if (!b.done) continue;
-    if (!b.hasTorch && b.type !== BuildingType.Camp) continue;
+    if (!b.hasTorch && !b.burning && b.type !== BuildingType.Camp) continue;
     const d = Math.hypot(b.centerX - camera.x, b.centerY - camera.y);
     if (d < fireDist) fireDist = d;
   }
