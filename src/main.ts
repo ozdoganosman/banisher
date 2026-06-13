@@ -50,7 +50,7 @@ import {
   panelRectOf,
   type PanelId,
 } from "./render/hud";
-import { buyTech, grantTech, hasTech, prereqsMet, purchasedList, restorePurchased, TECHS, type Tech, type TechId } from "./sim/tech";
+import { buyTech, grantTech, hasTech, cheapestAvailable, currentCost, purchasedList, restorePurchased, TECHS, type Tech, type TechId } from "./sim/tech";
 import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, BARN_CAPACITY, BREED_INTERVAL, PASTURE_RADIUS, pastureBounds, type AnimalType } from "./sim/animals";
 import {
   AXE_STONE_COST,
@@ -1440,6 +1440,8 @@ let lastDayCount = 0;
 let homeTimer = 0;
 let homelessCount = 0;
 let homelessWarnTimer = 0;
+let knowledgeRate = 0; // tahmini bilgi/sn (oto-araştırma ETA için)
+let kPrevKnowledge = 0;
 
 // Oto-araştırma: açıkken bilgi yettikçe en ucuz uygun araştırmayı kendi yapar
 // (oyuncu kapatıp bilgi biriktirebilir ya da dilediğini elle araştırabilir)
@@ -1507,12 +1509,8 @@ function autoStaffTick(): void {
 
 function autoResearchTick(): void {
   if (!policy.research) return;
-  let pick: Tech | null = null;
-  for (const t of TECHS) {
-    if (hasTech(t.id) || !prereqsMet(t) || resources.knowledge < t.cost) continue;
-    if (!pick || t.cost < pick.cost) pick = t;
-  }
-  if (!pick) return;
+  const pick = cheapestAvailable();
+  if (!pick || resources.knowledge < currentCost(pick)) return;
   if (buyTech(pick.id)) {
     if (pick.id === "humanity") for (const v of villagers) v.changeMorale(10, "Tanrı inancı");
     celebrateTech(pick.id);
@@ -2183,6 +2181,10 @@ function step(dt: number) {
   homeTimer -= dt;
   if (homeTimer <= 0) {
     homeTimer = 1;
+    // bilgi kazanç hızını (bilgi/sn) tahmin et: yalnız artış olan saniyeleri say
+    const dk = resources.knowledge - kPrevKnowledge;
+    if (dk > 0) knowledgeRate = knowledgeRate * 0.6 + dk * 0.4;
+    kPrevKnowledge = resources.knowledge;
     assignHomes();
     assignChildcare();
     assignDogs();
@@ -2539,7 +2541,7 @@ function frame(now: number) {
   }
 
   renderer.drawMinimap(ctx, camera, villagers, buildings, TOOLBAR_HEIGHT);
-  drawHud(ctx, villagers.length, selected, paused, gameSpeed, homelessCount);
+  drawHud(ctx, villagers.length, selected, paused, gameSpeed, homelessCount, knowledgeRate);
   if (villagers.length > 0) drawMarkFilters(ctx, markFilter);
   let taskListY = 42;
   if (villagers.length > 0) {

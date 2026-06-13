@@ -219,6 +219,23 @@ export function prereqsMet(tech: Tech): boolean {
   return !tech.prereq || tech.prereq.every((p) => purchased.has(p));
 }
 
+// Maliyet katlamalı artar: her araştırılan, sonrakileri pahalılaştırır.
+// Böylece kabile geliştikçe ilerleme giderek daha büyük bir yatırım ister.
+const COST_ESCALATION = 1.16;
+export function currentCost(tech: Tech): number {
+  return Math.round(tech.cost * Math.pow(COST_ESCALATION, purchased.size));
+}
+
+// Oto-araştırmanın sıradaki hedefi: ön koşulu sağlanmış, en ucuz alınmamış araştırma
+export function cheapestAvailable(): Tech | null {
+  let pick: Tech | null = null;
+  for (const t of TECHS) {
+    if (purchased.has(t.id) || !prereqsMet(t)) continue;
+    if (!pick || currentCost(t) < currentCost(pick)) pick = t;
+  }
+  return pick;
+}
+
 // Debug/hile: araştırmayı koşulsuz ve bedava aç
 export function grantTech(id: TechId): void {
   purchased.add(id);
@@ -237,9 +254,11 @@ export function restorePurchased(ids: TechId[]): void {
 // Araştırmayı satın al; başarılıysa true döner
 export function buyTech(id: TechId): boolean {
   const tech = TECHS.find((t) => t.id === id);
-  if (!tech || purchased.has(id) || resources.knowledge < tech.cost) return false;
+  if (!tech || purchased.has(id)) return false;
   if (!prereqsMet(tech)) return false;
-  resources.knowledge -= tech.cost;
+  const cost = currentCost(tech);
+  if (resources.knowledge < cost) return false;
+  resources.knowledge -= cost;
   purchased.add(id);
   return true;
 }

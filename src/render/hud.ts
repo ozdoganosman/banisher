@@ -23,7 +23,7 @@ import { ANIMAL_DEFS, BARN_CAPACITY, TAME_TARGET, type Animal } from "../sim/ani
 import { journal } from "../sim/journal";
 import { policy, POLICY_INFO, type PolicyKey } from "../sim/policy";
 import { currentGoal, type GoalCtx } from "../sim/goals";
-import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
+import { hasTech, prereqsMet, currentCost, cheapestAvailable, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
   darkness,
   dateString,
@@ -2240,7 +2240,8 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D, autoResearch = fals
     if (pos.x + cardW < 0 || pos.x > w) return; // görünüm dışı
     const owned = hasTech(tech.id);
     const locked = !prereqsMet(tech);
-    const affordable = resources.knowledge >= tech.cost;
+    const cost = currentCost(tech);
+    const affordable = resources.knowledge >= cost;
 
     // Kart arka planı (yuvarlatılmış, satın alınabilirse ışıltılı)
     ctx.beginPath();
@@ -2334,7 +2335,7 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D, autoResearch = fals
       cy2 += 1;
     } else {
       ctx.fillStyle = affordable ? "#e0b864" : "#b06a5c";
-      ctx.fillText(`Maliyet: ${tech.cost} bilgi`, pos.x + 10, cy2);
+      ctx.fillText(`Maliyet: ${cost} bilgi`, pos.x + 10, cy2);
       cy2 += 11;
     }
 
@@ -2432,7 +2433,8 @@ export function drawHud(
   selected: BuildingType | null,
   paused: boolean,
   speed: number,
-  homeless = 0
+  homeless = 0,
+  knowledgeRate = 0
 ): void {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
@@ -2538,6 +2540,40 @@ export function drawHud(
     ctx.fillText("⚙", cx + bw / 2 - 2, 18);
     ctx.textAlign = "left";
     cx += bw + 10;
+  }
+
+  // oto-araştırma açıkken: sıradaki araştırma + tahmini süre (Teknoloji düğmesinin altında)
+  if (policy.research && population > 0) {
+    const next = cheapestAvailable();
+    if (next) {
+      const cost = currentCost(next);
+      const have = Math.floor(resources.knowledge);
+      const deficit = Math.max(0, cost - have);
+      const eta = deficit <= 0 ? 0 : knowledgeRate > 0.05 ? Math.ceil(deficit / knowledgeRate) : -1;
+      const label =
+        deficit <= 0
+          ? `🔬 Sıradaki: ${next.icon} ${next.name} — hazır ✓`
+          : `🔬 Sıradaki: ${next.icon} ${next.name} — ${have}/${cost}` +
+            (eta >= 0 ? `  ~${eta}sn` : ``);
+      ctx.font = "11px monospace";
+      ctx.textBaseline = "middle";
+      const tw2 = ctx.measureText(label).width + 18;
+      const bx = Math.max(8, Math.min(techButtonRect.x, w - tw2 - 8));
+      const by = 39;
+      chipBg(ctx, bx, by, tw2, 20, false, UI.purple);
+      // ilerleme dolgusu
+      if (deficit > 0 && cost > 0) {
+        const frac = Math.min(1, have / cost);
+        ctx.save();
+        rrect(ctx, bx, by, tw2 * frac, 20, 6);
+        ctx.clip();
+        ctx.fillStyle = "rgba(176,143,224,0.25)";
+        ctx.fillRect(bx, by, tw2, 20);
+        ctx.restore();
+      }
+      ctx.fillStyle = "#d8c0ff";
+      ctx.fillText(label, bx + 9, by + 10);
+    }
   }
 
   // tarih (takvim ikonu) — sağdaki düğmelere sığıyorsa

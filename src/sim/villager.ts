@@ -2,7 +2,7 @@ import { sfxHit, sfxStep, sfxWhoosh } from "../engine/sound";
 import { addFloater, burst, throwSpearFx } from "../render/effects";
 import { foodItemOf, Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
-import { ANIMAL_DEFS, TAME_TARGET, type Animal } from "./animals";
+import { ANIMAL_DEFS, TAME_TARGET, BARN_CAPACITY, type Animal } from "./animals";
 import type { Building } from "./buildings";
 import {
   AUTO_MARK_RADIUS,
@@ -1250,6 +1250,43 @@ export class Villager {
                 return true;
               },
             });
+          }
+        }
+        // çiftçi, çiftliğin türüne dönüşecek yabani bir hayvan görürse
+        // kendiliğinden evcilleştirmeye gider (ağıl dolu değilse)
+        if (hut.farmType && !bagFull) {
+          const herd = animals.filter((a) => a.barn === hut && !a.dead).length;
+          if (herd < BARN_CAPACITY) {
+            const TAME_RANGE = 28 * TILE_SIZE;
+            let bestW: Animal | null = null;
+            let bestWD = Infinity;
+            for (const a of animals) {
+              if (!a.wild || a.dead || a.claimed || a.tameMark) continue;
+              if (TAME_TARGET[a.type] !== hut.farmType) continue;
+              const d = Math.abs(a.x - this.x) + Math.abs(a.y - this.y);
+              if (d < TAME_RANGE && d < bestWD) {
+                bestWD = d;
+                bestW = a;
+              }
+            }
+            if (bestW) {
+              const target = bestW;
+              candidates.push({
+                dist: bestWD / TILE_SIZE + 4, // ürün toplama biraz öncelikli
+                start: () => {
+                  const path = findPath(
+                    world, this.tileX, this.tileY,
+                    Math.floor(target.x / TILE_SIZE), Math.floor(target.y / TILE_SIZE)
+                  );
+                  if (!path) return false;
+                  target.claimed = true;
+                  target.tameMark = true; // yeşil işaret: evcilleştiriliyor
+                  this.job = { kind: "tame", animal: target, barn: hut };
+                  this.startPath(path);
+                  return true;
+                },
+              });
+            }
           }
         }
       } else if (hut.type === BuildingType.Temple) {
