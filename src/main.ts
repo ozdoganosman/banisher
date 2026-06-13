@@ -64,6 +64,8 @@ import {
   canPlace,
   HOUSE_CAPACITY,
   isHousing,
+  worshipState,
+  worshipYieldFor,
   placeBuilding,
   ROLE_NAMES,
   isBuildingUnlocked,
@@ -315,6 +317,7 @@ function loadGame(): boolean {
     selectedBuilding = null;
     selectedAnimal = null;
     dangerFollow = null;
+    followVillager = null;
     lastDayCount = totalDays();
     renderer.repaintAll();
     addMessage("💾 Kayıt yüklendi — hoş geldin!");
@@ -424,13 +427,66 @@ function showDifficultySelect(): void {
       onClick: () => {
         pr.apply();
         applyDifficultyToColony();
-        closeMenu();
-        paused = false;
+        showScripture(); // kutsal metin: amaç ve zorlu yol
       },
     };
   });
   items.push({ label: "← Geri", desc: "", onClick: showMainMenu });
   buildMenu("BANISHER", "Kabilen için bir kader seç:", items);
+}
+
+// Açılış kutsal metni: oyunun amacını ve yolun zorluğunu anlatır
+function showScripture(): void {
+  closeMenu();
+  const overlay = document.createElement("div");
+  overlay.style.cssText =
+    "position:fixed;inset:0;background:radial-gradient(ellipse at center, #1a1410 0%, #08090c 100%);" +
+    "display:flex;flex-direction:column;align-items:center;justify-content:center;" +
+    "font-family:monospace;color:#e8e2d0;z-index:10;gap:18px;padding:24px";
+
+  const title = document.createElement("div");
+  title.textContent = "☉ İLK SÖZ ☉";
+  title.style.cssText =
+    "font-size:22px;font-weight:bold;color:#ffd23c;letter-spacing:8px;" +
+    "text-shadow:0 0 18px rgba(255,210,60,0.5)";
+
+  const scripture = document.createElement("div");
+  scripture.style.cssText =
+    "max-width:600px;font-size:15px;line-height:1.9;color:#d8cdb4;text-align:center;" +
+    "font-style:italic;border-top:1px solid rgba(255,210,60,0.3);" +
+    "border-bottom:1px solid rgba(255,210,60,0.3);padding:22px 8px";
+  scripture.innerHTML =
+    "“Ey gök kubbenin altındaki avuç dolusu can,<br>" +
+    "sizi karanlık bir mağaranın ağzında bıraktım.<br><br>" +
+    "Önünüzde uzun ve <b style='color:#e8b86a'>çetin bir yol</b> var:<br>" +
+    "açlık, soğuk ve gecenin dişli gölgeleri.<br>" +
+    "Ateşi bulun, taşı yontun, toprağı evcilleştirin;<br>" +
+    "yıkılan her nesilden bilgi devşirin.<br><br>" +
+    "Ben yalnızca sizi <b style='color:#e8b86a'>izleyen göz</b>üm —<br>" +
+    "kaderinizi kendi elleriniz örecek.<br>" +
+    "Bu kabileyi mağaradan medeniyete taşıyın.”";
+
+  const sub = document.createElement("div");
+  sub.textContent = "— Banisher";
+  sub.style.cssText = "font-size:12px;color:#8a7a5c;letter-spacing:3px";
+
+  const btn = document.createElement("button");
+  btn.textContent = "▶ Yolculuğa Başla";
+  btn.style.cssText =
+    "margin-top:10px;width:300px;padding:13px 16px;background:rgba(255,210,60,0.1);" +
+    "border:1px solid #ffd23c;color:#ffe296;font-family:monospace;font-size:15px;" +
+    "font-weight:bold;cursor:pointer;border-radius:6px";
+  btn.onmouseenter = () => (btn.style.background = "rgba(255,210,60,0.22)");
+  btn.onmouseleave = () => (btn.style.background = "rgba(255,210,60,0.1)");
+  btn.onclick = () => {
+    initAudio();
+    closeMenu();
+    paused = false;
+  };
+
+  overlay.append(title, scripture, sub, btn);
+  document.body.append(overlay);
+  menuOverlay = overlay;
 }
 
 // Oyun içi duraklatma menüsü (Esc — açık panel yokken)
@@ -787,6 +843,7 @@ input.onClick = (wx, wy, sx, sy) => {
   const mm = renderer.minimapHit(sx, sy);
   if (mm) {
     dangerFollow = null;
+    followVillager = null;
     dangerCooldown = 10;
     camera.x = mm.x;
     camera.y = mm.y;
@@ -874,11 +931,12 @@ input.onClick = (wx, wy, sx, sy) => {
       if (hit.kind === "close") {
         showPeople = false;
       } else if (hit.kind === "select") {
-        // isme tıkla: köylünün profilini de aç ve kameraya al (menü açık kalır)
+        // isme tıkla: profili aç ve kamerayı köylüye kilitle (manuel pan'a dek izler)
         const v = villagers[hit.index];
         selectedVillager = v;
-        camera.x = v.x;
-        camera.y = v.y;
+        followVillager = v;
+        dangerFollow = null;
+        addMessage(`🎥 ${v.fullName} takip ediliyor (kamerayı oynatınca biter)`);
       }
       return;
     }
@@ -1593,6 +1651,7 @@ function checkStorageFull() {
 
 let dangerFollow: Villager | null = null;
 let dangerCooldown = 0; // takip bittikten/iptalden sonra yeniden kilitlenme bekleme süresi
+let followVillager: Villager | null = null; // İnsanlar panelinden tıklanan köylüyü kamera izler (manuel pan'a dek)
 
 function villagerInDanger(v: Villager): boolean {
   for (const a of animals) {
@@ -1617,15 +1676,27 @@ function updateDangerCamera(dt: number): void {
     camera.y += (dangerFollow.y - camera.y) * k;
     return;
   }
-  if (dangerCooldown > 0) return;
-  for (const v of villagers) {
-    if (v.dead || v.state === "sleeping") continue;
-    if (villagerInDanger(v)) {
-      dangerFollow = v;
-      addMessage(`⚠ ${v.fullName} tehlikede — kamera takipte!`);
-      addJournal(`⚠ ${v.fullName} bir yırtıcıyla karşı karşıya!`);
-      break;
+  if (dangerCooldown <= 0) {
+    for (const v of villagers) {
+      if (v.dead || v.state === "sleeping") continue;
+      if (villagerInDanger(v)) {
+        dangerFollow = v;
+        followVillager = null; // tehlike manuel takibi devralır
+        addMessage(`⚠ ${v.fullName} tehlikede — kamera takipte!`, "important");
+        addJournal(`⚠ ${v.fullName} bir yırtıcıyla karşı karşıya!`);
+        return;
+      }
     }
+  }
+  // manuel takip: İnsanlar panelinden seçilen köylüyü yumuşakça izle
+  if (followVillager) {
+    if (followVillager.dead) {
+      followVillager = null;
+      return;
+    }
+    const k = Math.min(1, dt * 5);
+    camera.x += (followVillager.x - camera.x) * k;
+    camera.y += (followVillager.y - camera.y) * k;
   }
 }
 
@@ -1971,6 +2042,11 @@ function step(dt: number) {
     assignHomes();
     assignChildcare();
     assignDogs();
+    // ayin verimi rahip sayısıyla üstel artar (toplam birikim ~ rahip²/3)
+    const priests = villagers.filter(
+      (v) => v.assignment.kind === "building" && v.assignment.building.type === BuildingType.Temple
+    ).length;
+    worshipState.yield = worshipYieldFor(priests);
   }
 
   // evsiz uyarısı: ara ara hatırlat (ev yapımına teşvik)
@@ -2203,7 +2279,7 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
 };
 
 // tuning: konsoldan canlı ayar (__game.tuning.dayLength / timeScale / moveSpeed)
-window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, goals: { state: goalState, current: currentGoal } };
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, worship: worshipState, goals: { state: goalState, current: currentGoal }, get follow() { return followVillager ? followVillager.fullName : null; } };
 (window as unknown as { hile: typeof hile }).hile = hile;
 console.info(
   "%cBanisher debug: konsola hile.yardim() yaz",
@@ -2223,9 +2299,10 @@ function frame(now: number) {
   const camX0 = camera.x;
   const camY0 = camera.y;
   input.update(elapsed);
-  if (dangerFollow && (camera.x !== camX0 || camera.y !== camY0)) {
-    // oyuncu kamerayı eline aldı: takibi bırak
+  if ((dangerFollow || followVillager) && (camera.x !== camX0 || camera.y !== camY0)) {
+    // oyuncu kamerayı eline aldı: her türlü takibi bırak
     dangerFollow = null;
+    followVillager = null;
     dangerCooldown = 10;
   }
   updateMessages(elapsed);

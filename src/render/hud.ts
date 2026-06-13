@@ -7,6 +7,7 @@ import {
   HOUSE_CAPACITY,
   isDepositPoint,
   isHousing,
+  worshipState,
   type Building,
   isBuildingUnlocked,
 } from "../sim/buildings";
@@ -35,7 +36,7 @@ import { assignmentLabel, type Villager } from "../sim/villager";
 import type { World } from "../world/world";
 import { drawVillagerJobAccessories } from "./renderer";
 
-export const TOOLBAR_HEIGHT = 64;
+export const TOOLBAR_HEIGHT = 76;
 
 // ---- Sol üst hedef kartı (tutorial görev zinciri) ----
 
@@ -477,9 +478,40 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.Nursery,
 ];
 
-const BTN_W = 96;
-const BTN_H = 48;
-const BTN_GAP = 4;
+const BTN_W = 108;
+const BTN_H = 60;
+const BTN_GAP = 5;
+
+// İnşaat menüsü görselleri: her bina için amblem ve kategori rengi
+const BUILDING_ICON: Partial<Record<BuildingType, string>> = {
+  [BuildingType.House]: "🏠",
+  [BuildingType.Depot]: "📦",
+  [BuildingType.Woodcutter]: "🌲",
+  [BuildingType.Gatherer]: "🧺",
+  [BuildingType.ToolWorkshop]: "🪓",
+  [BuildingType.Splitter]: "🪚",
+  [BuildingType.Road]: "🧱",
+  [BuildingType.Fisher]: "🎣",
+  [BuildingType.Barn]: "🐄",
+  [BuildingType.HunterLodge]: "🏹",
+  [BuildingType.Temple]: "🛕",
+  [BuildingType.Cafeteria]: "🍲",
+  [BuildingType.Nursery]: "👶",
+};
+const BUILDING_TINT: Partial<Record<BuildingType, string>> = {
+  [BuildingType.House]: "#c89a5a",
+  [BuildingType.Depot]: "#c89a5a",
+  [BuildingType.Woodcutter]: "#6a9a4a",
+  [BuildingType.Gatherer]: "#6a9a4a",
+  [BuildingType.Splitter]: "#6a9a4a",
+  [BuildingType.Fisher]: "#4a90b0",
+  [BuildingType.ToolWorkshop]: "#9a8a6a",
+  [BuildingType.HunterLodge]: "#b0563f",
+  [BuildingType.Temple]: "#9a6cc0",
+  [BuildingType.Nursery]: "#c07ab0",
+  [BuildingType.Cafeteria]: "#c0843f",
+  [BuildingType.Road]: "#8a8e96",
+};
 
 // Geçici bildirimler ("Yetersiz odun!", "Yeni köylüler geldi" vb.)
 // level: önemli olanlar büyük/parlak; sık tekrarlananlar tek satırda "×N" ile birikir
@@ -1160,10 +1192,10 @@ export function drawBuildingPanel(
       const itemCount = ITEM_TYPES.filter(isItemVisible).length;
       h += 34 + itemCount * 17 + 6;
     }
+    else if (b.type === BuildingType.Temple) h += 40;
     else if (
       b.type === BuildingType.Woodcutter ||
       b.type === BuildingType.Gatherer ||
-      b.type === BuildingType.Temple ||
       b.type === BuildingType.HunterLodge
     ) h += 22;
     else if (b.type === BuildingType.Barn) h += b.farmType ? 42 : 52;
@@ -1510,6 +1542,10 @@ export function drawBuildingPanel(
       ctx.fillStyle = "#e8e2d0";
       ctx.fillText(`Sonraki ayin: ${Math.ceil(b.worshipTimer)} sn`, x + 12, ly + 2);
     }
+    // ayin verimi: rahip sayısıyla üstel artar
+    ctx.fillStyle = "#b08fe0";
+    ctx.font = "11px monospace";
+    ctx.fillText(`📖 Ayin verimi: +${worshipState.yield} bilgi (rahip arttıkça hızlanır)`, x + 12, ly + 18, w - 24);
   }
 }
 
@@ -2140,24 +2176,25 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D): void {
       ctx.fillText("✓ Araştırıldı", pos.x + 10, cy2);
       cy2 += 11;
     } else if (locked) {
-      const missing = (tech.prereq ?? [])
-        .filter((p) => !hasTech(p))
-        .map((p) => TECHS.find((t) => t.id === p)?.name ?? p);
-      ctx.fillStyle = "#b06a5c";
-      if (missing.length === 1) {
-        ctx.fillText(`Kilitli — önce ${missing[0]}`, pos.x + 10, cy2, cardW - 20);
-        cy2 += 11;
-      } else {
-        ctx.fillText("Kilitli — gerekenler:", pos.x + 10, cy2);
+      // Önce gerekenler: her biri amblem + ad + ✓/✗ ile (yeşil=tamam, kırmızı=eksik)
+      ctx.fillStyle = "#d08a5c";
+      ctx.font = "bold 11px monospace";
+      ctx.fillText("🔒 Önce şunlar:", pos.x + 10, cy2);
+      cy2 += 14;
+      ctx.font = "11px monospace";
+      for (const pid of tech.prereq ?? []) {
+        const pt = TECHS.find((t) => t.id === pid);
+        const met = hasTech(pid);
+        ctx.fillStyle = met ? "#8fd05e" : "#e07a68";
+        const mark = met ? "✓" : "✗";
+        ctx.fillText(`${pt?.icon ?? ""} ${pt?.name ?? pid}`, pos.x + 14, cy2, cardW - 40);
+        ctx.textAlign = "right";
+        ctx.fillText(mark, pos.x + cardW - 12, cy2);
+        ctx.textAlign = "left";
         cy2 += 13;
-        ctx.font = "11px monospace";
-        for (const mname of missing) {
-          ctx.fillText(`• ${mname}`, pos.x + 16, cy2, cardW - 28);
-          cy2 += 12;
-        }
-        ctx.font = "12px monospace";
-        cy2 -= 1;
       }
+      ctx.font = "12px monospace";
+      cy2 += 1;
     } else {
       ctx.fillStyle = affordable ? "#e0b864" : "#b06a5c";
       ctx.fillText(`Maliyet: ${tech.cost} bilgi`, pos.x + 10, cy2);
@@ -2573,9 +2610,19 @@ export function drawHud(
     ctx.textAlign = "left";
   }
 
-  // alt araç çubuğu
-  ctx.fillStyle = "rgba(10, 12, 16, 0.8)";
-  ctx.fillRect(0, h - TOOLBAR_HEIGHT, w, TOOLBAR_HEIGHT);
+  // alt araç çubuğu — zarif inşaat menüsü
+  const tbY = h - TOOLBAR_HEIGHT;
+  const tbGrad = ctx.createLinearGradient(0, tbY, 0, h);
+  tbGrad.addColorStop(0, "rgba(18, 20, 27, 0.97)");
+  tbGrad.addColorStop(1, "rgba(8, 9, 13, 0.99)");
+  ctx.fillStyle = tbGrad;
+  ctx.fillRect(0, tbY, w, TOOLBAR_HEIGHT);
+  ctx.strokeStyle = "rgba(255, 210, 120, 0.18)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, tbY + 0.5);
+  ctx.lineTo(w, tbY + 0.5);
+  ctx.stroke();
 
   const unlockedTypes = TOOLBAR_TYPES.filter(isBuildingUnlocked);
   const n = unlockedTypes.length;
@@ -2584,31 +2631,79 @@ export function drawHud(
     const def = BUILDING_DEFS[type];
     const isSelected = selected === type;
     const affordable = resources.wood >= def.cost;
+    const tint = BUILDING_TINT[type] ?? "#5a5f68";
 
+    // kart gövdesi (yuvarlatılmış); seçiliyse kategori renginde ışıltı
+    ctx.beginPath();
+    ctx.roundRect(r.x, r.y, r.w, r.h, 7);
     if (isSelected) {
-      // seçili düğme: yeşil ışıltı
       ctx.save();
-      ctx.shadowColor = "rgba(143, 208, 94, 0.9)";
-      ctx.shadowBlur = 12;
+      ctx.shadowColor = tint;
+      ctx.shadowBlur = 16;
     }
-    ctx.fillStyle = isSelected ? "rgba(90, 143, 60, 0.5)" : "rgba(255,255,255,0.06)";
-    ctx.fillRect(r.x, r.y, r.w, r.h);
+    const cardGrad = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
+    if (isSelected) {
+      cardGrad.addColorStop(0, "rgba(120, 170, 80, 0.4)");
+      cardGrad.addColorStop(1, "rgba(70, 110, 45, 0.25)");
+    } else {
+      cardGrad.addColorStop(0, "rgba(255,255,255,0.07)");
+      cardGrad.addColorStop(1, "rgba(255,255,255,0.02)");
+    }
+    ctx.fillStyle = cardGrad;
+    ctx.fill();
     if (isSelected) ctx.restore();
-    ctx.strokeStyle = isSelected ? "#8fd05e" : affordable ? "#5a5f68" : "#7a3b2e";
     ctx.lineWidth = isSelected ? 2 : 1;
-    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    ctx.strokeStyle = isSelected
+      ? "#9fe06a"
+      : affordable
+      ? "rgba(255,255,255,0.16)"
+      : "rgba(176, 86, 63, 0.55)";
+    ctx.stroke();
 
-    ctx.fillStyle = affordable ? "#e8e2d0" : "#8a8478";
-    ctx.font = "bold 13px monospace";
-    ctx.fillText(`${(i + 1) % 10}. ${def.name}`, r.x + 8, r.y + 14, r.w - 14);
-    // maliyet + uygunluk işareti
-    ctx.font = "12px monospace";
-    ctx.fillStyle = affordable ? "#c9a35a" : "#d06a55";
-    ctx.fillText(`${def.cost} dal ${affordable ? "✓" : "✗"}`, r.x + 10, r.y + 30);
-    ctx.fillStyle = "#9a9488";
-    ctx.font = "10px monospace";
-    ctx.fillText(def.desc, r.x + 10, r.y + 43, r.w - 20);
+    // sol kategori şeridi
+    ctx.fillStyle = tint;
+    ctx.beginPath();
+    ctx.roundRect(r.x + 1, r.y + 1, 3.5, r.h - 2, [6, 0, 0, 6]);
+    ctx.fill();
+
+    // hotkey rozeti (sol üst)
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.beginPath();
+    ctx.arc(r.x + 15, r.y + 14, 8.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = tint;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = "#e8e2d0";
+    ctx.font = "bold 10px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${(i + 1) % 10}`, r.x + 15, r.y + 14);
+
+    // amblem
+    ctx.font = "19px monospace";
+    ctx.textAlign = "left";
+    ctx.globalAlpha = affordable ? 1 : 0.45;
+    ctx.fillText(BUILDING_ICON[type] ?? "🏗", r.x + 28, r.y + 14);
+    ctx.globalAlpha = 1;
+
+    // isim
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = affordable ? "#ece6d4" : "#8a8478";
+    ctx.font = "bold 11px monospace";
+    ctx.fillText(def.name, r.x + 9, r.y + 38, r.w - 14);
+
+    // maliyet + uygunluk
+    ctx.font = "11px monospace";
+    ctx.fillStyle = affordable ? "#d8b96a" : "#e0796a";
+    ctx.fillText(`🪵 ${def.cost}`, r.x + 9, r.y + 52);
+    ctx.fillStyle = affordable ? "#7fc05a" : "#e0796a";
+    ctx.textAlign = "right";
+    ctx.font = "bold 12px monospace";
+    ctx.fillText(affordable ? "✓" : "✗", r.x + r.w - 9, r.y + 52);
+    ctx.textAlign = "left";
   });
+  ctx.textBaseline = "middle";
 
   // koloni envanteri (Minecraft tarzı slot çubuğu)
   drawInventoryBar(ctx);

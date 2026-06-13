@@ -237,6 +237,13 @@ export const WORSHIP_INTERVAL = 20; // saniye: tapınak yeni ayine bu arayla izi
 export const WORSHIP_TIME = 15;
 export const KNOWLEDGE_PER_WORSHIP = 1;
 
+// Ayin verimi rahip sayısıyla üstel artar (toplam birikim ~ rahip²/3).
+// main her saniye rahip sayısına göre yield'i günceller; ayin biten köylü bunu okur.
+export const worshipState = { yield: 1 };
+export function worshipYieldFor(priests: number): number {
+  return Math.max(1, Math.round(priests / 3));
+}
+
 // Köylülerin topladıklarını teslim edebileceği bina mı?
 export function isDepositPoint(b: Building): boolean {
   return b.done && (b.type === BuildingType.Depot || b.type === BuildingType.Camp);

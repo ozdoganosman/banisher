@@ -18,7 +18,7 @@ import {
   isDepositPoint,
   isLit,
   lightRadiusOf,
-  KNOWLEDGE_PER_WORSHIP,
+  worshipState,
   MAX_CARRIED_SPEARS,
   ROLE_NAMES,
   SPEAR_CRAFT_TIME,
@@ -1957,10 +1957,11 @@ export class Villager {
     this.walkPhase += dt * 3; // yavaş sallanarak dua
     this.timer -= dt;
     if (this.timer <= 0) {
-      resources.knowledge += KNOWLEDGE_PER_WORSHIP;
+      const gain = worshipState.yield;
+      resources.knowledge += gain;
       addFloater(
         job.building.centerX, job.building.y * TILE_SIZE - 6,
-        `+${KNOWLEDGE_PER_WORSHIP} bilgi`, "#b08fe0"
+        `+${gain} bilgi`, "#b08fe0"
       );
       job.building.worshipClaimed = false;
       job.building.worshipSpots.delete(job.tile);

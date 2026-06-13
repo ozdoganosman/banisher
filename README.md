@@ -120,7 +120,25 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.3)
+## Şu anki özellikler (v2.4)
+
+### v2.4: Kutsal metin, masterpiece inşaat menüsü ve cila
+
+- **Açılış kutsal metni**: yeni oyun başlarken "İLK SÖZ" — kabileyi
+  mağaradan medeniyete taşıma amacını ve yolun çetinliğini anlatan
+  tanrısal bir hitap
+- **İnşaat menüsü yeniden tasarlandı**: yuvarlatılmış kartlar, bina
+  amblemleri (🏠🛕🪓🐄…), kategori renkli sol şerit, kısayol rozeti,
+  `🪵 maliyet ✓/✗` uygunluk işareti, seçilince kategori renginde ışıltı
+- **Daha hızlı araştırma**: ayin verimi rahip sayısıyla üstel artar
+  (toplam birikim ≈ rahip²/3) — tapınağa rahip yığmak hızla ödüllendirir;
+  tapınak panelinde güncel verim görünür
+- **Net önkoşullar**: kilitli araştırma kartı, gereken her araştırmayı
+  amblemi + adı + yeşil ✓ / kırmızı ✗ ile listeler
+- **Kamera takibi**: İnsanlar panelinde bir köylüye tıklayınca kamera
+  onu kilitleyip izler; kamerayı elle oynatınca takip biter
+
+### v2.3: Arayüz cilası — bildirimler, araştırma hissi, ev ocağı
 
 ### v2.3: Arayüz cilası — bildirimler, araştırma hissi, ev ocağı
 
