@@ -1,0 +1,60 @@
+// Blok (tile) tanımları. Dünya bu bloklardan oluşan bir ızgaradır.
+
+export const TILE_SIZE = 16; // bir bloğun dünya-piksel boyutu
+
+export const enum Tile {
+  Water = 0,
+  Sand = 1,
+  Grass = 2,
+  Dirt = 3,
+  Stone = 4,
+  Tree = 5,
+  Bush = 6, // meyve çalısı: toplayıcılar yemek toplar
+  Mushroom = 7, // orman mantarı: alternatif yemek kaynağı
+  AppleTree = 8, // elma ağacı: toplanır, sonra yeniden meyve verir
+  OrangeTree = 9, // portakal ağacı
+  TangerineTree = 10, // mandalina ağacı
+  NutBush = 11, // yemiş (fındık) çalısı
+  Sapling = 12, // ormancının diktiği fidan: zamanla ağaca dönüşür
+  PrunedTree = 13, // budanmış ağaç: dal toplandıktan sonra; zamanla Tree'ye döner
+  Pebbles = 14, // yerde çakıl: Sert Cisimler ile toplanır, taş verir
+  Road = 15, // taş yol (Hırs): üstünde %40 hızlı yürünür
+}
+
+// Toplanabilir yemek blokları hangi eşyayı verir?
+import type { ItemType } from "../sim/resources";
+export function foodItemOf(t: Tile): ItemType | null {
+  switch (t) {
+    case Tile.Bush: return "berry";
+    case Tile.Mushroom: return "mushroom";
+    default: return null;
+  }
+}
+
+export function isFruitTree(t: Tile): boolean {
+  return t === Tile.AppleTree || t === Tile.OrangeTree || t === Tile.TangerineTree;
+}
+
+export function isWalkable(t: Tile): boolean {
+  return t !== Tile.Water && t !== Tile.Stone && t !== Tile.PrunedTree;
+}
+
+// Her blok tipi için temel renk ve hafif ton varyasyonları (pixel-art dokusu için)
+export const TILE_COLORS: Record<Tile, string[]> = {
+  [Tile.Water]: ["#2a5d9c", "#2c62a5", "#27588f"],
+  [Tile.Sand]: ["#d8c27a", "#d1bb74", "#dfc983"],
+  [Tile.Grass]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.Dirt]: ["#8a6a43", "#84653f", "#907048"],
+  [Tile.Stone]: ["#7c7f86", "#75787f", "#84878e"],
+  [Tile.Tree]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, ağaç üstüne çizilir
+  [Tile.Bush]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, çalı üstüne çizilir
+  [Tile.Mushroom]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, mantar üstüne çizilir
+  [Tile.AppleTree]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.OrangeTree]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.TangerineTree]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.NutBush]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.Sapling]: ["#5a8f3c", "#558838", "#609541"],
+  [Tile.PrunedTree]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, çıplak gövde çizilir
+  [Tile.Pebbles]: ["#5a8f3c", "#558838", "#609541"], // zemin çimen, çakıllar üstüne çizilir
+  [Tile.Road]: ["#9a9690", "#928e88", "#a29e98"], // döşeli taş yol
+};
