@@ -48,7 +48,7 @@ import {
   type PanelId,
 } from "./render/hud";
 import { buyTech, grantTech, hasTech, purchasedList, restorePurchased, TECHS, type TechId } from "./sim/tech";
-import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, type AnimalType } from "./sim/animals";
+import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, BARN_CAPACITY, BREED_INTERVAL, type AnimalType } from "./sim/animals";
 import {
   AXE_STONE_COST,
   AXE_WOOD_COST,
@@ -143,8 +143,6 @@ const input = new Input(canvas, camera);
 const villagers: Villager[] = [];
 const buildings: Building[] = [];
 const animals: Animal[] = [];
-// kesilen domuzların yerine yenisi gelir
-const animalRespawns: { barn: Building; type: AnimalType; t: number }[] = [];
 let selected: BuildingType | null = null;
 let selectedVillager: Villager | null = null;
 let selectedBuilding: Building | null = null;
@@ -207,6 +205,7 @@ function saveGame(): void {
     animals: animals.map((a) => ({
       type: a.type, x: a.x, y: a.y, hunger: a.hunger, hp: a.hp,
       hunted: a.hunted, tameMark: a.tameMark, produceTimer: a.produceTimer,
+      female: a.female, bornDay: a.bornDay,
       barn: bIndex(a.barn), owner: vIndex(a.owner),
     })),
   };
@@ -300,6 +299,8 @@ function loadGame(): boolean {
       a.hunted = ad.hunted;
       a.tameMark = ad.tameMark;
       a.produceTimer = ad.produceTimer;
+      if (typeof ad.female === "boolean") a.female = ad.female;
+      a.bornDay = ad.bornDay ?? null;
       a.owner = ad.owner >= 0 ? villagers[ad.owner] : null;
       animals.push(a);
     }
@@ -597,8 +598,8 @@ function animalAt(wx: number, wy: number): Animal | null {
   return best;
 }
 
-// Çiftlik çevresindeki yürünebilir bloğa hayvan bırak
-function spawnAnimal(barn: Building, type: AnimalType): void {
+// Çiftlik çevresindeki yürünebilir bloğa hayvan bırak (baby=true: yavru doğar)
+function spawnAnimal(barn: Building, type: AnimalType, baby = false): void {
   for (let r = 1; r <= 4; r++) {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
@@ -606,13 +607,59 @@ function spawnAnimal(barn: Building, type: AnimalType): void {
         const x = b2t(barn.centerX) + dx;
         const y = b2t(barn.centerY) + dy;
         if (!world.walkableAt(x, y)) continue;
-        animals.push(new Animal(type, barn, x, y));
+        const a = new Animal(type, barn, x, y);
+        if (baby) a.bornDay = totalDays();
+        animals.push(a);
         return;
       }
     }
   }
 }
 const b2t = (px: number) => Math.floor(px / TILE_SIZE);
+
+// Çiftlik döngüsü: yetişkin dişi+erkek çift yavru yapar; ağıl dolunca en yaşlı kesilir
+function tickBarns(dt: number): void {
+  for (const barn of buildings) {
+    if (barn.type !== BuildingType.Barn || !barn.done || !barn.farmType) continue;
+    const herd = animals.filter((a) => a.barn === barn && !a.dead);
+    if (herd.length === 0) {
+      barn.breedTimer = BREED_INTERVAL;
+      continue;
+    }
+    // kapasite aşıldı: en yaşlı yetişkini kes (et kazanılır)
+    if (herd.length > BARN_CAPACITY) {
+      const adults = herd.filter((a) => a.adult);
+      if (adults.length > 0) {
+        // en yaşlı = en küçük bornDay; doğuştan yetişkin (null) en yaşlı sayılır
+        adults.sort((a, b) => (a.bornDay ?? -1) - (b.bornDay ?? -1));
+        const victim = adults[0];
+        victim.dead = true;
+        victim.slaughtered = true;
+        const meat = victim.def.huntYield;
+        const hide = victim.def.leatherYield;
+        addItem("meat", meat);
+        if (hide > 0) addItem("leather", hide);
+        addMessage(`🔪 Çiftlik doldu: bir ${ANIMAL_DEFS[victim.type].name.toLowerCase()} kesildi (+${meat} et)`);
+        addJournal(`🔪 Ağıl kapasitesi doldu, bir ${ANIMAL_DEFS[victim.type].name.toLowerCase()} kesildi (+${meat} et)`);
+        addFloater(victim.x, victim.y - 12, `+${meat} et`, "#c0564a");
+      }
+      continue;
+    }
+    // üreme: en az bir yetişkin dişi + bir yetişkin erkek gerek, ağıl dolmamış olmalı
+    const adultF = herd.some((a) => a.adult && a.female);
+    const adultM = herd.some((a) => a.adult && !a.female);
+    if (adultF && adultM && herd.length < BARN_CAPACITY) {
+      barn.breedTimer -= dt;
+      if (barn.breedTimer <= 0) {
+        barn.breedTimer = BREED_INTERVAL;
+        spawnAnimal(barn, barn.farmType, true);
+        addMessage(`🐣 Çiftlikte bir ${ANIMAL_DEFS[barn.farmType].name.toLowerCase()} yavrusu doğdu`);
+      }
+    } else {
+      barn.breedTimer = BREED_INTERVAL;
+    }
+  }
+}
 
 function demolishBuilding(b: Building): void {
   if (b.type === BuildingType.Camp) return;
@@ -1810,25 +1857,14 @@ function step(dt: number) {
   for (let i = animals.length - 1; i >= 0; i--) {
     const a = animals[i];
     if (!a.dead) continue;
-    if (a.slaughtered) {
-      // kesilen çiftlik hayvanının yerine zamanla yenisi gelir (av hariç)
-      if (a.barn) animalRespawns.push({ barn: a.barn, type: a.type, t: 90 });
-    } else {
+    if (!a.slaughtered && !a.eatenByPredator && a.barn) {
       addMessage(`🐄 Bir ${ANIMAL_DEFS[a.type].name.toLowerCase()} açlıktan telef oldu!`);
     }
     animals.splice(i, 1);
   }
-  for (let i = animalRespawns.length - 1; i >= 0; i--) {
-    const r = animalRespawns[i];
-    r.t -= dt;
-    if (r.t <= 0) {
-      animalRespawns.splice(i, 1);
-      if (buildings.includes(r.barn)) {
-        spawnAnimal(r.barn, r.type);
-        addMessage(`Çiftliğe yeni bir ${ANIMAL_DEFS[r.type].name.toLowerCase()} geldi`);
-      }
-    }
-  }
+
+  // çiftliklerde üreme ve kapasite kesimi
+  tickBarns(dt);
 
   // büyüyen bebekler işçi olur
   for (const v of villagers) {
@@ -1981,6 +2017,36 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
   },
   ayi(): void {
     animals.push(new Animal("bear", null, campCenter.x - 5, campCenter.y - 5));
+  },
+  // Test/hızlı kurulum: kamp yanına hazır çiftlik kur ve N hayvan koy
+  ciftlik(type: AnimalType = "cow", n = 2): void {
+    let barn = buildings.find((b) => b.type === BuildingType.Barn && b.farmType === type);
+    if (!barn) {
+      for (let r = 3; r <= 8 && !barn; r++) {
+        for (let dy = -r; dy <= r && !barn; dy++) {
+          for (let dx = -r; dx <= r && !barn; dx++) {
+            const x = campCenter.x + dx, y = campCenter.y + dy;
+            if (canPlace(world, x, y, 2)) {
+              const b = new Building(BuildingType.Barn, x, y);
+              b.progress = b.def.buildTime;
+              b.effectApplied = true;
+              b.farmType = type;
+              b.breedTimer = BREED_INTERVAL;
+              placeBuilding(world, b);
+              buildings.push(b);
+              barn = b;
+            }
+          }
+        }
+      }
+    }
+    if (!barn) { addMessage("Hile: çiftliğe yer bulunamadı"); return; }
+    for (let i = 0; i < n; i++) {
+      const a = new Animal(type, barn, b2t(barn.centerX), b2t(barn.centerY));
+      a.female = i % 2 === 0; // dişi/erkek dönüşümlü
+      animals.push(a);
+    }
+    addMessage(`Hile: ${ANIMAL_DEFS[type].name} çiftliği + ${n} hayvan`);
   },
   gun(n = 1): void {
     gameTime.total += n * tuning.dayLength;
@@ -2144,7 +2210,7 @@ function frame(now: number) {
   }
   if (villagers.length > 0) {
     if (selectedVillager) drawProfile(ctx, selectedVillager);
-    if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers);
+    if (selectedBuilding) drawBuildingPanel(ctx, selectedBuilding, world, villagers, animals);
     if (showPopulation) drawPopulationPanel(ctx, villagers, buildings);
     if (showPeople) drawPeoplePanel(ctx, villagers);
     if (showJournal) drawJournalPanel(ctx);

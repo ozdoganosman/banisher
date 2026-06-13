@@ -122,7 +122,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildTime: 11,
     size: 2,
     maxWorkers: 2,
-    desc: "Bir tür seçilir (inek/tavuk/koyun/domuz); evcilleştirilen yabaniler bu çiftliğe gelir",
+    desc: "Çitle çevrili ağıl: bir tür seçilir; evcilleşenler buraya gelir. Yetişkin dişiler süt/yumurta verir, dişi+erkek çift yavru yapar; ağıl dolunca en yaşlısı kesilir (et)",
   },
   [BuildingType.ToolWorkshop]: {
     name: "Alet Atölyesi",
@@ -261,6 +261,8 @@ export class Building {
   hasTorch = false;
   // Çiftlik: beslediği tür (kurulduktan sonra panelden seçilir)
   farmType: import("./animals").AnimalType | null = null;
+  // Çiftlik: yeni yavru için üreme sayacı (saniye)
+  breedTimer = 0;
   // Tapınak: rahiplerin tuttuğu dua yerleri (üst üste durmasınlar)
   readonly worshipSpots = new Set<number>();
   private scanTimer = Math.random() * SCAN_INTERVAL;

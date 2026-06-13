@@ -1,5 +1,5 @@
 import type { Camera } from "../engine/camera";
-import type { Animal } from "../sim/animals";
+import { pastureBounds, type Animal } from "../sim/animals";
 import { EAT_THRESHOLD, type Villager } from "../sim/villager";
 import {
   AUTO_MARK_RADIUS,
@@ -611,6 +611,11 @@ export class Renderer {
       ctx.stroke();
     }
 
+    // Çiftlik padokları: çit ve trampled zemin sprite'ların altına çizilir
+    for (const b of buildings) {
+      if (b.type === BuildingType.Barn && b.done) this.drawPastureFence(ctx, b);
+    }
+
     // Binalar ve köylüler: taban çizgisine (y) göre sırala ki önde olan üstte çizilsin
     type Drawable = { baseY: number; draw: () => void };
     const drawables: Drawable[] = [];
@@ -882,6 +887,47 @@ export class Renderer {
     }
   }
 
+  // Çitle çevrili padok: trampled zemin + ahşap kazık-korkuluk çit
+  private drawPastureFence(ctx: CanvasRenderingContext2D, b: Building): void {
+    const pen = pastureBounds(b);
+    const x0 = pen.x0 * TILE_SIZE;
+    const y0 = pen.y0 * TILE_SIZE;
+    const x1 = (pen.x1 + 1) * TILE_SIZE;
+    const y1 = (pen.y1 + 1) * TILE_SIZE;
+    const w = x1 - x0;
+    const h = y1 - y0;
+
+    // çiğnenmiş otlak: hafif toprak tonu
+    ctx.fillStyle = "rgba(120, 104, 74, 0.22)";
+    ctx.fillRect(x0, y0, w, h);
+
+    // çit: köşelerden başlayarak kazıklar + iki yatay korkuluk
+    const POST = 16; // kazık aralığı (piksel)
+    const railTop = "#7a5733";
+    const post = "#5e3f22";
+    ctx.fillStyle = railTop;
+    // üst ve alt korkuluk
+    for (const ry of [y0, y1 - 2]) {
+      ctx.fillRect(x0, ry, w, 2);
+      ctx.fillRect(x0, ry - 2.5, w, 1.4);
+    }
+    // sol ve sağ korkuluk
+    for (const rx of [x0, x1 - 2]) {
+      ctx.fillRect(rx, y0, 2, h);
+      ctx.fillRect(rx - 2.5, y0, 1.4, h);
+    }
+    // kazıklar (perimetre boyunca)
+    ctx.fillStyle = post;
+    for (let xx = x0; xx <= x1; xx += POST) {
+      ctx.fillRect(xx - 1, y0 - 3, 2.4, 6);
+      ctx.fillRect(xx - 1, y1 - 3, 2.4, 6);
+    }
+    for (let yy = y0; yy <= y1; yy += POST) {
+      ctx.fillRect(x0 - 1, yy - 3, 2.4, 6);
+      ctx.fillRect(x1 - 1, yy - 3, 2.4, 6);
+    }
+  }
+
   private drawBarn(ctx: CanvasRenderingContext2D, px: number, py: number): void {
     this.baseShadow(ctx, px + 16, py + 29, 15);
     ctx.fillStyle = "#6b4a2b";
@@ -921,6 +967,15 @@ export class Renderer {
     ctx.fill();
 
     const headDrop = a.grazing ? 2.2 : 0; // otlarken kafa yere eğilir
+
+    // yavru hayvan: gövdeyi küçült (büyüdükçe normal boya döner)
+    const baby = !a.adult;
+    if (baby) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(0.6, 0.6);
+      ctx.translate(-x, -y);
+    }
 
     switch (a.type) {
       case "chicken": {
@@ -1088,6 +1143,8 @@ export class Renderer {
         break;
       }
     }
+
+    if (baby) ctx.restore();
 
     // isabet parlaması: vurulan hayvan bir an bembeyaz yanar
     if (a.hitFlash > 0) {

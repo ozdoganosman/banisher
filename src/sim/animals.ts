@@ -5,6 +5,7 @@ import { sfxHowl } from "../engine/sound";
 import { burst } from "../render/effects";
 import { addJournal } from "./journal";
 import { Tile, TILE_SIZE } from "../world/tiles";
+import { totalDays } from "./time";
 import type { World } from "../world/world";
 import type { Building } from "./buildings";
 import type { ItemType } from "./resources";
@@ -33,11 +34,15 @@ export interface AnimalDef {
 
 const NEVER = 1e9; // yabaniler "ürün" hazırlamaz (sahipsizler tüketilemez)
 
+// Çiftlikte pasif (hayvanı öldürmeden) toplanan ürünler.
+// Süt ve yumurta yalnız yetişkin dişiden; yün yetişkin herkesten alınır.
+export const PASSIVE_PRODUCTS: ItemType[] = ["milk", "egg", "wool"];
+
 // Boyuta göre denge: büyük hayvan yavaş ama çok et/deri verir ve zor ölür
 export const ANIMAL_DEFS: Record<AnimalType, AnimalDef> = {
-  chicken: { name: "Tavuk", product: "meat", yieldAmount: 1, interval: 30, speed: 14, hp: 2, huntYield: 1, leatherYield: 0, woolYield: 0 },
-  cow: { name: "İnek", product: "meat", yieldAmount: 2, interval: 45, speed: 8, hp: 6, huntYield: 5, leatherYield: 2, woolYield: 0 },
-  pig: { name: "Domuz", product: "meat", yieldAmount: 4, interval: 70, speed: 11, hp: 4, huntYield: 4, leatherYield: 1, woolYield: 0, slaughter: true },
+  chicken: { name: "Tavuk", product: "egg", yieldAmount: 1, interval: 28, speed: 14, hp: 2, huntYield: 1, leatherYield: 0, woolYield: 0 },
+  cow: { name: "İnek", product: "milk", yieldAmount: 2, interval: 40, speed: 8, hp: 6, huntYield: 5, leatherYield: 2, woolYield: 0 },
+  pig: { name: "Domuz", product: "meat", yieldAmount: 4, interval: 70, speed: 11, hp: 4, huntYield: 4, leatherYield: 1, woolYield: 0 },
   sheep: { name: "Koyun", product: "wool", yieldAmount: 2, interval: 50, speed: 10, hp: 4, huntYield: 2, leatherYield: 1, woolYield: 2 },
   goat: { name: "Keçi", product: "meat", yieldAmount: 1, interval: 40, speed: 12, hp: 4, huntYield: 2, leatherYield: 1, woolYield: 1 },
   deer: { name: "Geyik", product: "meat", yieldAmount: 4, interval: NEVER, speed: 20, hp: 6, huntYield: 4, leatherYield: 2, woolYield: 0 },
@@ -75,6 +80,19 @@ const HUNGER_RATE = 100 / 120; // 2 dakikada acıkır
 const GRAZE_THRESHOLD = 70; // bunun üstünde otlamaya gider, üretim durur
 const STARVE_TIME = 60; // 100 açlıkta bu kadar kalan telef olur
 
+// Çitle çevrili ağıl: hayvanlar bu yarıçaptaki padoğun dışına çıkamaz
+export const PASTURE_RADIUS = 4; // çiftlik merkezinden blok (çit sınırı)
+export const ANIMAL_GROW_DAYS = 2; // yavru bu kadar günde yetişkin olur
+export const BARN_CAPACITY = 6; // ağıl sınırı; aşılınca en yaşlı yetişkin kesilir
+export const BREED_INTERVAL = 55; // saniye: dişi+erkek çift bu sürede bir yavru yapar
+
+// Bir çiftliğin çit sınırlarını (karo cinsinden, dahil) hesaplar
+export function pastureBounds(barn: Building): { x0: number; y0: number; x1: number; y1: number } {
+  const cx = Math.floor(barn.centerX / TILE_SIZE);
+  const cy = Math.floor(barn.centerY / TILE_SIZE);
+  return { x0: cx - PASTURE_RADIUS, y0: cy - PASTURE_RADIUS, x1: cx + PASTURE_RADIUS, y1: cy + PASTURE_RADIUS };
+}
+
 export class Animal {
   x: number;
   y: number;
@@ -86,6 +104,9 @@ export class Animal {
   slaughtered = false; // çiftçi kesti / avlandı (telef değil)
   hunted = false; // oyuncu av için işaretledi (yalnızca yabaniler)
   tameMark = false; // oyuncu evcilleştirme için işaretledi
+  female = Math.random() < 0.5; // dişiler süt/yumurta verir; üreme için ikisi de gerekir
+  bornDay: number | null = null; // çiftlikte doğan yavru: yetişkinleşme için doğum günü; null = doğuştan yetişkin
+  eatenByPredator = false; // yırtıcı çiftlik hayvanını kaptı (telef mesajı yerine baskın mesajı)
   owner: Villager | null = null; // köpek: birlikte gezdiği avcı
   private dogBiteTimer = 0;
   claimed = false; // bir köylü bu hayvana yöneldi
@@ -146,8 +167,22 @@ export class Animal {
     return ANIMAL_DEFS[this.type];
   }
 
+  // Çiftlikte doğan yavru ANIMAL_GROW_DAYS sonra yetişkin olur; ötekiler hep yetişkin
+  get adult(): boolean {
+    return this.bornDay === null || totalDays() - this.bornDay >= ANIMAL_GROW_DAYS;
+  }
+
+  // Pasif ürün (süt/yumurta/yün) verebilir mi? Süt ve yumurta yalnız yetişkin dişiden
+  get canProduce(): boolean {
+    if (!this.adult || this.wild) return false;
+    const p = this.def.product;
+    if (!PASSIVE_PRODUCTS.includes(p)) return false; // ör. domuz: pasif ürün yok, et kesimle alınır
+    if ((p === "milk" || p === "egg") && !this.female) return false;
+    return true;
+  }
+
   get ready(): boolean {
-    return !this.dead && this.produceTimer <= 0 && !this.claimed;
+    return !this.dead && this.canProduce && this.produceTimer <= 0 && !this.claimed;
   }
 
   update(dt: number, world: World, villagers?: Villager[]): void {
@@ -170,6 +205,7 @@ export class Animal {
         this.fleeDirX = -this.fleeDirX;
         this.fleeDirY = -this.fleeDirY;
       }
+      this.confineToPasture();
       return;
     }
 
@@ -291,8 +327,8 @@ export class Animal {
       this.starveTimer = 0;
     }
 
-    // tok hayvan üretir; aç hayvan üretmez
-    if (this.hunger < GRAZE_THRESHOLD && this.produceTimer > 0) {
+    // tok yetişkin (dişi) ürün hazırlar; aç ya da uygun olmayan üretmez
+    if (this.canProduce && this.hunger < GRAZE_THRESHOLD && this.produceTimer > 0) {
       this.produceTimer -= dt;
     }
 
@@ -327,6 +363,7 @@ export class Animal {
         this.y = ny;
         if (dx !== 0) this.facing = dx > 0 ? 1 : -1;
         this.walkPhase += dt * 7;
+        this.confineToPasture();
       } else {
         this.targetX = this.x;
         this.targetY = this.y;
@@ -348,17 +385,37 @@ export class Animal {
     return Math.floor(this.y / TILE_SIZE);
   }
 
-  // Açken çimen arar, değilse çiftliğin/yuvasının çevresinde dolanır
+  // Çiftlik hayvanı çitin dışına çıkamaz: konumu padok sınırına kıstır
+  private confineToPasture(): void {
+    if (!this.barn) return;
+    const b = pastureBounds(this.barn);
+    const minX = (b.x0 + 0.15) * TILE_SIZE;
+    const maxX = (b.x1 + 0.85) * TILE_SIZE;
+    const minY = (b.y0 + 0.15) * TILE_SIZE;
+    const maxY = (b.y1 + 0.85) * TILE_SIZE;
+    if (this.x < minX) this.x = minX;
+    else if (this.x > maxX) this.x = maxX;
+    if (this.y < minY) this.y = minY;
+    else if (this.y > maxY) this.y = maxY;
+  }
+
+  // Açken çimen arar, değilse çiftliğin/yuvasının çevresinde dolanır.
+  // Çiftlik hayvanı yalnızca çitle çevrili padok içinde hedef seçer.
   private pickTarget(world: World): void {
+    const pen = this.barn ? pastureBounds(this.barn) : null;
     const ax = this.barn ? this.barn.centerX : this.anchorX;
     const ay = this.barn ? this.barn.centerY : this.anchorY;
     const cx = Math.floor(ax / TILE_SIZE);
     const cy = Math.floor(ay / TILE_SIZE);
     const radius = this.wild ? 8 : WANDER_RADIUS;
     const wantGrass = this.hunger > GRAZE_THRESHOLD;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const tx = cx + Math.floor((Math.random() * 2 - 1) * radius);
-      const ty = cy + Math.floor((Math.random() * 2 - 1) * radius);
+    for (let attempt = 0; attempt < 12; attempt++) {
+      let tx = cx + Math.floor((Math.random() * 2 - 1) * radius);
+      let ty = cy + Math.floor((Math.random() * 2 - 1) * radius);
+      if (pen) {
+        tx = Math.max(pen.x0, Math.min(pen.x1, tx));
+        ty = Math.max(pen.y0, Math.min(pen.y1, ty));
+      }
       if (!world.walkableAt(tx, ty)) continue;
       if (wantGrass && world.get(tx, ty) !== Tile.Grass) continue;
       this.targetX = (tx + 0.5) * TILE_SIZE;

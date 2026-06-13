@@ -118,6 +118,19 @@ export const GOALS: Goal[] = [
     check: (c) => c.villagers.length >= 20,
     progress: (c) => ({ cur: c.villagers.length, max: 20 }),
   },
+  {
+    id: "suru",
+    title: "Çiftlikte 5 hayvanlık sürü kur",
+    hint: "Çiftlik kur, tür seç, yabanileri evcilleştir; dişi+erkek çift ağılda yavru yapar",
+    reward: 8,
+    check: (c) =>
+      c.buildings.some(
+        (b) =>
+          b.type === BuildingType.Barn &&
+          b.done &&
+          c.animals.filter((a) => a.barn === b && !a.dead).length >= 5
+      ),
+  },
 ];
 
 // Aktif hedefin sırası (kaydedilir/yüklenir)

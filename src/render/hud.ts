@@ -19,7 +19,7 @@ import {
   totalStored,
   type ItemType,
 } from "../sim/resources";
-import { ANIMAL_DEFS, TAME_TARGET, type Animal } from "../sim/animals";
+import { ANIMAL_DEFS, BARN_CAPACITY, TAME_TARGET, type Animal } from "../sim/animals";
 import { journal } from "../sim/journal";
 import { currentGoal, type GoalCtx } from "../sim/goals";
 import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
@@ -960,8 +960,9 @@ export function drawAnimalPanel(
   ctx.textAlign = "left";
   ctx.fillStyle = "#ffe296";
   ctx.font = "bold 14px monospace";
-  const tag = isDog ? " (evcil)" : a.barn ? " (çiftlik)" : def.predator ? " (yırtıcı!)" : " (yabani)";
-  ctx.fillText(`${def.name}${tag}`, x + 12, y + 18);
+  const sex = !isDog && a.barn ? (a.female ? " ♀" : " ♂") : "";
+  const tag = isDog ? " (evcil)" : a.barn ? (a.adult ? " (çiftlik)" : " (yavru)") : def.predator ? " (yırtıcı!)" : " (yabani)";
+  ctx.fillText(`${def.name}${sex}${tag}`, x + 12, y + 18);
 
   // can barı
   ctx.font = "11px monospace";
@@ -1116,7 +1117,8 @@ export function drawBuildingPanel(
   ctx: CanvasRenderingContext2D,
   b: Building,
   world: World,
-  villagers: Villager[]
+  villagers: Villager[],
+  animals: Animal[] = []
 ): void {
   const def = b.def;
   const w = 252;
@@ -1142,7 +1144,7 @@ export function drawBuildingPanel(
       b.type === BuildingType.Temple ||
       b.type === BuildingType.HunterLodge
     ) h += 22;
-    else if (b.type === BuildingType.Barn) h += b.farmType ? 22 : 52;
+    else if (b.type === BuildingType.Barn) h += b.farmType ? 42 : 52;
     else if (b.type === BuildingType.ToolWorkshop) {
       h += 64;
       if (hasTech("kan")) h += 40;
@@ -1412,8 +1414,19 @@ export function drawBuildingPanel(
   } else if (b.type === BuildingType.Barn) {
     ctx.font = "12px monospace";
     if (b.farmType) {
+      const herd = animals.filter((a) => a.barn === b && !a.dead);
+      const adultF = herd.filter((a) => a.adult && a.female).length;
+      const adultM = herd.filter((a) => a.adult && !a.female).length;
+      const babies = herd.filter((a) => !a.adult).length;
+      const prod = ANIMAL_DEFS[b.farmType].product;
+      const prodName = prod === "milk" ? "süt" : prod === "egg" ? "yumurta" : prod === "wool" ? "yün" : "et";
       ctx.fillStyle = "#8fd05e";
-      ctx.fillText(`Tür: ${ANIMAL_DEFS[b.farmType].name} çiftliği`, x + 12, ly + 2);
+      ctx.fillText(`${ANIMAL_DEFS[b.farmType].name} ağılı — ürün: ${prodName}`, x + 12, ly);
+      ctx.fillStyle = herd.length >= BARN_CAPACITY ? "#e0a83c" : "#c9d4dc";
+      ctx.fillText(
+        `Sürü: ${herd.length}/${BARN_CAPACITY}  (♀${adultF} ♂${adultM} 🍼${babies})`,
+        x + 12, ly + 16
+      );
     } else {
       ctx.fillStyle = "#e0a83c";
       ctx.fillText("Tür seç (evcilleşenler buraya gelir):", x + 12, ly);

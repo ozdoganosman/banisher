@@ -120,7 +120,25 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.1)
+## Şu anki özellikler (v2.2)
+
+### v2.2: Hayvancılık — çitli ağıl, üreme ve süt/yumurta
+
+- **Çitle çevrili ağıl**: çiftlik artık ahşap kazık-korkuluk çitle
+  çevrili geniş bir padok; hayvanlar çitin dışına çıkamaz, içeride
+  otlar ve dolanır
+- **Cinsiyet ve üreme**: hayvanların dişi/erkeği var; ağılda en az bir
+  yetişkin dişi + bir yetişkin erkek olunca düzenli aralıkla **yavru**
+  doğar (yavrular küçük çizilir, ~2 günde yetişkin olur)
+- **Süt ve yumurta**: yeni yenilenebilir besinler — yalnız **yetişkin
+  dişi** inek süt, tavuk yumurta verir; koyun yün (yetişkin), domuz et
+  sürüsüdür
+- **Kapasite ve kesim**: her ağılın sınırı **6**; sürü taşınca **en
+  yaşlı yetişkin** otomatik kesilir ve ete (+ deri) dönüşür
+- **Çiftlik paneli**: tür, ürün, sürü sayısı `N/6` ve `♀/♂/🍼` dökümü;
+  hayvan panelinde cinsiyet (♀/♂) ve yavru/yetişkin rozeti
+- Yeni hedef: "Çiftlikte 5 hayvanlık sürü kur"; `hile.ciftlik("cow", 4)`
+  ile hızlı test
 
 ### v2.1: Hedef zinciri — oyun içi tutorial
 
