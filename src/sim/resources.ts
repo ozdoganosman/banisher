@@ -5,13 +5,13 @@ export type ItemType =
   | "wood" | "log" | "stone"
   | "berry" | "mushroom" | "fish"
   | "meat" | "leather" | "wool"
-  | "milk" | "egg";
+  | "milk" | "egg" | "grain";
 
 export const ITEM_TYPES: ItemType[] = [
   "wood", "log", "stone",
   "berry", "mushroom", "fish",
   "meat", "leather", "wool",
-  "milk", "egg",
+  "milk", "egg", "grain",
 ];
 
 export const ITEM_INFO: Record<ItemType, { name: string; color: string }> = {
@@ -26,16 +26,18 @@ export const ITEM_INFO: Record<ItemType, { name: string; color: string }> = {
   wool: { name: "yün", color: "#e8e4da" },
   milk: { name: "süt", color: "#eef0f0" },
   egg: { name: "yumurta", color: "#f0e0b0" },
+  grain: { name: "tahıl", color: "#e6c34d" },
 };
 
 // Yenebilirler (tüketim önceliği sırasıyla)
 export const FOOD_TYPES: ItemType[] = [
-  "berry", "mushroom", "fish", "meat", "milk", "egg",
+  "berry", "mushroom", "grain", "fish", "meat", "milk", "egg",
 ];
 
 export const FOOD_NUTRITION: Record<ItemType, number> = {
   berry: 8, // yemiş: bol bulunur ama az doyurur (+%20)
   mushroom: 12, // mantar yemişten daha besleyicidir (+%20)
+  grain: 16, // tahıl: tarımın doyurucu temel azığı
   fish: 15,
   meat: 14, // av eti doyurucudur
   milk: 9, // çiftlikten yenilenebilir besin

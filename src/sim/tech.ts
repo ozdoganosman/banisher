@@ -19,6 +19,7 @@ export type TechId =
   | "leatherworking"
   | "aidiyet"
   | "ciftlik"
+  | "tarim"
   | "hirs";
 
 export interface Tech {
@@ -164,6 +165,17 @@ export const TECHS: Tech[] = [
     gridY: 6,
   },
   {
+    id: "tarim",
+    name: "Tarım",
+    cost: 24,
+    desc: "Tarla kurulur: ekinciler tohum eker, ekin mevsiminde olgunlaşır, hasatta tahıl verir (kışın tarla durur)",
+    icon: "🌾",
+    unlocks: "Tarla + tahıl hasadı",
+    prereq: ["gathering"],
+    gridX: 3,
+    gridY: 6,
+  },
+  {
     id: "hirs",
     name: "Hırs",
     cost: 16,
@@ -221,7 +233,7 @@ export function prereqsMet(tech: Tech): boolean {
 
 // Maliyet katlamalı artar: her araştırılan, sonrakileri pahalılaştırır.
 // Böylece kabile geliştikçe ilerleme giderek daha büyük bir yatırım ister.
-const COST_ESCALATION = 1.22;
+const COST_ESCALATION = 1.27;
 export function currentCost(tech: Tech): number {
   return Math.round(tech.cost * Math.pow(COST_ESCALATION, purchased.size));
 }

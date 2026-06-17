@@ -52,8 +52,8 @@ Mantaroloji → mantar tanıma, Toplayıcılık → toplayıcı kulübesi,
 Motor Beceriler (+%20 hız), Bilişsel Beceriler → bakımevi ve eğitim,
 Alet Atölyesi → balta, Kan → mızrak ve avcı kulübesi, Deri İşleme →
 giysi (kış koruması), Aidiyet → köpek, Çiftlik → evcilleştirme çiftliği,
-Hırs → taş yol. Sonraki çağlar: dil, pişirme, tarım, çömlek, maden ve
-yazıya doğru ilerlenecek.
+Tarım → tarla ve tahıl hasadı (Neolitik), Hırs → taş yol. Sonraki çağlar:
+dil, pişirme, çömlek, maden ve yazıya doğru ilerlenecek.
 
 **Zaman ve yaşam döngüsü.** Takvimde **1 gün = 1 mevsim, 4 gün = 1 yıl**;
 tarih "İlkbahar/3" gibi mevsim/yıl olarak akar ve yıl her ilkbaharda artar.
@@ -120,7 +120,18 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v3.5)
+## Şu anki özellikler (v3.6)
+
+### v3.6: Neolitik — Tarım + teknoloji biraz daha yavaş
+
+- **🌾 Tarım (Neolitik çağ açıldı)**: yeni **Tarım** araştırması (Toplayıcılık
+  sonrası) **Tarla** binasını açar. Ekinciler tarlanın çevresine tohum eker;
+  ekin mevsiminde olgunlaşır, **kışın büyüme durur** ("tarla durur"), olgun
+  ekin biçilince **tahıl** verir — oyunun en doyurucu temel azığı. Hasat
+  edilen kare sürülmüş tarlaya döner ve yeniden ekilir. Tarla otomatik inşaat
+  ve işçi dağıtımına dahildir (eller serbest çalışır)
+- **Teknoloji biraz daha yavaşlatıldı**: ayin verimi çarpanı 0.7→0.55, her
+  ayin 10→13 sn, araştırma maliyeti daha dik katlanır (×1.22→×1.27)
 
 ### v3.5: Sıkışma düzeltmesi + teknoloji temposu
 
@@ -663,7 +674,10 @@ genişleyecek. Her çağ yeni araştırmalar, binalar ve davranışlar getirir.
 
 ### 🌾 Neolitik — Tarım Devrimi
 
-- [ ] **Tarım**: tarla, tohum ekme, mevsimlik hasat (kışın tarla durur)
+- [x] **Tarım**: Tarım araştırması Tarla binasını açar. Ekinciler çevreye
+      tohum eker; ekin mevsiminde olgunlaşır (kışın büyüme durur — "tarla
+      durur"), olgun ekin biçilince **tahıl** verir (en doyurucu temel azık).
+      Hasat edilen kare sürülmüş tarlaya döner ve yeniden ekilir.
 - [ ] **Hayvan evcilleştirme**: yabani hayvan yakalayıp çiftliğe katma
 - [ ] **Çanak çömlek**: yiyecek saklama — gıda bozulması mekaniğiyle birlikte
 - [ ] **Dokumacılık**: yünden kıyafet (deri işlemenin gelişmişi)

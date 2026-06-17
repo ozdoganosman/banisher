@@ -163,6 +163,10 @@ export class Renderer {
       case Tile.Dirt: colors = DIRT_BY_SEASON[s]; break;
       case Tile.Stone: colors = STONE_BY_SEASON[s]; break;
       case Tile.Road: colors = ["#9a9690", "#928e88", "#a29e98"]; break; // döşeli taş
+      case Tile.Farmland:
+      case Tile.Crop:
+      case Tile.CropRipe:
+        colors = ["#7a5631", "#6e4d2b", "#835e38"]; break; // sürülmüş tarla toprağı
       default: colors = GRASS_BY_SEASON[s]; break; // çimen ve üstündekiler
     }
     const sub = 4;
@@ -210,6 +214,9 @@ export class Renderer {
     else if (t === Tile.Bush || t === Tile.NutBush) this.paintBush(px, py, x, y, t);
     else if (t === Tile.Mushroom) this.paintMushroom(px, py, x, y);
     else if (t === Tile.Sapling) this.paintSapling(px, py, x, y);
+    else if (t === Tile.Farmland) this.paintFarmland(px, py, x, y);
+    else if (t === Tile.Crop) this.paintCrop(px, py, x, y);
+    else if (t === Tile.CropRipe) this.paintCropRipe(px, py, x, y);
     else if (t === Tile.Pebbles) this.paintPebbles(px, py, x, y);
     else if (t === Tile.AppleTree || t === Tile.OrangeTree || t === Tile.TangerineTree) {
       this.paintTree(px, py, x, y);
@@ -250,6 +257,9 @@ export class Renderer {
       case Tile.Pebbles: color = "#8e9296"; break;
       case Tile.Bush: color = BUSH_BY_SEASON[s][1]; break;
       case Tile.Road: color = "#9a9690"; break;
+      case Tile.Farmland: color = "#7a5631"; break;
+      case Tile.Crop: color = "#6cae3e"; break;
+      case Tile.CropRipe: color = "#e6c34d"; break;
       default: color = GRASS_BY_SEASON[s][0]; break;
     }
     this.mctx.fillStyle = color;
@@ -494,6 +504,53 @@ export class Renderer {
     c.fillStyle = "rgba(255,255,255,0.5)";
     const hx = cx - 3 + Math.floor(hash2(x, y, 58) * 6);
     c.fillRect(hx, cy - 2, 1, 1);
+  }
+
+  // Sürülmüş boş tarla: koyu yatay çizgiler (sürgü/pulluk izleri) + toprak benekleri
+  private paintFarmland(px: number, py: number, x: number, y: number): void {
+    const c = this.tctx;
+    c.fillStyle = "rgba(48, 33, 18, 0.4)";
+    for (let row = 2; row < 16; row += 4) c.fillRect(px, py + row, 16, 1);
+    c.fillStyle = "rgba(150, 115, 70, 0.5)";
+    for (let k = 0; k < 3; k++) {
+      const gx = px + Math.floor(hash2(x * 5 + k, y, 201) * 15);
+      const gy = py + 1 + Math.floor(hash2(x, y * 5 + k, 202) * 13);
+      c.fillRect(gx, gy, 1, 1);
+    }
+  }
+
+  // Büyüyen ekin: sürülmüş zemin üzerinde sıralı küçük yeşil filizler (kışın soluk)
+  private paintCrop(px: number, py: number, x: number, y: number): void {
+    this.paintFarmland(px, py, x, y);
+    const c = this.tctx;
+    c.fillStyle = season() === 3 ? "#7a8a5a" : "#6cae3e";
+    for (let row = 0; row < 2; row++) {
+      const ry = py + 7 + row * 6;
+      for (let col = 0; col < 4; col++) {
+        const bx = px + 2 + col * 4 + Math.floor(hash2(x + col, y + row, 211) * 2);
+        const h = 2 + Math.floor(hash2(x * 3 + col, y * 3 + row, 212) * 2);
+        c.fillRect(bx, ry - h, 1, h);
+      }
+    }
+  }
+
+  // Olgun ekin: altın saplar ve başlarında dolgun başaklar
+  private paintCropRipe(px: number, py: number, x: number, y: number): void {
+    this.paintFarmland(px, py, x, y);
+    const c = this.tctx;
+    for (let row = 0; row < 2; row++) {
+      const ry = py + 8 + row * 6;
+      for (let col = 0; col < 4; col++) {
+        const bx = px + 2 + col * 4 + Math.floor(hash2(x + col, y + row, 221) * 2);
+        const h = 4 + Math.floor(hash2(x * 3 + col, y * 3 + row, 222) * 2);
+        c.fillStyle = "#b9942f";
+        c.fillRect(bx, ry - h, 1, h);
+        c.fillStyle = "#e6c34d";
+        c.fillRect(bx - 1, ry - h - 1, 3, 2);
+        c.fillStyle = "rgba(255,240,180,0.7)";
+        c.fillRect(bx, ry - h - 1, 1, 1);
+      }
+    }
   }
 
   render(
@@ -769,6 +826,7 @@ export class Renderer {
       const isWorkHut =
         ghost.type === BuildingType.Woodcutter ||
         ghost.type === BuildingType.Gatherer ||
+        ghost.type === BuildingType.Field ||
         ghost.type === BuildingType.Fisher;
       const pr = lr ?? (isWorkHut ? AUTO_MARK_RADIUS * TILE_SIZE : 0);
       if (pr) {
@@ -884,6 +942,7 @@ export class Renderer {
       case BuildingType.ToolWorkshop: this.drawToolWorkshop(ctx, px, py); break;
       case BuildingType.HunterLodge: this.drawHunterLodge(ctx, px, py); break;
       case BuildingType.Splitter: this.drawSplitter(ctx, px, py); break;
+      case BuildingType.Field: this.drawField(ctx, px, py); break;
     }
   }
 
@@ -1619,6 +1678,54 @@ export class Renderer {
     }
   }
 
+  // Tarla binası: altın saman çatılı küçük ambar + yana yaslı buğday demeti
+  private drawField(ctx: CanvasRenderingContext2D, px: number, py: number): void {
+    this.baseShadow(ctx, px + 15, py + 29, 13);
+    // ahşap gövde
+    ctx.fillStyle = "#9a7038";
+    ctx.fillRect(px + 5, py + 14, 17, 15);
+    ctx.fillStyle = "#85602f";
+    for (let i = 0; i < 3; i++) ctx.fillRect(px + 5, py + 18 + i * 4, 17, 1);
+    this.outlineRect(ctx, px + 5, py + 14, 17, 15);
+    // saman/altın çatı
+    ctx.fillStyle = "#e0b84a";
+    ctx.beginPath();
+    ctx.moveTo(px + 3, py + 14);
+    ctx.lineTo(px + 13.5, py + 5);
+    ctx.lineTo(px + 24, py + 14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#c79a36";
+    ctx.beginPath();
+    ctx.moveTo(px + 3, py + 14);
+    ctx.lineTo(px + 13.5, py + 9.5);
+    ctx.lineTo(px + 24, py + 14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 3, py + 14);
+    ctx.lineTo(px + 13.5, py + 5);
+    ctx.lineTo(px + 24, py + 14);
+    ctx.stroke();
+    // kapı
+    ctx.fillStyle = "#4a3420";
+    ctx.fillRect(px + 11, py + 21, 5, 8);
+    this.outlineRect(ctx, px + 11, py + 21, 5, 8);
+    // yana yaslı buğday demeti
+    ctx.strokeStyle = "#caa12e";
+    ctx.lineWidth = 1;
+    for (let k = 0; k < 4; k++) {
+      ctx.beginPath();
+      ctx.moveTo(px + 25 + k, py + 29);
+      ctx.lineTo(px + 24 + k * 1.3, py + 19);
+      ctx.stroke();
+      ctx.fillStyle = "#e6c34d";
+      ctx.fillRect(px + 23.5 + k * 1.3, py + 17.5, 2, 2);
+    }
+  }
+
   private drawToolWorkshop(ctx: CanvasRenderingContext2D, px: number, py: number): void {
     this.baseShadow(ctx, px + 15, py + 29, 13);
     ctx.fillStyle = "#6b4a2b";
@@ -2254,6 +2361,19 @@ export function drawVillagerJobAccessories(
       // Alın bandı
       ctx.fillStyle = "#7f8c8d";
       ctx.fillRect(x - 2 * s, y - 13.2 * s, 4 * s, 0.9 * s);
+    }
+
+    // 7. Ekinci (Tarla) — geniş hasır şapka + zeytin yeşili önlük
+    else if (type === 16) { // BuildingType.Field
+      // geniş kenarlı hasır şapka
+      ctx.fillStyle = "#d9b24c";
+      ctx.fillRect(x - 1.6 * s, y - 14.8 * s, 3.2 * s, 1.8 * s); // kubbe
+      ctx.fillRect(x - 4 * s, y - 13.2 * s, 8 * s, 0.8 * s); // geniş siperlik
+      ctx.fillStyle = "#9c7a2e";
+      ctx.fillRect(x - 1.6 * s, y - 13.7 * s, 3.2 * s, 0.6 * s); // şapka bandı
+      // zeytin yeşili iş önlüğü
+      ctx.fillStyle = "#6b7a2e";
+      ctx.fillRect(x - 0.9 * s, y - 8 * s, 1.8 * s, 3 * s);
     }
   }
   

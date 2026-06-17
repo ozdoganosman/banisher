@@ -78,10 +78,11 @@ const TEND_TIME = 2.5;
 const TAME_TIME = 6; // evcilleştirme: sabırlı yaklaşma
 const PLANT_TIME = 2;
 const FOOD_TARGET = 14; // toplayıcının alanında hedef çalı/mantar/yemiş
+const CROP_TARGET = 16; // tarlada en çok bu kadar etkin ekin tutulur (derli toplu öbek)
 
 // Toplanabilir yemeklerin verimi (eşya başına)
 const GATHER_YIELD: Partial<Record<ItemType, number>> = {
-  berry: 5, mushroom: 2,
+  berry: 5, mushroom: 2, grain: 5,
 };
 
 // Teknolojiye göre değişen değerler
@@ -169,7 +170,7 @@ type VillagerState =
 
 type Job =
   | { kind: "chop"; tile: number; auto?: boolean }
-  | { kind: "gather"; tile: number; item: ItemType; auto?: boolean }
+  | { kind: "gather"; tile: number; item: ItemType; auto?: boolean; crop?: boolean }
   | { kind: "mine"; tile: number; auto?: boolean }
   | { kind: "fish"; tile: number }
   | { kind: "plant"; tile: number; target: Tile }
@@ -463,6 +464,7 @@ export class Villager {
           : "Avlanıyor";
       case "gathering": {
         if (this.job?.kind !== "gather") return "Topluyor";
+        if (this.job.crop) return "Ekin biçiyor";
         const n = ITEM_INFO[this.job.item].name;
         return `${n[0].toUpperCase()}${n.slice(1)} topluyor`;
       }
@@ -473,6 +475,7 @@ export class Villager {
       case "fishing":
         return "Balık tutuyor";
       case "planting":
+        if (this.job?.kind === "plant" && this.job.target === Tile.Crop) return "Tohum ekiyor";
         return this.job?.kind === "plant" && this.job.target === Tile.Tree
           ? "Fidan dikiyor" : "Ekim yapıyor";
       case "building":
@@ -1124,6 +1127,46 @@ export class Villager {
               this.job = { kind: "gather", tile: i, item: "berry" };
             }
           );
+        }
+      } else if (hut.type === BuildingType.Field && !bagFull) {
+        // Tarla: önce olgun ekini hasat et; kış değilse boş yere tohum ek.
+        // (Hasat yıl boyu; ekim ve büyüme kışın durur — "tarla durur".)
+        const ripe = world.findRipeCrop(hx, hy, AUTO_MARK_RADIUS, this.tileX, this.tileY);
+        if (ripe && litTile(ripe.x, ripe.y) && !isFull("grain")) {
+          candidates.push({
+            dist: Math.abs(ripe.x - this.tileX) + Math.abs(ripe.y - this.tileY),
+            start: () => {
+              const path = findPath(world, this.tileX, this.tileY, ripe.x, ripe.y);
+              if (!path) return false;
+              const i = world.index(ripe.x, ripe.y);
+              world.claimedBushes.add(i);
+              this.job = { kind: "gather", tile: i, item: "grain", crop: true };
+              this.takeFoodForWork();
+              this.startPath(path);
+              return true;
+            },
+          });
+        } else if (
+          season() !== 3 &&
+          !isFull("grain") &&
+          world.cropCountNear(hx, hy, AUTO_MARK_RADIUS) < CROP_TARGET
+        ) {
+          const spot = world.findSowSpot(hx, hy, AUTO_MARK_RADIUS);
+          if (spot && litTile(spot.x, spot.y)) {
+            candidates.push({
+              dist: Math.abs(spot.x - this.tileX) + Math.abs(spot.y - this.tileY),
+              start: () => {
+                const path = findPath(world, this.tileX, this.tileY, spot.x, spot.y);
+                if (!path) return false;
+                const i = world.index(spot.x, spot.y);
+                world.claimedPlants.add(i);
+                this.job = { kind: "plant", tile: i, target: Tile.Crop };
+                this.takeFoodForWork();
+                this.startPath(path);
+                return true;
+              },
+            });
+          }
         }
       } else if (hut.type === BuildingType.ToolWorkshop) {
         // Alet ustası: bekleyen sipariş ve hammadde varsa tezgâha geçer
@@ -1853,6 +1896,8 @@ export class Villager {
       }
       case "gather": {
         const p = tileOf(this.job.tile);
+        if (this.job.crop)
+          return world.get(p.x, p.y) === Tile.CropRipe && !isFull(this.job.item) && tileLit(this.job.tile);
         const exists = this.job.auto
           ? foodItemOf(world.get(p.x, p.y)) === this.job.item
           : world.markedBushes.has(this.job.tile);
@@ -1871,7 +1916,11 @@ export class Villager {
       case "plant": {
         const px = this.job.tile % world.width;
         const py = Math.floor(this.job.tile / world.width);
-        return world.get(px, py) === Tile.Grass && tileLit(this.job.tile);
+        const t = world.get(px, py);
+        // ekin tohumu boş tarlaya da ekilir; fidan yalnız çimene
+        if (this.job.target === Tile.Crop)
+          return (t === Tile.Grass || t === Tile.Farmland) && tileLit(this.job.tile);
+        return t === Tile.Grass && tileLit(this.job.tile);
       }
       case "tend":
         return !this.job.animal.dead;
@@ -2459,10 +2508,14 @@ export class Villager {
 
   private gather(dt: number, world: World): void {
     const job = this.job;
+    const gx = job && job.kind === "gather" ? job.tile % world.width : 0;
+    const gy = job && job.kind === "gather" ? Math.floor(job.tile / world.width) : 0;
     const gatherable =
       job?.kind === "gather" &&
-      (job.auto
-        ? foodItemOf(world.get(job.tile % world.width, Math.floor(job.tile / world.width))) === job.item
+      (job.crop
+        ? world.get(gx, gy) === Tile.CropRipe
+        : job.auto
+        ? foodItemOf(world.get(gx, gy)) === job.item
         : world.markedBushes.has(job.tile));
     if (!job || job.kind !== "gather" || !gatherable) {
       this.releaseJob(world);
@@ -2471,10 +2524,11 @@ export class Villager {
     }
     const c = this.jobTileCenter(world, job.tile);
     this.faceTowards(c.x);
-    this.walkPhase += dt * 7; // yavaş eğilip toplama
+    this.walkPhase += dt * 7; // yavaş eğilip toplama (ekinde orak sallar)
     this.timer -= dt;
     if (this.timer <= 0) {
-      world.harvestFood(job.tile % world.width, Math.floor(job.tile / world.width));
+      if (job.crop) world.harvestCrop(gx, gy);
+      else world.harvestFood(gx, gy);
       const amount = (GATHER_YIELD[job.item] ?? 3) + forageBonus();
       this.gainItem(job.item, amount, c.x, c.y - 8);
       this.job = null;
@@ -2612,14 +2666,13 @@ export class Villager {
       this.toIdle();
       return;
     }
-    this.walkPhase += dt * 7; // eğilip dikme
+    this.walkPhase += dt * 7; // eğilip dikme/tohum saçma
     this.timer -= dt;
     if (this.timer <= 0) {
-      world.plantSapling(
-        job.tile % world.width,
-        Math.floor(job.tile / world.width),
-        job.target
-      );
+      const px = job.tile % world.width;
+      const py = Math.floor(job.tile / world.width);
+      if (job.target === Tile.Crop) world.sowCrop(px, py);
+      else world.plantSapling(px, py, job.target);
       this.job = null;
       this.toIdle();
     }

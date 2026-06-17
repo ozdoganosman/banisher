@@ -541,6 +541,7 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.Depot,
   BuildingType.Woodcutter,
   BuildingType.Gatherer,
+  BuildingType.Field,
   BuildingType.ToolWorkshop,
   BuildingType.Splitter,
   BuildingType.Road,
@@ -567,6 +568,7 @@ const BUILDING_ICON: Partial<Record<BuildingType, string>> = {
   [BuildingType.Road]: "🧱",
   [BuildingType.Fisher]: "🎣",
   [BuildingType.Barn]: "🐄",
+  [BuildingType.Field]: "🌾",
   [BuildingType.HunterLodge]: "🏹",
   [BuildingType.Temple]: "🛕",
   [BuildingType.Cafeteria]: "🍲",
@@ -584,6 +586,7 @@ const BUILDING_TINT: Partial<Record<BuildingType, string>> = {
   [BuildingType.Temple]: "#9a6cc0",
   [BuildingType.Nursery]: "#c07ab0",
   [BuildingType.Cafeteria]: "#c0843f",
+  [BuildingType.Field]: "#caa83c",
   [BuildingType.Road]: "#8a8e96",
 };
 

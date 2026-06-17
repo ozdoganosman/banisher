@@ -76,7 +76,7 @@ import {
   ROLE_NAMES,
   isBuildingUnlocked,
 } from "./sim/buildings";
-import { dateString, dayFrac, gameTime, season, totalDays, tuning, updateTime } from "./sim/time";
+import { dateString, dayFrac, gameTime, regrowFactor, season, totalDays, tuning, updateTime } from "./sim/time";
 import { initAudio, isMuted, setFireProximity, setListener, setMuted, sfxResearch } from "./engine/sound";
 import { addFloater, burst } from "./render/effects";
 import {
@@ -1503,6 +1503,7 @@ function autoToolsTick(): void {
 function staffPriority(b: Building): number {
   switch (b.type) {
     case BuildingType.Gatherer:
+    case BuildingType.Field:
     case BuildingType.Fisher: return 0; // yiyecek üreten binalar önce
     case BuildingType.HunterLodge: return 1;
     case BuildingType.Nursery: return 2;
@@ -1592,6 +1593,8 @@ function autoBuildTick(): void {
   if (bCount(BuildingType.Temple) < Math.min(2, 1 + Math.floor(pop / 20))) wishlist.push(BuildingType.Temple);
   // 3) yemek: toplayıcı (kilidi açıksa), nüfusa göre 1-2 tane
   if (isBuildingUnlocked(BuildingType.Gatherer) && bCount(BuildingType.Gatherer) < Math.min(2, Math.ceil(pop / 8))) wishlist.push(BuildingType.Gatherer);
+  // 3b) tarla (Tarım açıksa): tahıl üreten yiyecek kaynağı, nüfusa göre 1-2 tane
+  if (isBuildingUnlocked(BuildingType.Field) && bCount(BuildingType.Field) < Math.min(2, Math.ceil(pop / 12))) wishlist.push(BuildingType.Field);
   // 4) balıkçı (su kenarı)
   if (isBuildingUnlocked(BuildingType.Fisher) && bCount(BuildingType.Fisher) < 1) wishlist.push(BuildingType.Fisher);
   // 5) atölye
@@ -2321,7 +2324,8 @@ function tickRandomEvents(dt: number): void {
 
 function step(dt: number) {
   updateTime(dt);
-  world.update(dt);
+  // ekinler mevsime göre büyür (kışın regrowFactor 0 → tarla durur)
+  world.update(dt, regrowFactor());
   updateEffects(dt);
   checkStorageFull();
   checkMilestones();
