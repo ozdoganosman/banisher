@@ -1541,8 +1541,8 @@ function autoBuildTick(): void {
   const wishlist: BuildingType[] = [];
   // 1) konut: nüfus için yeterli yatak yoksa
   if (pop > bCount(BuildingType.House) * HOUSE_CAPACITY) wishlist.push(BuildingType.House);
-  // 2) tapınak: bilgi/araştırma motoru
-  if (bCount(BuildingType.Temple) < 1) wishlist.push(BuildingType.Temple);
+  // 2) tapınak: bilgi/araştırma motoru — koloni büyüdükçe daha çok tapınak
+  if (bCount(BuildingType.Temple) < Math.min(3, 1 + Math.floor(pop / 14))) wishlist.push(BuildingType.Temple);
   // 3) yemek: toplayıcı (kilidi açıksa), nüfusa göre 1-2 tane
   if (isBuildingUnlocked(BuildingType.Gatherer) && bCount(BuildingType.Gatherer) < Math.min(2, Math.ceil(pop / 8))) wishlist.push(BuildingType.Gatherer);
   // 4) balıkçı (su kenarı)
@@ -1920,7 +1920,7 @@ function schedulePleading(dt: number): void {
   if (candidates.length === 0) return;
   const v = candidates[Math.floor(Math.random() * candidates.length)];
   v.pleadingTtl = 25;
-  addMessage(`✋ ${v.fullName} sana yakarıyor — üzerine tıklayıp konuş!`);
+  addMessage(`📨 ${v.fullName} sana bir ileti gönderiyor — üzerine tıklayıp yanıtla!`, "important");
 }
 
 // Mikrofonu aç, ses etkinliği yeterliyse köylüyü teskin et.

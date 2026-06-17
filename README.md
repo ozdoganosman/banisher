@@ -120,7 +120,19 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v3.2)
+## Şu anki özellikler (v3.3)
+
+### v3.3: Bilgi seli + "ileti"
+
+- **Araştırma puanı seli**: ayin verimi rahip başına çok daha yüksek
+  (≈ rahip×2/ayin) ve ayin döngüsü hızlandı (8sn ara / 7sn ayin); tapınak
+  3 rahibe çıktı ve koloni büyüdükçe 3 tapınağa dek otomatik kurulur —
+  3 rahiple ~1.5 bilgi/sn (öncekinin ~16 katı)
+- **"Yakarış" yerine "İleti"**: köylüler artık tanrıya **ileti gönderir**;
+  tıklayıp mikrofonla **yanıtlarsın** (Merak araştırması). Sen dışarıdan
+  yönlendiren tanrısın
+
+### v3.2: Kendi kendini kuran koloni
 
 ### v3.2: Kendi kendini kuran koloni
 

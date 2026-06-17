@@ -1015,7 +1015,7 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
     ctx.fillStyle = "#ffe296";
     ctx.font = "bold 12px monospace";
     ctx.textAlign = "center";
-    ctx.fillText("🎤 Konuş ve teskin et", x + w / 2, r.y + 12);
+    ctx.fillText("🎤 İletiyi yanıtla", x + w / 2, r.y + 12);
     ctx.textAlign = "left";
   }
 }

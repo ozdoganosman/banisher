@@ -88,8 +88,8 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     cost: 20,
     buildTime: 12,
     size: 2,
-    maxWorkers: 2,
-    desc: "2 rahip istihdam eder; tapınarak bilgi üretirler",
+    maxWorkers: 3,
+    desc: "3 rahibe dek istihdam eder; tapınarak bolca bilgi üretirler",
   },
   [BuildingType.Cafeteria]: {
     name: "Yemekhane",
@@ -233,15 +233,15 @@ export function isLit(buildings: Building[], wx: number, wy: number): boolean {
   return false;
 }
 
-export const WORSHIP_INTERVAL = 20; // saniye: tapınak yeni ayine bu arayla izin verir
-export const WORSHIP_TIME = 15;
+export const WORSHIP_INTERVAL = 8; // saniye: tapınak yeni ayine bu arayla izin verir
+export const WORSHIP_TIME = 7;
 export const KNOWLEDGE_PER_WORSHIP = 1;
 
-// Ayin verimi rahip sayısıyla üstel artar (toplam birikim ~ rahip²/3).
-// main her saniye rahip sayısına göre yield'i günceller; ayin biten köylü bunu okur.
+// Ayin verimi rahip sayısıyla güçlü biçimde artar (toplam birikim ~ rahip² mertebesinde,
+// hızlı ayin döngüsüyle birleşince bilgi bolca akar). main her saniye günceller.
 export const worshipState = { yield: 1 };
 export function worshipYieldFor(priests: number): number {
-  return Math.max(1, Math.round(priests / 3));
+  return Math.max(3, Math.round(priests * 2));
 }
 
 // Köylülerin topladıklarını teslim edebileceği bina mı?

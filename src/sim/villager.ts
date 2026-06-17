@@ -396,7 +396,7 @@ export class Villager {
   // Profil panelinde gösterilen anlık durum
   get statusText(): string {
     if (this.shockTtl > 0) return "Şokta — Tanrı onunla konuştu!";
-    if (this.pleadingTtl > 0) return "Sana yakarıyor ✋ (tıkla ve konuş)";
+    if (this.pleadingTtl > 0) return "Sana ileti gönderiyor 📨 (tıkla ve yanıtla)";
     if (this.baby) {
       if (this.nurseryCovered) return `Bebek (bakımevinde)`;
       if (this.mother && !this.mother.dead) return `Bebek (annesine muhtaç)`;
