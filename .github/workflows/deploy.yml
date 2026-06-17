@@ -1,7 +1,8 @@
 name: GitHub Pages'e Dağıt
 
-# main'e (ya da bu geliştirme dalına) her push'ta build alıp Pages'e yayınlar.
-# Pages'i etkinleştir: Settings -> Pages -> Source: "GitHub Actions".
+# Her push'ta build alınır (geliştirme dallarında da kod doğrulanır); Pages'e
+# yayınlama yalnız main'de yapılır (dev dalları tek Pages ortamına yarışıp
+# deploy'u patlatmasın). Pages: Settings -> Pages -> Source: "GitHub Actions".
 on:
   push:
     branches: [main, "claude/**"]
@@ -34,6 +35,8 @@ jobs:
 
   deploy:
     needs: build
+    # yalnız main yayınlanır; dev dallarında deploy atlanır (CI yeşil kalır)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

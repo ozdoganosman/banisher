@@ -19,6 +19,7 @@ export type TechId =
   | "leatherworking"
   | "aidiyet"
   | "ciftlik"
+  | "tarim"
   | "hirs";
 
 export interface Tech {
@@ -90,9 +91,9 @@ export const TECHS: Tech[] = [
     id: "merak",
     name: "Merak",
     cost: 16,
-    desc: "İnsanlar ara ara sana yakarır; tıklayıp mikrofonla konuş: şok olur, 2 gün boyunca morali çok yükselir",
+    desc: "İnsanlar ara ara sana ileti gönderir; tıklayıp mikrofonla yanıtla: şok olur, 2 gün boyunca morali çok yükselir",
     icon: "💡",
-    unlocks: "Yakarış: mikrofonla teskin",
+    unlocks: "İleti: mikrofonla yanıt",
     prereq: ["korku"],
     gridX: 2,
     gridY: 4,
@@ -164,6 +165,17 @@ export const TECHS: Tech[] = [
     gridY: 6,
   },
   {
+    id: "tarim",
+    name: "Tarım",
+    cost: 24,
+    desc: "Tarla kurulur: ekinciler tohum eker, ekin mevsiminde olgunlaşır, hasatta tahıl verir (kışın tarla durur)",
+    icon: "🌾",
+    unlocks: "Tarla + tahıl hasadı",
+    prereq: ["gathering"],
+    gridX: 3,
+    gridY: 6,
+  },
+  {
     id: "hirs",
     name: "Hırs",
     cost: 16,
@@ -219,6 +231,23 @@ export function prereqsMet(tech: Tech): boolean {
   return !tech.prereq || tech.prereq.every((p) => purchased.has(p));
 }
 
+// Maliyet katlamalı artar: her araştırılan, sonrakileri pahalılaştırır.
+// Böylece kabile geliştikçe ilerleme giderek daha büyük bir yatırım ister.
+const COST_ESCALATION = 1.27;
+export function currentCost(tech: Tech): number {
+  return Math.round(tech.cost * Math.pow(COST_ESCALATION, purchased.size));
+}
+
+// Oto-araştırmanın sıradaki hedefi: ön koşulu sağlanmış, en ucuz alınmamış araştırma
+export function cheapestAvailable(): Tech | null {
+  let pick: Tech | null = null;
+  for (const t of TECHS) {
+    if (purchased.has(t.id) || !prereqsMet(t)) continue;
+    if (!pick || currentCost(t) < currentCost(pick)) pick = t;
+  }
+  return pick;
+}
+
 // Debug/hile: araştırmayı koşulsuz ve bedava aç
 export function grantTech(id: TechId): void {
   purchased.add(id);
@@ -237,9 +266,11 @@ export function restorePurchased(ids: TechId[]): void {
 // Araştırmayı satın al; başarılıysa true döner
 export function buyTech(id: TechId): boolean {
   const tech = TECHS.find((t) => t.id === id);
-  if (!tech || purchased.has(id) || resources.knowledge < tech.cost) return false;
+  if (!tech || purchased.has(id)) return false;
   if (!prereqsMet(tech)) return false;
-  resources.knowledge -= tech.cost;
+  const cost = currentCost(tech);
+  if (resources.knowledge < cost) return false;
+  resources.knowledge -= cost;
   purchased.add(id);
   return true;
 }

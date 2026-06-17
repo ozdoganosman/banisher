@@ -6,6 +6,7 @@ export const policy = {
   research: true, // bilgi yettikçe en ucuz uygun araştırma yapılır
   tools: true, // alet atölyesi balta/mızrak stoğunu düşükse kendiliğinden sipariş eder
   staff: true, // yeni/eksik kadrolu binalar boştaki işçilerle otomatik doldurulur
+  build: true, // koloni ihtiyaç duydukça binaları kendiliğinden diker
 };
 
 export type PolicyKey = keyof typeof policy;
@@ -15,4 +16,5 @@ export const POLICY_INFO: { key: PolicyKey; name: string; desc: string }[] = [
   { key: "research", name: "Otomatik araştırma", desc: "Bilgi yettikçe en ucuz uygun araştırma yapılır" },
   { key: "tools", name: "Otomatik alet siparişi", desc: "Balta/mızrak azaldığında atölyeye sipariş açılır" },
   { key: "staff", name: "Otomatik işçi dağıtımı", desc: "Kadrosu eksik binalar boştaki işçilerle doldurulur" },
+  { key: "build", name: "Otomatik inşaat", desc: "Koloni ihtiyaç duydukça ev/üretim binalarını kendiliğinden diker" },
 ];

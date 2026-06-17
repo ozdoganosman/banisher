@@ -20,6 +20,7 @@ export const enum BuildingType {
   HunterLodge = 13, // Avcı kulübesi: mızraklı avcılar en yakın hayvanları avlar
   Splitter = 14, // Kırıcı: odunu dala böler (1 odun -> 4 dal)
   Road = 15, // taş yol: yerleştirilince bina değil karo olur (1 taş)
+  Field = 16, // Tarla: ekinciler tohum eker, ekin olgunlaşınca tahıl hasat edilir
 }
 
 export interface BuildingDef {
@@ -88,8 +89,8 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     cost: 20,
     buildTime: 12,
     size: 2,
-    maxWorkers: 2,
-    desc: "2 rahip istihdam eder; tapınarak bilgi üretirler",
+    maxWorkers: 3,
+    desc: "3 rahibe dek istihdam eder; tapınarak bolca bilgi üretirler",
   },
   [BuildingType.Cafeteria]: {
     name: "Yemekhane",
@@ -156,6 +157,14 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     maxWorkers: 1,
     desc: "Kırıcı odunu dala böler: 1 odun -> 4 dal (stokta odun oldukça çalışır)",
   },
+  [BuildingType.Field]: {
+    name: "Tarla",
+    cost: 12,
+    buildTime: 9,
+    size: 2,
+    maxWorkers: 3,
+    desc: "3 ekinci: çevresine tohum eker; ekin olgunlaşınca tahıl hasat eder. Kışın tarla durur",
+  },
 };
 
 // Kırıcı dönüşümü
@@ -205,6 +214,7 @@ export const ROLE_NAMES: Partial<Record<BuildingType, string>> = {
   [BuildingType.Nursery]: "Bakıcı",
   [BuildingType.HunterLodge]: "Avcı",
   [BuildingType.Splitter]: "Kırıcı",
+  [BuildingType.Field]: "Ekinci",
 };
 
 // Işık kaynakları ve dünya-piksel cinsinden yarıçapları
@@ -233,15 +243,15 @@ export function isLit(buildings: Building[], wx: number, wy: number): boolean {
   return false;
 }
 
-export const WORSHIP_INTERVAL = 20; // saniye: tapınak yeni ayine bu arayla izin verir
-export const WORSHIP_TIME = 15;
+export const WORSHIP_INTERVAL = 14; // saniye: tapınak yeni ayine bu arayla izin verir
+export const WORSHIP_TIME = 13; // her ayin bu kadar sürer (uzadı: bilgi temposu yavaşladı)
 export const KNOWLEDGE_PER_WORSHIP = 1;
 
-// Ayin verimi rahip sayısıyla üstel artar (toplam birikim ~ rahip²/3).
-// main her saniye rahip sayısına göre yield'i günceller; ayin biten köylü bunu okur.
+// Ayin verimi rahip sayısıyla artar ama ölçülü: teknoloji çok hızlı gelişmesin.
+// main her saniye günceller. (Çarpan düşürüldü: ilerleme daha sabırlı.)
 export const worshipState = { yield: 1 };
 export function worshipYieldFor(priests: number): number {
-  return Math.max(1, Math.round(priests / 3));
+  return Math.max(1, Math.round(priests * 0.55));
 }
 
 // Köylülerin topladıklarını teslim edebileceği bina mı?
@@ -378,7 +388,9 @@ export function canPlace(world: World, tx: number, ty: number, size: number): bo
         t === Tile.Sapling ||
         t === Tile.AppleTree ||
         t === Tile.OrangeTree ||
-        t === Tile.TangerineTree
+        t === Tile.TangerineTree ||
+        t === Tile.Crop ||
+        t === Tile.CropRipe
       ) {
         return false;
       }
@@ -406,6 +418,7 @@ export function isBuildingUnlocked(type: BuildingType): boolean {
   if (type === BuildingType.HunterLodge) return hasTech("kan");
   if (type === BuildingType.Splitter) return hasTech("toolworkshop"); // odun keşfi
   if (type === BuildingType.Barn) return hasTech("ciftlik");
+  if (type === BuildingType.Field) return hasTech("tarim");
   if (type === BuildingType.Road) return hasTech("hirs");
   // Meşale artık ayrı bina değil: Doğa ile binalara takılır
   return false;

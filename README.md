@@ -52,8 +52,8 @@ Mantaroloji → mantar tanıma, Toplayıcılık → toplayıcı kulübesi,
 Motor Beceriler (+%20 hız), Bilişsel Beceriler → bakımevi ve eğitim,
 Alet Atölyesi → balta, Kan → mızrak ve avcı kulübesi, Deri İşleme →
 giysi (kış koruması), Aidiyet → köpek, Çiftlik → evcilleştirme çiftliği,
-Hırs → taş yol. Sonraki çağlar: dil, pişirme, tarım, çömlek, maden ve
-yazıya doğru ilerlenecek.
+Tarım → tarla ve tahıl hasadı (Neolitik), Hırs → taş yol. Sonraki çağlar:
+dil, pişirme, çömlek, maden ve yazıya doğru ilerlenecek.
 
 **Zaman ve yaşam döngüsü.** Takvimde **1 gün = 1 mevsim, 4 gün = 1 yıl**;
 tarih "İlkbahar/3" gibi mevsim/yıl olarak akar ve yıl her ilkbaharda artar.
@@ -120,7 +120,90 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.9)
+## Şu anki özellikler (v3.6)
+
+### v3.6: Neolitik — Tarım + teknoloji biraz daha yavaş
+
+- **🌾 Tarım (Neolitik çağ açıldı)**: yeni **Tarım** araştırması (Toplayıcılık
+  sonrası) **Tarla** binasını açar. Ekinciler tarlanın çevresine tohum eker;
+  ekin mevsiminde olgunlaşır, **kışın büyüme durur** ("tarla durur"), olgun
+  ekin biçilince **tahıl** verir — oyunun en doyurucu temel azığı. Hasat
+  edilen kare sürülmüş tarlaya döner ve yeniden ekilir. Tarla otomatik inşaat
+  ve işçi dağıtımına dahildir (eller serbest çalışır)
+- **Teknoloji biraz daha yavaşlatıldı**: ayin verimi çarpanı 0.7→0.55, her
+  ayin 10→13 sn, araştırma maliyeti daha dik katlanır (×1.22→×1.27)
+
+### v3.5: Sıkışma düzeltmesi + teknoloji temposu
+
+- **"Yapıya sıkışma" hatası giderildi**: otomatik inşaat artık binaların
+  çevresinde 1 karo yürüme koridoru bırakır (birbirine yapışmaz) ve köylünün
+  üstüne bina kurmaz; binadan çıkış en yakın yürünebilir kareye düşer
+- **Teknoloji oldukça yavaşlatıldı**: ayin verimi düşürüldü, ayin döngüsü
+  uzadı ve araştırma maliyeti daha dik katlanır (×1.22) — bilgi akar ama
+  ilerleme artık aceleci değil
+
+### v3.4: İlahî Güçler — dışarıdan yönlendiren tanrı
+
+### v3.4: İlahî Güçler — dışarıdan yönlendiren tanrı
+
+- **İnanç (faith)** kaynağı: tapınak ayinlerinden ve ileti yanıtlarından
+  birikir; üst bardaki ✨ sayaçta görünür
+- **İlahî Güçler paneli** (✨ düğmesi / Y tuşu): inanç harcayarak kolonyi
+  yönlendirirsin (her gücün maliyeti + bekleme süresi var):
+  - 🙏 **Peygamber Yolla**: bir köylü peygamber olur — çevresine moral
+    (ilham) yayar, hızlı çalışır, başında altın hale
+  - 📜 **Kehanet: Bilgelik**: 2 gün tapınak bilgisi iki katı
+  - 🌾 **Kehanet: Bereket**: 2 gün toplama + doğurganlık artar, çevreye
+    yemiş saçılır
+  - ✨ **Mucize: Şifa**: herkes anında iyileşir, hastalık geçer, moral artar
+  - 🛡️ **Mucize: Koruma Kalkanı**: 1 gün yırtıcılar saldıramaz
+- Vizyon: koloni kendi ihtiyaçlarını anlayıp kendini yönetir; sen
+  dışarıdan müdahale eder, kaderlerini şekillendirirsin
+
+### v3.3: Bilgi seli + "ileti"
+
+### v3.3: Bilgi seli + "ileti"
+
+- **Araştırma puanı seli**: ayin verimi rahip başına çok daha yüksek
+  (≈ rahip×2/ayin) ve ayin döngüsü hızlandı (8sn ara / 7sn ayin); tapınak
+  3 rahibe çıktı ve koloni büyüdükçe 3 tapınağa dek otomatik kurulur —
+  3 rahiple ~1.5 bilgi/sn (öncekinin ~16 katı)
+- **"Yakarış" yerine "İleti"**: köylüler artık tanrıya **ileti gönderir**;
+  tıklayıp mikrofonla **yanıtlarsın** (Merak araştırması). Sen dışarıdan
+  yönlendiren tanrısın
+
+### v3.2: Kendi kendini kuran koloni
+
+### v3.2: Kendi kendini kuran koloni
+
+- **Otomatik inşaat** (⚙ Otomasyon → Otomatik inşaat): koloni ihtiyaç
+  duydukça kampın yakınına uygun binayı (önce konut, sonra tapınak,
+  toplayıcı, balıkçı, atölye, avcı, bakımevi, depo, çiftlik) kendiliğinden
+  diker; aynı anda en çok 2 şantiye, dalı tamamen tüketmez
+- **İşçiler şantiyeleri kendiliğinden kurar**: ayrı "inşaatçı" atamaya
+  gerek yok — boştaki işçiler en yakın şantiyeyi inşa eder
+- **Katlamalı araştırma maliyeti**: her araştırma sonrakileri ~%16
+  pahalılaştırır (kabile geliştikçe ilerleme daha büyük yatırım ister)
+- **Sıradaki araştırma göstergesi**: oto-araştırma açıkken Teknoloji
+  düğmesi altında sıradaki araştırma, bilgi/ihtiyaç ve tahmini süre
+- **Çiftlik oto-evcilleştirme**: çiftçiler ağıl türüne dönüşecek yabanileri
+  görünce kendiliğinden evcilleştirir (ağıl dolu değilse)
+- Artık koloni büyük ölçüde kendini yönetiyor; sen yön verir, müdahale edersin
+
+### v3.0: Taş yalnız çakıldan + daha güçlü otomasyon
+
+### v3.0: Taş yalnız çakıldan + daha güçlü otomasyon
+
+- **Büyük taş blokları artık kırılamaz** (ileride maden çağında gelecek);
+  taş yalnızca yerdeki **çakıl** kümelerinden toplanır
+- **Çakıl bollaştı**: kayalık (toprak) kuşağında ve çimende çok daha sık
+  bulunur — taşın sürdürülebilir kaynağı çakıl madenleridir
+- **Daha güçlü otomatik işçi dağıtımı**: kadrosu eksik tüm binalar
+  (yiyecek → av → bakım → bilgi önceliğiyle) azami kadroya kadar
+  boştaki işçilerle doldurulur; nüfusa göre birkaç işçi toplama için
+  boşta kalır (elle yönetmek için ⚙ Otomasyon'dan kapat)
+
+### v2.9: Otomasyon (Politika) paneli
 
 ### v2.9: Otomasyon (Politika) paneli
 
@@ -591,7 +674,10 @@ genişleyecek. Her çağ yeni araştırmalar, binalar ve davranışlar getirir.
 
 ### 🌾 Neolitik — Tarım Devrimi
 
-- [ ] **Tarım**: tarla, tohum ekme, mevsimlik hasat (kışın tarla durur)
+- [x] **Tarım**: Tarım araştırması Tarla binasını açar. Ekinciler çevreye
+      tohum eker; ekin mevsiminde olgunlaşır (kışın büyüme durur — "tarla
+      durur"), olgun ekin biçilince **tahıl** verir (en doyurucu temel azık).
+      Hasat edilen kare sürülmüş tarlaya döner ve yeniden ekilir.
 - [ ] **Hayvan evcilleştirme**: yabani hayvan yakalayıp çiftliğe katma
 - [ ] **Çanak çömlek**: yiyecek saklama — gıda bozulması mekaniğiyle birlikte
 - [ ] **Dokumacılık**: yünden kıyafet (deri işlemenin gelişmişi)

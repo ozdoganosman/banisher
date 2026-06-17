@@ -4,6 +4,7 @@
 import { sfxHowl } from "../engine/sound";
 import { burst } from "../render/effects";
 import { addJournal } from "./journal";
+import { shieldActive } from "./divine";
 import { Tile, TILE_SIZE } from "../world/tiles";
 import { totalDays } from "./time";
 import type { World } from "../world/world";
@@ -265,7 +266,7 @@ export class Animal {
 
     // yırtıcı: görüş alanındaki en yakın insana saldırır
     // (evcilleştirme işaretlisi yemle sakinleştirilmiştir: saldırmaz)
-    if (this.def.predator && !this.tameMark && villagers && !this.dead) {
+    if (this.def.predator && !this.tameMark && !shieldActive() && villagers && !this.dead) {
       let prey: Villager | null = null;
       let preyD = PREDATOR_AGGRO_RANGE;
       for (const v of villagers) {

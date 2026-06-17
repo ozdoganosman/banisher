@@ -22,8 +22,9 @@ import {
 import { ANIMAL_DEFS, BARN_CAPACITY, TAME_TARGET, type Animal } from "../sim/animals";
 import { journal } from "../sim/journal";
 import { policy, POLICY_INFO, type PolicyKey } from "../sim/policy";
+import { DIVINE_POWERS, divineCooldown, type DivinePowerId } from "../sim/divine";
 import { currentGoal, type GoalCtx } from "../sim/goals";
-import { hasTech, prereqsMet, TECHS, type TechId, type Tech } from "../sim/tech";
+import { hasTech, prereqsMet, currentCost, cheapestAvailable, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
   darkness,
   dateString,
@@ -540,6 +541,7 @@ export const TOOLBAR_TYPES: BuildingType[] = [
   BuildingType.Depot,
   BuildingType.Woodcutter,
   BuildingType.Gatherer,
+  BuildingType.Field,
   BuildingType.ToolWorkshop,
   BuildingType.Splitter,
   BuildingType.Road,
@@ -566,6 +568,7 @@ const BUILDING_ICON: Partial<Record<BuildingType, string>> = {
   [BuildingType.Road]: "🧱",
   [BuildingType.Fisher]: "🎣",
   [BuildingType.Barn]: "🐄",
+  [BuildingType.Field]: "🌾",
   [BuildingType.HunterLodge]: "🏹",
   [BuildingType.Temple]: "🛕",
   [BuildingType.Cafeteria]: "🍲",
@@ -583,6 +586,7 @@ const BUILDING_TINT: Partial<Record<BuildingType, string>> = {
   [BuildingType.Temple]: "#9a6cc0",
   [BuildingType.Nursery]: "#c07ab0",
   [BuildingType.Cafeteria]: "#c0843f",
+  [BuildingType.Field]: "#caa83c",
   [BuildingType.Road]: "#8a8e96",
 };
 
@@ -686,7 +690,7 @@ export function drawMarkFilters(ctx: CanvasRenderingContext2D, current: MarkFilt
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   const visibleFilters = MARK_FILTERS.filter(
-    (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
+    (f) => f.id !== "stone" || hasTech("hardobjects")
   );
   const totalW = 64 + visibleFilters.reduce(
     (s, f) => s + ctx.measureText(f.label).width + 22 + 14, 0
@@ -1015,7 +1019,7 @@ export function drawProfile(ctx: CanvasRenderingContext2D, v: Villager): void {
     ctx.fillStyle = "#ffe296";
     ctx.font = "bold 12px monospace";
     ctx.textAlign = "center";
-    ctx.fillText("🎤 Konuş ve teskin et", x + w / 2, r.y + 12);
+    ctx.fillText("🎤 İletiyi yanıtla", x + w / 2, r.y + 12);
     ctx.textAlign = "left";
   }
 }
@@ -2079,6 +2083,83 @@ export function isOverPolicyPanel(sx: number, sy: number): boolean {
     sy >= policyRect.y && sy <= policyRect.y + policyRect.h;
 }
 
+// ---- İlahî Güçler paneli ----
+let divineRect = { x: 0, y: 0, w: 0, h: 0 };
+let divineRows: { id: DivinePowerId; x: number; y: number; w: number; h: number }[] = [];
+
+export type DivineHit = { kind: "close" } | { kind: "cast"; id: DivinePowerId } | { kind: "panel" } | null;
+
+export function divinePanelHitTest(sx: number, sy: number): DivineHit {
+  const cx = divineRect.x + divineRect.w - 26;
+  const cy = divineRect.y + 8;
+  if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
+  for (const r of divineRows) {
+    if (sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h) return { kind: "cast", id: r.id };
+  }
+  if (sx >= divineRect.x && sx <= divineRect.x + divineRect.w &&
+      sy >= divineRect.y && sy <= divineRect.y + divineRect.h) return { kind: "panel" };
+  return null;
+}
+
+export function drawDivinePanel(ctx: CanvasRenderingContext2D): void {
+  const w = 460;
+  const rowH = 52;
+  const h = 56 + DIVINE_POWERS.length * rowH + 12;
+  const x = (ctx.canvas.width - w) / 2;
+  const y = 72;
+  divineRect = { x, y, w, h };
+  divineRows = [];
+
+  panelChrome(ctx, x, y, w, h, UI.purple);
+  drawCloseButton(ctx, x + w - 26, y + 8);
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffe296";
+  ctx.font = "bold 15px monospace";
+  ctx.fillText("✨ İlahî Güçler", x + 14, y + 20);
+  ctx.fillStyle = "#d8c0ff";
+  ctx.font = "bold 13px monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(`İnanç: ${Math.floor(resources.faith)}`, x + w - 40, y + 20);
+  ctx.textAlign = "left";
+
+  let ry = y + 48;
+  for (const power of DIVINE_POWERS) {
+    const cd = divineCooldown[power.id] ?? 0;
+    const affordable = resources.faith >= power.cost;
+    const ready = cd <= 0;
+    rrect(ctx, x + 10, ry, w - 20, rowH - 6, 6);
+    ctx.fillStyle = "rgba(255,255,255,0.03)";
+    ctx.fill();
+    // ikon
+    ctx.font = "20px monospace";
+    ctx.globalAlpha = ready && affordable ? 1 : 0.5;
+    ctx.fillText(power.icon, x + 18, ry + 16);
+    ctx.globalAlpha = 1;
+    // ad + açıklama
+    ctx.fillStyle = ready && affordable ? "#e8e2d0" : "#8a8478";
+    ctx.font = "bold 12px monospace";
+    ctx.fillText(power.name, x + 46, ry + 13);
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "10px monospace";
+    ctx.fillText(power.desc, x + 46, ry + 30, w - 200);
+    // çağır düğmesi
+    const tw = 96, th = 30, tx = x + w - tw - 14, ty = ry + (rowH - 6 - th) / 2;
+    const label = cd > 0 ? `${Math.ceil(cd)} sn` : `${power.cost} inanç`;
+    chipBg(ctx, tx, ty, tw, th, ready && affordable, ready && affordable ? UI.gold : UI.muted);
+    ctx.textAlign = "center";
+    ctx.fillStyle = cd > 0 ? "#9a9488" : affordable ? "#ffe296" : "#d0796a";
+    ctx.font = "bold 11px monospace";
+    ctx.fillText(cd > 0 ? "⏳ " + label : "Çağır", tx + tw / 2, ry + (rowH - 6) / 2 - 5);
+    ctx.fillStyle = "#b8b2a4";
+    ctx.font = "10px monospace";
+    ctx.fillText(cd > 0 ? "bekliyor" : label, tx + tw / 2, ry + (rowH - 6) / 2 + 8);
+    ctx.textAlign = "left";
+    divineRows.push({ id: power.id, x: tx, y: ty, w: tw, h: th });
+    ry += rowH;
+  }
+}
+
 export function drawPolicyPanel(ctx: CanvasRenderingContext2D): void {
   const w = 420;
   const rowH = 46;
@@ -2240,7 +2321,8 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D, autoResearch = fals
     if (pos.x + cardW < 0 || pos.x > w) return; // görünüm dışı
     const owned = hasTech(tech.id);
     const locked = !prereqsMet(tech);
-    const affordable = resources.knowledge >= tech.cost;
+    const cost = currentCost(tech);
+    const affordable = resources.knowledge >= cost;
 
     // Kart arka planı (yuvarlatılmış, satın alınabilirse ışıltılı)
     ctx.beginPath();
@@ -2334,7 +2416,7 @@ export function drawTechPanel(ctx: CanvasRenderingContext2D, autoResearch = fals
       cy2 += 1;
     } else {
       ctx.fillStyle = affordable ? "#e0b864" : "#b06a5c";
-      ctx.fillText(`Maliyet: ${tech.cost} bilgi`, pos.x + 10, cy2);
+      ctx.fillText(`Maliyet: ${cost} bilgi`, pos.x + 10, cy2);
       cy2 += 11;
     }
 
@@ -2392,10 +2474,16 @@ export function journalButtonHitTest(sx: number, sy: number): boolean {
 }
 let techButtonRect = { x: 0, y: 0, w: 0, h: 0 };
 let policyButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+let divineButtonRect = { x: 0, y: 0, w: 0, h: 0 };
 
 export function policyButtonHitTest(sx: number, sy: number): boolean {
   return sx >= policyButtonRect.x && sx <= policyButtonRect.x + policyButtonRect.w &&
     sy >= policyButtonRect.y && sy <= policyButtonRect.y + policyButtonRect.h;
+}
+
+export function divineButtonHitTest(sx: number, sy: number): boolean {
+  return sx >= divineButtonRect.x && sx <= divineButtonRect.x + divineButtonRect.w &&
+    sy >= divineButtonRect.y && sy <= divineButtonRect.y + divineButtonRect.h;
 }
 
 export function peopleButtonHitTest(sx: number, sy: number): boolean {
@@ -2432,7 +2520,8 @@ export function drawHud(
   selected: BuildingType | null,
   paused: boolean,
   speed: number,
-  homeless = 0
+  homeless = 0,
+  knowledgeRate = 0
 ): void {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
@@ -2538,6 +2627,53 @@ export function drawHud(
     ctx.fillText("⚙", cx + bw / 2 - 2, 18);
     ctx.textAlign = "left";
     cx += bw + 10;
+  }
+
+  // ilahî güçler düğmesi — ✨ + inanç sayacı
+  {
+    const label = `✨ ${Math.floor(resources.faith)}`;
+    ctx.font = "13px monospace";
+    const bw = ctx.measureText(label).width + 16;
+    divineButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
+    chipBg(ctx, divineButtonRect.x, divineButtonRect.y, bw, 26, true, UI.purple);
+    ctx.fillStyle = "#e8d8ff";
+    ctx.font = "13px monospace";
+    ctx.fillText(label, cx + 6, 18);
+    cx += bw + 10;
+  }
+
+  // oto-araştırma açıkken: sıradaki araştırma + tahmini süre (Teknoloji düğmesinin altında)
+  if (policy.research && population > 0) {
+    const next = cheapestAvailable();
+    if (next) {
+      const cost = currentCost(next);
+      const have = Math.floor(resources.knowledge);
+      const deficit = Math.max(0, cost - have);
+      const eta = deficit <= 0 ? 0 : knowledgeRate > 0.05 ? Math.ceil(deficit / knowledgeRate) : -1;
+      const label =
+        deficit <= 0
+          ? `🔬 Sıradaki: ${next.icon} ${next.name} — hazır ✓`
+          : `🔬 Sıradaki: ${next.icon} ${next.name} — ${have}/${cost}` +
+            (eta >= 0 ? `  ~${eta}sn` : ``);
+      ctx.font = "11px monospace";
+      ctx.textBaseline = "middle";
+      const tw2 = ctx.measureText(label).width + 18;
+      const bx = Math.max(8, Math.min(techButtonRect.x, w - tw2 - 8));
+      const by = 39;
+      chipBg(ctx, bx, by, tw2, 20, false, UI.purple);
+      // ilerleme dolgusu
+      if (deficit > 0 && cost > 0) {
+        const frac = Math.min(1, have / cost);
+        ctx.save();
+        rrect(ctx, bx, by, tw2 * frac, 20, 6);
+        ctx.clip();
+        ctx.fillStyle = "rgba(176,143,224,0.25)";
+        ctx.fillRect(bx, by, tw2, 20);
+        ctx.restore();
+      }
+      ctx.fillStyle = "#d8c0ff";
+      ctx.fillText(label, bx + 9, by + 10);
+    }
   }
 
   // tarih (takvim ikonu) — sağdaki düğmelere sığıyorsa

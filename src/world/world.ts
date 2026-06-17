@@ -1,6 +1,9 @@
 import { fractalNoise, hash2 } from "./noise";
 import { Tile, foodItemOf, isWalkable, TILE_SIZE } from "./tiles";
 
+// Ekin tohumdan olgunluğa: bu kadar (mevsim çarpanıyla ölçeklenen) saniye sürer
+export const CROP_GROW_TIME = 130;
+
 export class World {
   readonly width: number;
   readonly height: number;
@@ -23,6 +26,9 @@ export class World {
   private saplings: { x: number; y: number; t: number; target: Tile }[] = [];
   // budanmış ağaçlar: zamanla Tree'ye döner
   private prunedTrees: { x: number; y: number; t: number }[] = [];
+  // ekilmiş ekinler: t<=0 olunca olgunlaşır (Crop -> CropRipe). Büyüme mevsime
+  // bağlıdır (kışın durur): update'e geçilen cropGrowth çarpanıyla ilerler.
+  private crops: { x: number; y: number; t: number }[] = [];
 
   // Bina kaplayan bloklar: yürünemez
   readonly blocked = new Set<number>();
@@ -118,10 +124,13 @@ export class World {
           } else if (hash2(x, y, seed + 47) > 0.992) {
             // açık alanda tek tük çalı
             t = Tile.Bush;
-          } else if (hash2(x, y, seed + 53) > 0.99) {
-            // yerde çakıl kümeleri (Sert Cisimler ile toplanır)
+          } else if (hash2(x, y, seed + 53) > 0.965) {
+            // yerde çakıl kümeleri: taşın tek kaynağı (Sert Cisimler ile toplanır)
             t = Tile.Pebbles;
           }
+        } else if (t === Tile.Dirt && hash2(x, y, seed + 71) > 0.82) {
+          // kayalık (toprak) kuşağında bol çakıl: taş madeni buralarda
+          t = Tile.Pebbles;
         }
         this.tiles[this.index(x, y)] = t;
       }
@@ -143,7 +152,8 @@ export class World {
     };
     if (t === Tile.Tree) toggle(this.markedTrees, this.claimedTrees);
     else if (foodItemOf(t)) toggle(this.markedBushes, this.claimedBushes);
-    else if (t === Tile.Stone || t === Tile.Pebbles) toggle(this.markedStones, this.claimedStones);
+    else if (t === Tile.Pebbles) toggle(this.markedStones, this.claimedStones);
+    // büyük taş blokları (Tile.Stone) kırılamaz — ileride (maden çağında) eklenecek
   }
 
   markTree(x: number, y: number): void {
@@ -156,8 +166,8 @@ export class World {
   }
 
   markStone(x: number, y: number): void {
-    const t = this.get(x, y);
-    if (t === Tile.Stone || t === Tile.Pebbles) {
+    // yalnız çakıl toplanır; büyük taş blokları henüz kırılamaz
+    if (this.get(x, y) === Tile.Pebbles) {
       this.markedStones.add(this.index(x, y));
     }
   }
@@ -187,8 +197,9 @@ export class World {
     return removed;
   }
 
-  // Fidan/filizler ve budanmış ağaçlar zamanla hedef bloğa dönüşür
-  update(dt: number): void {
+  // Fidan/filizler ve budanmış ağaçlar zamanla hedef bloğa dönüşür.
+  // cropGrowth: ekinlerin büyüme hızı çarpanı (mevsime bağlı; kışın 0 = durur).
+  update(dt: number, cropGrowth = 1): void {
     for (let i = this.saplings.length - 1; i >= 0; i--) {
       const s = this.saplings[i];
       s.t -= dt;
@@ -206,6 +217,17 @@ export class World {
         if (this.get(p.x, p.y) === Tile.PrunedTree) this.set(p.x, p.y, Tile.Tree);
       }
     }
+    // Ekinler olgunlaşır (kışın cropGrowth=0 ise ilerlemez: tarla donar)
+    if (cropGrowth > 0) {
+      for (let i = this.crops.length - 1; i >= 0; i--) {
+        const cr = this.crops[i];
+        cr.t -= dt * cropGrowth;
+        if (cr.t <= 0) {
+          this.crops.splice(i, 1);
+          if (this.get(cr.x, cr.y) === Tile.Crop) this.set(cr.x, cr.y, Tile.CropRipe);
+        }
+      }
+    }
   }
 
   // ---- Kaydet/Yükle ----
@@ -221,6 +243,7 @@ export class World {
       blocked: [...this.blocked],
       saplings: this.saplings.map((x) => ({ ...x })),
       prunedTrees: this.prunedTrees.map((x) => ({ ...x })),
+      crops: this.crops.map((x) => ({ ...x })),
     };
   }
 
@@ -231,6 +254,7 @@ export class World {
       blocked: number[];
       saplings: { x: number; y: number; t: number; target: Tile }[];
       prunedTrees: { x: number; y: number; t: number }[];
+      crops?: { x: number; y: number; t: number }[];
     };
     this.tiles.set(d.tiles);
     this.heights.set(d.heights);
@@ -248,6 +272,7 @@ export class World {
     this.claimedPlants.clear();
     this.saplings = d.saplings.map((x) => ({ ...x }));
     this.prunedTrees = d.prunedTrees.map((x) => ({ ...x }));
+    this.crops = (d.crops ?? []).map((x) => ({ ...x }));
   }
 
   // Mantar türemesi için: rastgele bir budanmış ağaç konumu
@@ -262,6 +287,82 @@ export class World {
     if (this.get(x, y) !== Tile.Grass || this.blocked.has(this.index(x, y))) return;
     this.set(x, y, Tile.Sapling);
     this.saplings.push({ x, y, t: target === Tile.Tree ? 90 : 70, target });
+  }
+
+  // ---- Tarım: tohum ek, olgunlaş, hasat et ----
+
+  // Çimen ya da boş tarlaya tohum ek: blok Crop olur, büyüme sayacı başlar
+  sowCrop(x: number, y: number): void {
+    const i = this.index(x, y);
+    this.claimedPlants.delete(i);
+    const t = this.get(x, y);
+    if ((t !== Tile.Grass && t !== Tile.Farmland) || this.blocked.has(i)) return;
+    this.set(x, y, Tile.Crop);
+    this.crops.push({ x, y, t: CROP_GROW_TIME });
+  }
+
+  // Olgun ekini hasat et: blok sürülmüş tarlaya (Farmland) döner ki tekrar ekilsin
+  harvestCrop(x: number, y: number): void {
+    const i = this.index(x, y);
+    this.claimedBushes.delete(i);
+    if (this.get(x, y) !== Tile.CropRipe) return;
+    this.set(x, y, Tile.Farmland);
+  }
+
+  // Merkez çevresinde, sahiplenilmemiş en yakın olgun ekini bul (hasat için)
+  findRipeCrop(
+    cx: number,
+    cy: number,
+    r: number,
+    fromX: number,
+    fromY: number
+  ): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestDist = Infinity;
+    for (let y = Math.max(0, cy - r); y <= Math.min(this.height - 1, cy + r); y++) {
+      for (let x = Math.max(0, cx - r); x <= Math.min(this.width - 1, cx + r); x++) {
+        if (this.get(x, y) !== Tile.CropRipe) continue;
+        const i = this.index(x, y);
+        if (this.claimedBushes.has(i)) continue;
+        const d = Math.abs(x - fromX) + Math.abs(y - fromY);
+        if (d < bestDist) {
+          bestDist = d;
+          best = { x, y };
+        }
+      }
+    }
+    return best;
+  }
+
+  // Tohum ekmek için boş kare bul: sürülmüş tarla (Farmland) öncelikli, yoksa
+  // çimen. Merkeze (cx,cy) yakın seçilir ki tarla derli toplu bir öbek olsun.
+  findSowSpot(
+    cx: number,
+    cy: number,
+    r: number
+  ): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestScore = Infinity;
+    for (let y = Math.max(0, cy - r); y <= Math.min(this.height - 1, cy + r); y++) {
+      for (let x = Math.max(0, cx - r); x <= Math.min(this.width - 1, cx + r); x++) {
+        const t = this.get(x, y);
+        if (t !== Tile.Farmland && t !== Tile.Grass) continue;
+        const i = this.index(x, y);
+        if (this.blocked.has(i) || this.claimedPlants.has(i)) continue;
+        // sürülmüş tarlayı çimene tercih et (puanı düşür)
+        const d = Math.abs(x - cx) + Math.abs(y - cy) + (t === Tile.Farmland ? 0 : 100);
+        if (d < bestScore) {
+          bestScore = d;
+          best = { x, y };
+        }
+      }
+    }
+    return best;
+  }
+
+  // Çalışma alanındaki etkin ekin (Crop+CropRipe) sayısı: tarla doygunluğu
+  cropCountNear(cx: number, cy: number, r: number): number {
+    return this.countTilesNear([Tile.Crop, Tile.CropRipe], cx, cy, r);
   }
 
   // Dikim için boş çimen blok bul (sahiplenilmemiş)

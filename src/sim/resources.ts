@@ -5,13 +5,13 @@ export type ItemType =
   | "wood" | "log" | "stone"
   | "berry" | "mushroom" | "fish"
   | "meat" | "leather" | "wool"
-  | "milk" | "egg";
+  | "milk" | "egg" | "grain";
 
 export const ITEM_TYPES: ItemType[] = [
   "wood", "log", "stone",
   "berry", "mushroom", "fish",
   "meat", "leather", "wool",
-  "milk", "egg",
+  "milk", "egg", "grain",
 ];
 
 export const ITEM_INFO: Record<ItemType, { name: string; color: string }> = {
@@ -26,16 +26,18 @@ export const ITEM_INFO: Record<ItemType, { name: string; color: string }> = {
   wool: { name: "yün", color: "#e8e4da" },
   milk: { name: "süt", color: "#eef0f0" },
   egg: { name: "yumurta", color: "#f0e0b0" },
+  grain: { name: "tahıl", color: "#e6c34d" },
 };
 
 // Yenebilirler (tüketim önceliği sırasıyla)
 export const FOOD_TYPES: ItemType[] = [
-  "berry", "mushroom", "fish", "meat", "milk", "egg",
+  "berry", "mushroom", "grain", "fish", "meat", "milk", "egg",
 ];
 
 export const FOOD_NUTRITION: Record<ItemType, number> = {
   berry: 8, // yemiş: bol bulunur ama az doyurur (+%20)
   mushroom: 12, // mantar yemişten daha besleyicidir (+%20)
+  grain: 16, // tahıl: tarımın doyurucu temel azığı
   fish: 15,
   meat: 14, // av eti doyurucudur
   milk: 9, // çiftlikten yenilenebilir besin
@@ -47,12 +49,13 @@ export const FOOD_NUTRITION: Record<ItemType, number> = {
   wool: 0,
 };
 
-export const resources: Record<ItemType, number> & { cap: number; knowledge: number } = {
+export const resources: Record<ItemType, number> & { cap: number; knowledge: number; faith: number } = {
   ...(Object.fromEntries(ITEM_TYPES.map((t) => [t, 0])) as Record<ItemType, number>),
   wood: 20,
   berry: 45, // 10 kişilik kabilenin ilk gün erzağı
   cap: 200, // ÜRÜN BAŞINA depo sınırı (her eşya tipi ayrı ayrı bu kadar tutar; depolar artırır)
   knowledge: 0, // tapınaklarda üretilir; depo kapasitesine tabi değildir
+  faith: 0, // inanç: tapınak ve ileti yanıtlarından birikir; ilahî güçleri besler
 };
 
 // Toplam depolanmış kaynak miktarı (bilgi hariç)
