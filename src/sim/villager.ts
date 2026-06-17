@@ -29,6 +29,7 @@ import {
 } from "./buildings";
 import { difficulty } from "./difficulty";
 import { coldSnapActive } from "./events";
+import { bountyActive } from "./divine";
 import { policy } from "./policy";
 import { addJournal } from "./journal";
 import { babyIdentity, randomIdentity, type Identity } from "./names";
@@ -97,7 +98,7 @@ function gatherTime(): number {
   return GATHER_TIME;
 }
 function forageBonus(): number {
-  return 0;
+  return bountyActive() ? 3 : 0; // Kehanet: Bereket — toplama verimi artar
 }
 
 // Günlük açlık zorluk seviyesinden, gün süresi tuning'den okunur
@@ -211,6 +212,7 @@ export class Villager {
   pleadingTtl = 0; // Merak: oyuncuya yakarıyor (tıklanıp teskin edilebilir)
   shockTtl = 0; // teskin edildi: kısa süre şokta donar
   sickUntilDay = -1; // hastalık olayı: bu güne dek halsiz (yavaş yürür/çalışır)
+  prophetUntilDay = -1; // İlahî güç: bu güne dek peygamber (aura yayar, hızlı çalışır)
   private divineBuff: { untilDay: number; amount: number } | null = null;
   private fleeDirX = 0;
   private fleeDirY = 0;
@@ -283,6 +285,10 @@ export class Villager {
     return totalDays() < this.sickUntilDay;
   }
 
+  get isProphet(): boolean {
+    return totalDays() < this.prophetUntilDay;
+  }
+
   // Hamilelik ilerlemesi 0..1 (karın adım adım büyür)
   get pregnancyProgress(): number {
     if (this.pregnantSince === null) return 0;
@@ -321,7 +327,8 @@ export class Villager {
     const before = this.morale;
     this.changeMorale(40, "Tanrının sesi");
     this.divineBuff = { untilDay: totalDays() + 2, amount: this.morale - before };
-    addFloater(this.x, this.y - 18, "⚡ Tanrı konuştu!", "#ffd23c");
+    resources.faith += 15; // iletiye yanıt vermek inancı güçlendirir
+    addFloater(this.x, this.y - 18, "⚡ Tanrı konuştu! (+15 inanç)", "#ffd23c");
   }
 
   // Yırtıcı saldırısı: hasar al; silahsızsa kaç, can biterse öl
@@ -541,6 +548,7 @@ export class Villager {
     if (this.educated) f *= 1.2; // bakımevi eğitimi: ek %20
     if (season() === 3 && !this.hasClothes) f *= 0.75; // kışın giysisiz: %25 yavaş
     if (this.sick) f *= 0.55; // hastalık: halsiz
+    if (this.isProphet) f *= 1.4; // peygamber ilhamla hızlı çalışır
     return f;
   }
 
@@ -2107,6 +2115,7 @@ export class Villager {
     if (this.timer <= 0) {
       const gain = worshipState.yield;
       resources.knowledge += gain;
+      resources.faith += 1; // her ayin biraz inanç da getirir
       addFloater(
         job.building.centerX, job.building.y * TILE_SIZE - 6,
         `+${gain} bilgi`, "#b08fe0"

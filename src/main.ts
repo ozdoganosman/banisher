@@ -27,6 +27,9 @@ import {
   drawPolicyPanel,
   policyPanelHitTest,
   policyButtonHitTest,
+  drawDivinePanel,
+  divinePanelHitTest,
+  divineButtonHitTest,
   drawAnimalPanel,
   animalPanelHitTest,
   journalButtonHitTest,
@@ -87,6 +90,7 @@ import {
 } from "./sim/resources";
 import { DIFFICULTY_PRESETS, difficulty, type DifficultyLevel } from "./sim/difficulty";
 import { eventFlags } from "./sim/events";
+import { divine, divineCooldown, DIVINE_POWERS, wisdomActive, bountyActive, type DivinePowerId } from "./sim/divine";
 import { policy, POLICY_INFO } from "./sim/policy";
 import { currentGoal, goalState, tickGoals } from "./sim/goals";
 import { addJournal, journal } from "./sim/journal";
@@ -159,6 +163,7 @@ let showPeople = false;
 let showJournal = false;
 let showTech = false;
 let showPolicy = false;
+let showDivine = false;
 let markFilter: MarkFilter = "all";
 // sol tuş sürükleme: alan seçimi veya mini harita gezdirme
 let selecting:
@@ -185,6 +190,7 @@ function saveGame(): void {
     resources: { ...resources },
     tech: purchasedList(),
     policy: { ...policy },
+    divine: { ...divine },
     events: { ...eventFlags },
     goal: goalState.index,
     world: world.serialize(),
@@ -204,7 +210,7 @@ function saveGame(): void {
       moraleLog: [...v.moraleLog],
       birthDay: v.birthDay, pregnantSince: v.pregnantSince,
       educated: v.educated, hasAxe: v.hasAxe, hasClothes: v.hasClothes,
-      spears: v.spears, sick: v.sickUntilDay,
+      spears: v.spears, sick: v.sickUntilDay, prophet: v.prophetUntilDay,
       home: bIndex(v.home), mother: vIndex(v.mother),
       assignment:
         v.assignment.kind === "building"
@@ -242,6 +248,7 @@ function loadGame(): boolean {
     Object.assign(resources, d.resources);
     restorePurchased(d.tech);
     Object.assign(policy, d.policy ?? (d.autoResearch !== undefined ? { research: d.autoResearch } : {}));
+    if (d.divine) Object.assign(divine, d.divine);
     eventFlags.coldSnapUntilDay = d.events?.coldSnapUntilDay ?? -1;
     goalState.index = d.goal ?? 0; // eski kayıtlar: karşılanan hedefler peş peşe tamamlanır
     eventTimer = 0.5 * tuning.dayLength; // eski kayıtlarda olay sayacı tazelenir
@@ -281,6 +288,7 @@ function loadGame(): boolean {
       v.birthDay = vd.birthDay;
       v.pregnantSince = vd.pregnantSince;
       v.sickUntilDay = vd.sick ?? -1;
+      v.prophetUntilDay = vd.prophet ?? -1;
       v.educated = vd.educated;
       v.hasAxe = vd.hasAxe;
       v.hasClothes = vd.hasClothes;
@@ -913,6 +921,10 @@ input.onClick = (wx, wy, sx, sy) => {
     showPolicy = !showPolicy;
     return;
   }
+  if (divineButtonHitTest(sx, sy)) {
+    showDivine = !showDivine;
+    return;
+  }
   if (pauseButtonHitTest(sx, sy)) {
     paused = !paused;
     return;
@@ -965,6 +977,16 @@ input.onClick = (wx, wy, sx, sy) => {
     const hit = journalPanelHitTest(sx, sy);
     if (hit) {
       if (hit === "close") showJournal = false;
+      return;
+    }
+  }
+
+  // ilahî güçler paneli
+  if (showDivine) {
+    const hit = divinePanelHitTest(sx, sy);
+    if (hit) {
+      if (hit.kind === "close") showDivine = false;
+      else if (hit.kind === "cast") castDivinePower(hit.id);
       return;
     }
   }
@@ -1198,6 +1220,7 @@ input.onClick = (wx, wy, sx, sy) => {
 // Açık olan en üstteki şeyi kapat; her çağrıda yalnızca bir tane
 function closeTopmost(): boolean {
   if (selected !== null) { selected = null; return true; }
+  if (showDivine) { showDivine = false; return true; }
   if (showPolicy) { showPolicy = false; return true; }
   if (showTech) { showTech = false; return true; }
   if (showJournal) { showJournal = false; return true; }
@@ -1404,6 +1427,8 @@ window.addEventListener("keydown", (e) => {
     showTech = !showTech;
   } else if (e.code === "KeyP") {
     showPolicy = !showPolicy;
+  } else if (e.code === "KeyY") {
+    showDivine = !showDivine;
   } else if (e.code === "KeyF") {
     const visibleFilters = MARK_FILTERS.filter(
       (f) => f.id !== "stone" || hasTech("hardobjects")
@@ -1569,6 +1594,85 @@ function autoBuildTick(): void {
   }
 }
 
+// ---- İlahî güçler: inanç harcayarak kolonyi yönlendir ----
+function castDivinePower(id: DivinePowerId): boolean {
+  const power = DIVINE_POWERS.find((p) => p.id === id);
+  if (!power) return false;
+  if ((divineCooldown[id] ?? 0) > 0) {
+    addMessage(`${power.icon} ${power.name} henüz hazır değil (${Math.ceil(divineCooldown[id])} sn)`);
+    return false;
+  }
+  if (resources.faith < power.cost) {
+    addMessage(`İnanç yetersiz! (${power.name}: ${power.cost} inanç)`);
+    return false;
+  }
+  const now = totalDays();
+  let ok = true;
+  switch (id) {
+    case "prophet": {
+      // en yüksek moralli yetişkin peygamber olur (halk ona kulak verir)
+      const adults = villagers.filter((v) => v.canWork && !v.dead && !v.isProphet);
+      if (adults.length === 0) { ok = false; break; }
+      const p = adults.sort((a, b) => b.morale - a.morale)[0];
+      p.prophetUntilDay = now + 2;
+      p.changeMorale(30, "Peygamberlik");
+      addMessage(`🙏 ${p.fullName} peygamber seçildi — halka ilham veriyor!`, "important");
+      addJournal(`🙏 ${p.fullName} peygamber oldu`);
+      addFloater(p.x, p.y - 20, "🙏 Peygamber!", "#ffe296");
+      break;
+    }
+    case "wisdom":
+      divine.wisdomUntilDay = now + 2;
+      addMessage("📜 Kehanet: Bilgelik — 2 gün bilgi iki katı!", "important");
+      break;
+    case "bounty": {
+      divine.bountyUntilDay = now + 2;
+      // çevreye yemiş saç
+      for (let i = 0; i < 14; i++) {
+        const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * 16;
+        const x = Math.round(campCenter.x + Math.cos(a) * r);
+        const y = Math.round(campCenter.y + Math.sin(a) * r);
+        if (world.inBounds(x, y) && world.get(x, y) === Tile.Grass) world.set(x, y, Tile.Bush);
+      }
+      renderer.repaintAll();
+      addMessage("🌾 Kehanet: Bereket — bolluk çağı, toprak cömert!", "important");
+      break;
+    }
+    case "heal":
+      for (const v of villagers) {
+        if (v.dead) continue;
+        v.hp = 100;
+        v.sickUntilDay = -1;
+        v.changeMorale(20, "İlahî şifa");
+      }
+      addMessage("✨ Mucize: Şifa — herkes iyileşti!", "important");
+      addFloater(camera.x, camera.y, "✨ Şifa", "#8fd05e");
+      break;
+    case "shield":
+      divine.shieldUntilDay = now + 1;
+      addMessage("🛡️ Mucize: Koruma Kalkanı — yırtıcılar kaçıyor!", "important");
+      break;
+  }
+  if (!ok) return false;
+  resources.faith -= power.cost;
+  divineCooldown[id] = power.cooldown;
+  return true;
+}
+
+// Peygamber aurası: çevredeki köylülere moral yayar (main her adımda uygular)
+function applyProphetAura(dt: number): void {
+  const prophets = villagers.filter((v) => v.isProphet && !v.dead);
+  if (prophets.length === 0) return;
+  const R2 = (7 * TILE_SIZE) ** 2;
+  for (const p of prophets) {
+    for (const v of villagers) {
+      if (v === p || v.dead) continue;
+      const dx = v.x - p.x, dy = v.y - p.y;
+      if (dx * dx + dy * dy <= R2) v.changeMorale(0.6 * dt, "Peygamber ilhamı");
+    }
+  }
+}
+
 function autoResearchTick(): void {
   if (!policy.research) return;
   const pick = cheapestAvailable();
@@ -1692,7 +1796,7 @@ function nightlyConceptions(): void {
   // erken kabilede daha yüksek şans, nüfus büyüdükçe yavaşlar
   const pop = villagers.length;
   const boost = pop < 12 ? 1.6 : pop < 20 ? 1.15 : 0.7;
-  const chance = Math.min(0.92, BIRTH_CHANCE * boost);
+  const chance = Math.min(0.96, BIRTH_CHANCE * boost * (bountyActive() ? 1.8 : 1));
   for (const b of buildings) {
     if (!isHousing(b) || occupants(b) >= HOUSE_CAPACITY) continue;
     if (Math.random() > chance) continue;
@@ -2255,7 +2359,7 @@ function step(dt: number) {
     const priests = villagers.filter(
       (v) => v.assignment.kind === "building" && v.assignment.building.type === BuildingType.Temple
     ).length;
-    worshipState.yield = worshipYieldFor(priests);
+    worshipState.yield = worshipYieldFor(priests) * (wisdomActive() ? 2 : 1);
     autoResearchTick();
     autoBuildTick();
     autoToolsTick();
@@ -2272,6 +2376,8 @@ function step(dt: number) {
 
   tickHouseFuel(dt);
   for (const v of villagers) v.update(dt, world, buildings, animals);
+  applyProphetAura(dt);
+  for (const id in divineCooldown) if (divineCooldown[id] > 0) divineCooldown[id] -= dt;
   updateDangerCamera(dt);
 
   // hayvanlar: dolanma, otlama, açlık; yırtıcılar insan kovalar
@@ -2492,7 +2598,7 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
 };
 
 // tuning: konsoldan canlı ayar (__game.tuning.dayLength / timeScale / moveSpeed)
-window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, worship: worshipState, goals: { state: goalState, current: currentGoal }, get follow() { return followVillager ? followVillager.fullName : null; }, policy };
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, worship: worshipState, goals: { state: goalState, current: currentGoal }, get follow() { return followVillager ? followVillager.fullName : null; }, policy, divine, divineCooldown };
 (window as unknown as { hile: typeof hile }).hile = hile;
 console.info(
   "%cBanisher debug: konsola hile.yardim() yaz",
@@ -2640,6 +2746,7 @@ function frame(now: number) {
     if (showPeople) drawPeoplePanel(ctx, villagers);
     if (showJournal) drawJournalPanel(ctx);
     if (showPolicy) drawPolicyPanel(ctx);
+    if (showDivine) drawDivinePanel(ctx);
     if (selectedAnimal) drawAnimalPanel(ctx, selectedAnimal, canTameAnimal(selectedAnimal));
     if (showTech) drawTechPanel(ctx, policy.research);
   }

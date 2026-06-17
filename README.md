@@ -120,7 +120,25 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v3.3)
+## Şu anki özellikler (v3.4)
+
+### v3.4: İlahî Güçler — dışarıdan yönlendiren tanrı
+
+- **İnanç (faith)** kaynağı: tapınak ayinlerinden ve ileti yanıtlarından
+  birikir; üst bardaki ✨ sayaçta görünür
+- **İlahî Güçler paneli** (✨ düğmesi / Y tuşu): inanç harcayarak kolonyi
+  yönlendirirsin (her gücün maliyeti + bekleme süresi var):
+  - 🙏 **Peygamber Yolla**: bir köylü peygamber olur — çevresine moral
+    (ilham) yayar, hızlı çalışır, başında altın hale
+  - 📜 **Kehanet: Bilgelik**: 2 gün tapınak bilgisi iki katı
+  - 🌾 **Kehanet: Bereket**: 2 gün toplama + doğurganlık artar, çevreye
+    yemiş saçılır
+  - ✨ **Mucize: Şifa**: herkes anında iyileşir, hastalık geçer, moral artar
+  - 🛡️ **Mucize: Koruma Kalkanı**: 1 gün yırtıcılar saldıramaz
+- Vizyon: koloni kendi ihtiyaçlarını anlayıp kendini yönetir; sen
+  dışarıdan müdahale eder, kaderlerini şekillendirirsin
+
+### v3.3: Bilgi seli + "ileti"
 
 ### v3.3: Bilgi seli + "ileti"
 

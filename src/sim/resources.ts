@@ -47,12 +47,13 @@ export const FOOD_NUTRITION: Record<ItemType, number> = {
   wool: 0,
 };
 
-export const resources: Record<ItemType, number> & { cap: number; knowledge: number } = {
+export const resources: Record<ItemType, number> & { cap: number; knowledge: number; faith: number } = {
   ...(Object.fromEntries(ITEM_TYPES.map((t) => [t, 0])) as Record<ItemType, number>),
   wood: 20,
   berry: 45, // 10 kişilik kabilenin ilk gün erzağı
   cap: 200, // ÜRÜN BAŞINA depo sınırı (her eşya tipi ayrı ayrı bu kadar tutar; depolar artırır)
   knowledge: 0, // tapınaklarda üretilir; depo kapasitesine tabi değildir
+  faith: 0, // inanç: tapınak ve ileti yanıtlarından birikir; ilahî güçleri besler
 };
 
 // Toplam depolanmış kaynak miktarı (bilgi hariç)

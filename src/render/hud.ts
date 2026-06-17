@@ -22,6 +22,7 @@ import {
 import { ANIMAL_DEFS, BARN_CAPACITY, TAME_TARGET, type Animal } from "../sim/animals";
 import { journal } from "../sim/journal";
 import { policy, POLICY_INFO, type PolicyKey } from "../sim/policy";
+import { DIVINE_POWERS, divineCooldown, type DivinePowerId } from "../sim/divine";
 import { currentGoal, type GoalCtx } from "../sim/goals";
 import { hasTech, prereqsMet, currentCost, cheapestAvailable, TECHS, type TechId, type Tech } from "../sim/tech";
 import {
@@ -2079,6 +2080,83 @@ export function isOverPolicyPanel(sx: number, sy: number): boolean {
     sy >= policyRect.y && sy <= policyRect.y + policyRect.h;
 }
 
+// ---- İlahî Güçler paneli ----
+let divineRect = { x: 0, y: 0, w: 0, h: 0 };
+let divineRows: { id: DivinePowerId; x: number; y: number; w: number; h: number }[] = [];
+
+export type DivineHit = { kind: "close" } | { kind: "cast"; id: DivinePowerId } | { kind: "panel" } | null;
+
+export function divinePanelHitTest(sx: number, sy: number): DivineHit {
+  const cx = divineRect.x + divineRect.w - 26;
+  const cy = divineRect.y + 8;
+  if (sx >= cx && sx <= cx + 18 && sy >= cy && sy <= cy + 18) return { kind: "close" };
+  for (const r of divineRows) {
+    if (sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h) return { kind: "cast", id: r.id };
+  }
+  if (sx >= divineRect.x && sx <= divineRect.x + divineRect.w &&
+      sy >= divineRect.y && sy <= divineRect.y + divineRect.h) return { kind: "panel" };
+  return null;
+}
+
+export function drawDivinePanel(ctx: CanvasRenderingContext2D): void {
+  const w = 460;
+  const rowH = 52;
+  const h = 56 + DIVINE_POWERS.length * rowH + 12;
+  const x = (ctx.canvas.width - w) / 2;
+  const y = 72;
+  divineRect = { x, y, w, h };
+  divineRows = [];
+
+  panelChrome(ctx, x, y, w, h, UI.purple);
+  drawCloseButton(ctx, x + w - 26, y + 8);
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffe296";
+  ctx.font = "bold 15px monospace";
+  ctx.fillText("✨ İlahî Güçler", x + 14, y + 20);
+  ctx.fillStyle = "#d8c0ff";
+  ctx.font = "bold 13px monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(`İnanç: ${Math.floor(resources.faith)}`, x + w - 40, y + 20);
+  ctx.textAlign = "left";
+
+  let ry = y + 48;
+  for (const power of DIVINE_POWERS) {
+    const cd = divineCooldown[power.id] ?? 0;
+    const affordable = resources.faith >= power.cost;
+    const ready = cd <= 0;
+    rrect(ctx, x + 10, ry, w - 20, rowH - 6, 6);
+    ctx.fillStyle = "rgba(255,255,255,0.03)";
+    ctx.fill();
+    // ikon
+    ctx.font = "20px monospace";
+    ctx.globalAlpha = ready && affordable ? 1 : 0.5;
+    ctx.fillText(power.icon, x + 18, ry + 16);
+    ctx.globalAlpha = 1;
+    // ad + açıklama
+    ctx.fillStyle = ready && affordable ? "#e8e2d0" : "#8a8478";
+    ctx.font = "bold 12px monospace";
+    ctx.fillText(power.name, x + 46, ry + 13);
+    ctx.fillStyle = "#9a9488";
+    ctx.font = "10px monospace";
+    ctx.fillText(power.desc, x + 46, ry + 30, w - 200);
+    // çağır düğmesi
+    const tw = 96, th = 30, tx = x + w - tw - 14, ty = ry + (rowH - 6 - th) / 2;
+    const label = cd > 0 ? `${Math.ceil(cd)} sn` : `${power.cost} inanç`;
+    chipBg(ctx, tx, ty, tw, th, ready && affordable, ready && affordable ? UI.gold : UI.muted);
+    ctx.textAlign = "center";
+    ctx.fillStyle = cd > 0 ? "#9a9488" : affordable ? "#ffe296" : "#d0796a";
+    ctx.font = "bold 11px monospace";
+    ctx.fillText(cd > 0 ? "⏳ " + label : "Çağır", tx + tw / 2, ry + (rowH - 6) / 2 - 5);
+    ctx.fillStyle = "#b8b2a4";
+    ctx.font = "10px monospace";
+    ctx.fillText(cd > 0 ? "bekliyor" : label, tx + tw / 2, ry + (rowH - 6) / 2 + 8);
+    ctx.textAlign = "left";
+    divineRows.push({ id: power.id, x: tx, y: ty, w: tw, h: th });
+    ry += rowH;
+  }
+}
+
 export function drawPolicyPanel(ctx: CanvasRenderingContext2D): void {
   const w = 420;
   const rowH = 46;
@@ -2393,10 +2471,16 @@ export function journalButtonHitTest(sx: number, sy: number): boolean {
 }
 let techButtonRect = { x: 0, y: 0, w: 0, h: 0 };
 let policyButtonRect = { x: 0, y: 0, w: 0, h: 0 };
+let divineButtonRect = { x: 0, y: 0, w: 0, h: 0 };
 
 export function policyButtonHitTest(sx: number, sy: number): boolean {
   return sx >= policyButtonRect.x && sx <= policyButtonRect.x + policyButtonRect.w &&
     sy >= policyButtonRect.y && sy <= policyButtonRect.y + policyButtonRect.h;
+}
+
+export function divineButtonHitTest(sx: number, sy: number): boolean {
+  return sx >= divineButtonRect.x && sx <= divineButtonRect.x + divineButtonRect.w &&
+    sy >= divineButtonRect.y && sy <= divineButtonRect.y + divineButtonRect.h;
 }
 
 export function peopleButtonHitTest(sx: number, sy: number): boolean {
@@ -2539,6 +2623,19 @@ export function drawHud(
     ctx.textAlign = "center";
     ctx.fillText("⚙", cx + bw / 2 - 2, 18);
     ctx.textAlign = "left";
+    cx += bw + 10;
+  }
+
+  // ilahî güçler düğmesi — ✨ + inanç sayacı
+  {
+    const label = `✨ ${Math.floor(resources.faith)}`;
+    ctx.font = "13px monospace";
+    const bw = ctx.measureText(label).width + 16;
+    divineButtonRect = { x: cx - 2, y: 4, w: bw, h: 26 };
+    chipBg(ctx, divineButtonRect.x, divineButtonRect.y, bw, 26, true, UI.purple);
+    ctx.fillStyle = "#e8d8ff";
+    ctx.font = "13px monospace";
+    ctx.fillText(label, cx + 6, 18);
     cx += bw + 10;
   }
 

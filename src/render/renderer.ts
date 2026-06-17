@@ -2047,13 +2047,23 @@ export class Renderer {
       }
     }
 
-    // yakaran köylü: başının üstünde el işareti; şokta yıldırım
+    // peygamber: başının üstünde altın hale (parıldar)
+    if (v.isProphet) {
+      const pulse = 0.6 + 0.4 * Math.sin(time * 4);
+      ctx.strokeStyle = `rgba(255, 214, 90, ${pulse})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 13, 3.4, 1.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // ileti gönderen köylü: başının üstünde işaret; şokta yıldırım
     if (v.pleadingTtl > 0) {
       const bob = Math.sin(time * 5) * 1.2;
       ctx.font = "bold 5px monospace";
       ctx.textAlign = "center";
       ctx.fillStyle = "#ffe296";
-      ctx.fillText("✋", x, y - 19 + bob);
+      ctx.fillText("📨", x, y - 19 + bob);
       ctx.textAlign = "left";
     } else if (v.shockTtl > 0) {
       ctx.font = "bold 6px monospace";
