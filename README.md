@@ -120,7 +120,18 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v3.4)
+## Şu anki özellikler (v3.5)
+
+### v3.5: Sıkışma düzeltmesi + teknoloji temposu
+
+- **"Yapıya sıkışma" hatası giderildi**: otomatik inşaat artık binaların
+  çevresinde 1 karo yürüme koridoru bırakır (birbirine yapışmaz) ve köylünün
+  üstüne bina kurmaz; binadan çıkış en yakın yürünebilir kareye düşer
+- **Teknoloji oldukça yavaşlatıldı**: ayin verimi düşürüldü, ayin döngüsü
+  uzadı ve araştırma maliyeti daha dik katlanır (×1.22) — bilgi akar ama
+  ilerleme artık aceleci değil
+
+### v3.4: İlahî Güçler — dışarıdan yönlendiren tanrı
 
 ### v3.4: İlahî Güçler — dışarıdan yönlendiren tanrı
 

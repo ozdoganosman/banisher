@@ -1537,15 +1537,37 @@ function autoStaffTick(): void {
 function bCount(t: BuildingType): number {
   return buildings.filter((b) => b.type === t && !b.removed).length;
 }
+// Otomatik yerleştirme alanı: ayak izi + 1 karo kenar boşluğu tamamen açık
+// olmalı (binalar birbirine yapışmasın, köylüler kapana kısılmasın) ve
+// üstünde köylü durmamalı.
+function autoPlaceClear(tx: number, ty: number, size: number): boolean {
+  for (let dy = -1; dy <= size; dy++) {
+    for (let dx = -1; dx <= size; dx++) {
+      const x = tx + dx, y = ty + dy;
+      if (!world.inBounds(x, y)) return false;
+      const border = dx < 0 || dy < 0 || dx >= size || dy >= size;
+      if (border) {
+        // kenar: yürünebilir bir koridor kalsın (su/ağaç/bina olmaz)
+        if (!world.walkableAt(x, y)) return false;
+      }
+    }
+  }
+  // ayak izinde köylü var mı?
+  for (const v of villagers) {
+    if (v.tileX >= tx && v.tileX < tx + size && v.tileY >= ty && v.tileY < ty + size) return false;
+  }
+  return true;
+}
 function tryAutoPlace(type: BuildingType): boolean {
   const def = BUILDING_DEFS[type];
   const size = def.size;
-  for (let r = 3; r <= 20; r++) {
+  for (let r = 3; r <= 22; r++) {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
         const x = campCenter.x + dx, y = campCenter.y + dy;
         if (!canPlace(world, x, y, size)) continue;
+        if (!autoPlaceClear(x, y, size)) continue;
         if (def.needsWater && !world.hasAdjacentWater(x, y, size)) continue;
         if (type === BuildingType.Barn && !pastureClearOfWater(x, y)) continue;
         const b = new Building(type, x, y);
@@ -1567,7 +1589,7 @@ function autoBuildTick(): void {
   // 1) konut: nüfus için yeterli yatak yoksa
   if (pop > bCount(BuildingType.House) * HOUSE_CAPACITY) wishlist.push(BuildingType.House);
   // 2) tapınak: bilgi/araştırma motoru — koloni büyüdükçe daha çok tapınak
-  if (bCount(BuildingType.Temple) < Math.min(3, 1 + Math.floor(pop / 14))) wishlist.push(BuildingType.Temple);
+  if (bCount(BuildingType.Temple) < Math.min(2, 1 + Math.floor(pop / 20))) wishlist.push(BuildingType.Temple);
   // 3) yemek: toplayıcı (kilidi açıksa), nüfusa göre 1-2 tane
   if (isBuildingUnlocked(BuildingType.Gatherer) && bCount(BuildingType.Gatherer) < Math.min(2, Math.ceil(pop / 8))) wishlist.push(BuildingType.Gatherer);
   // 4) balıkçı (su kenarı)

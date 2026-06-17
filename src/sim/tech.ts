@@ -221,7 +221,7 @@ export function prereqsMet(tech: Tech): boolean {
 
 // Maliyet katlamalı artar: her araştırılan, sonrakileri pahalılaştırır.
 // Böylece kabile geliştikçe ilerleme giderek daha büyük bir yatırım ister.
-const COST_ESCALATION = 1.16;
+const COST_ESCALATION = 1.22;
 export function currentCost(tech: Tech): number {
   return Math.round(tech.cost * Math.pow(COST_ESCALATION, purchased.size));
 }

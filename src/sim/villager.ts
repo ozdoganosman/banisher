@@ -1812,17 +1812,16 @@ export class Villager {
 
   // Bina içinden çevredeki yürünebilir bloğa çık
   private exitBuilding(world: World, b: Building): void {
-    for (let r = 1; r <= 3; r++) {
-      for (let dy = -r; dy <= r + b.size - 1; dy++) {
-        for (let dx = -r; dx <= r + b.size - 1; dx++) {
-          const x = b.x + dx;
-          const y = b.y + dy;
-          if (!world.walkableAt(x, y)) continue;
-          this.x = (x + 0.5) * TILE_SIZE;
-          this.y = (y + 0.5) * TILE_SIZE;
-          return;
-        }
-      }
+    // binanın çevresinde en yakın yürünebilir kareyi bul (halka halka, geniş)
+    const cx = b.x + Math.floor(b.size / 2);
+    const cy = b.y + Math.floor(b.size / 2);
+    const spot = world.findNearestTile(
+      (cx + 0.5) * TILE_SIZE, (cy + 0.5) * TILE_SIZE,
+      (x, y) => world.walkableAt(x, y), 30
+    );
+    if (spot) {
+      this.x = (spot.x + 0.5) * TILE_SIZE;
+      this.y = (spot.y + 0.5) * TILE_SIZE;
     }
   }
 

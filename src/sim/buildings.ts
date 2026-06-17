@@ -233,15 +233,15 @@ export function isLit(buildings: Building[], wx: number, wy: number): boolean {
   return false;
 }
 
-export const WORSHIP_INTERVAL = 8; // saniye: tapınak yeni ayine bu arayla izin verir
-export const WORSHIP_TIME = 7;
+export const WORSHIP_INTERVAL = 14; // saniye: tapınak yeni ayine bu arayla izin verir
+export const WORSHIP_TIME = 10;
 export const KNOWLEDGE_PER_WORSHIP = 1;
 
-// Ayin verimi rahip sayısıyla güçlü biçimde artar (toplam birikim ~ rahip² mertebesinde,
-// hızlı ayin döngüsüyle birleşince bilgi bolca akar). main her saniye günceller.
+// Ayin verimi rahip sayısıyla artar ama ölçülü: teknoloji çok hızlı gelişmesin.
+// main her saniye günceller.
 export const worshipState = { yield: 1 };
 export function worshipYieldFor(priests: number): number {
-  return Math.max(3, Math.round(priests * 2));
+  return Math.max(1, Math.round(priests * 0.7));
 }
 
 // Köylülerin topladıklarını teslim edebileceği bina mı?
