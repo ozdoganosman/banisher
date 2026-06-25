@@ -10,13 +10,29 @@ let busDry: GainNode | null = null; // kuru karışım girişi
 let reverb: ConvolverNode | null = null;
 let fireGain: GainNode | null = null; // ateşin genel seviyesi (mesafe)
 let currentFire = 0; // çıtırtı zamanlayıcısının okuduğu anlık seviye
-let muted = false;
+
+// Ses kapalı/açık tercihi tarayıcıda saklanır: sayfa yenilense ya da "Ana
+// Menü" (location.reload) sonrası bile korunur.
+const MUTE_KEY = "banisher_muted";
+function loadMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+let muted = loadMuted();
 
 let lx = 0; // dinleyici (kamera) dünya konumu
 let ly = 0;
 
 export function setMuted(m: boolean): void {
   muted = m;
+  try {
+    localStorage.setItem(MUTE_KEY, m ? "1" : "0");
+  } catch {
+    /* depolama yoksa sessizce geç */
+  }
   if (master) master.gain.value = m ? 0 : 0.5;
 }
 
