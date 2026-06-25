@@ -209,6 +209,7 @@ function saveGame(auto = false): void {
       x: v.x, y: v.y, identity: { ...v.identity },
       hunger: v.hunger, morale: v.morale, hp: v.hp,
       moraleLog: [...v.moraleLog],
+      inventory: { ...v.inventory }, // taşınan kargo (yoksa kayıt/yüklemede kaybolur)
       birthDay: v.birthDay, pregnantSince: v.pregnantSince,
       educated: v.educated, hasAxe: v.hasAxe, hasClothes: v.hasClothes,
       spears: v.spears, sick: v.sickUntilDay, prophet: v.prophetUntilDay,
@@ -293,6 +294,7 @@ function loadGame(): boolean {
       v.hp = vd.hp;
       v.moraleLog.clear();
       for (const [k, val] of vd.moraleLog) v.moraleLog.set(k, val);
+      if (vd.inventory) Object.assign(v.inventory, vd.inventory); // taşınan kargoyu geri yükle
       v.birthDay = vd.birthDay;
       v.pregnantSince = vd.pregnantSince;
       v.sickUntilDay = vd.sick ?? -1;
