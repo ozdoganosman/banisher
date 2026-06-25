@@ -178,7 +178,7 @@ let gameSpeed = 1;
 
 const SAVE_KEY = "banisher_save";
 
-function saveGame(): void {
+function saveGame(auto = false): void {
   const bIndex = (b: Building | null) => (b ? buildings.indexOf(b) : -1);
   const vIndex = (v: Villager | null) => (v ? villagers.indexOf(v) : -1);
   const data = {
@@ -226,10 +226,17 @@ function saveGame(): void {
   };
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    addMessage("💾 Oyun kaydedildi");
+    addMessage(auto ? "💾 Otomatik kayıt alındı" : "💾 Oyun kaydedildi");
   } catch {
-    addMessage("Kayıt başarısız (depolama dolu olabilir)");
+    // Otomatik kayıtta sessiz kal (her döngüde uyarı yağmuru olmasın);
+    // elle kayıtta kullanıcıyı bilgilendir.
+    if (!auto) addMessage("Kayıt başarısız (depolama dolu olabilir)");
   }
+}
+
+// Aktif oyun var mı? (ana menü/oyun sonu sırasında kayıt almayız)
+function gameActive(): boolean {
+  return villagers.length > 0 && !menuOverlay;
 }
 
 function hasSave(): boolean {
@@ -519,7 +526,7 @@ function showPauseMenu(): void {
     },
     {
       label: "💾 Kaydet",
-      desc: "Oyunu tarayıcıya kaydet",
+      desc: "Ctrl+S ile de kaydedebilirsin · oyun otomatik de kaydeder",
       onClick: () => {
         saveGame();
         closeMenu();
@@ -1404,6 +1411,12 @@ input.wheelInterceptor = (sx, sy, deltaY) => {
 };
 
 window.addEventListener("keydown", (e) => {
+  if (e.code === "KeyS" && (e.ctrlKey || e.metaKey)) {
+    // Ctrl/Cmd+S: hızlı kayıt (tarayıcının "sayfayı kaydet" iletişimini bastır)
+    e.preventDefault();
+    if (gameActive()) saveGame();
+    return;
+  }
   if (e.code === "Escape") {
     if (menuOverlay) {
       // menü açıkken Esc: kapat ve devam et
@@ -1454,6 +1467,17 @@ window.addEventListener("keydown", (e) => {
       selected = selected === type ? null : type;
     }
   }
+});
+
+// Sekme kapanırken / arka plana atılırken son durumu sessizce kaydet —
+// kazara ilerleme kaybını önler. (visibilitychange mobil/sekme-değişiminde,
+// pagehide kapanış/yenilemede en güvenilir tetikleyicidir.)
+function saveOnExit(): void {
+  if (gameActive()) saveGame(true);
+}
+window.addEventListener("pagehide", saveOnExit);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveOnExit();
 });
 
 // ---- Simülasyon adımı ----
@@ -2631,6 +2655,7 @@ showMainMenu();
 
 let last = performance.now();
 let accumulator = 0;
+let autosaveTimer = 0; // gerçek-zaman sayacı (otomatik kayıt için)
 
 function frame(now: number) {
   const elapsed = Math.min((now - last) / 1000, 0.25);
@@ -2647,6 +2672,18 @@ function frame(now: number) {
     dangerCooldown = 10;
   }
   updateMessages(elapsed);
+
+  // Otomatik kayıt: gerçek-zamanda işler (duraklatılsa bile), yalnız aktif
+  // oyunda. tuning.autosaveSeconds = 0 ise devre dışı.
+  if (gameActive() && tuning.autosaveSeconds > 0) {
+    autosaveTimer += elapsed;
+    if (autosaveTimer >= tuning.autosaveSeconds) {
+      autosaveTimer = 0;
+      saveGame(true);
+    }
+  } else {
+    autosaveTimer = 0;
+  }
 
   // koloni yok olduysa simülasyon durur (oyun sonu perdesi gösterilir)
   accumulator += elapsed * (paused || villagers.length === 0 ? 0 : gameSpeed);
