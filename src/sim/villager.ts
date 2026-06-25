@@ -213,7 +213,9 @@ export class Villager {
   shockTtl = 0; // teskin edildi: kısa süre şokta donar
   sickUntilDay = -1; // hastalık olayı: bu güne dek halsiz (yavaş yürür/çalışır)
   prophetUntilDay = -1; // İlahî güç: bu güne dek peygamber (aura yayar, hızlı çalışır)
-  private divineBuff: { untilDay: number; amount: number } | null = null;
+  // Geçici moral takviyesi ("Tanrının sesi"): süresi dolunca geri alınır.
+  // Kayda yazılır (yoksa morale kalıcı kalıp takviye sonsuza dek sürerdi).
+  divineBuff: { untilDay: number; amount: number } | null = null;
   private fleeDirX = 0;
   private fleeDirY = 0;
   private threatTimer = Math.random() * 0.4; // yırtıcı kontrol ritmi

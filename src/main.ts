@@ -216,6 +216,7 @@ function saveGame(auto = false): void {
       birthDay: v.birthDay, pregnantSince: v.pregnantSince,
       educated: v.educated, hasAxe: v.hasAxe, hasClothes: v.hasClothes,
       spears: v.spears, sick: v.sickUntilDay, prophet: v.prophetUntilDay,
+      divineBuff: v.divineBuff, // geçici moral takviyesi (yoksa kalıcılaşırdı)
       home: bIndex(v.home), mother: vIndex(v.mother),
       assignment:
         v.assignment.kind === "building"
@@ -320,6 +321,7 @@ function loadGame(): boolean {
       v.pregnantSince = vd.pregnantSince;
       v.sickUntilDay = vd.sick ?? -1;
       v.prophetUntilDay = vd.prophet ?? -1;
+      v.divineBuff = vd.divineBuff ?? null; // geçici takviye geri yüklenir → süresi dolunca geri alınır
       v.educated = vd.educated;
       v.hasAxe = vd.hasAxe;
       v.hasClothes = vd.hasClothes;
