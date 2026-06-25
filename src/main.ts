@@ -192,8 +192,10 @@ function saveGame(auto = false): void {
     tech: purchasedList(),
     policy: { ...policy },
     divine: { ...divine },
+    divineCooldown: { ...divineCooldown }, // güç bekleme süreleri (reload ile sıfırlanmasın = save-scum yok)
     events: { ...eventFlags },
     goal: goalState.index,
+    gameSpeed, // oyun hızı: yüklemede seçilen hızı koru
     world: world.serialize(),
     journal: journal.map((e) => ({ ...e })),
     camera: { x: camera.x, y: camera.y, zoom: camera.zoom },
@@ -258,6 +260,9 @@ function loadGame(): boolean {
     restorePurchased(d.tech);
     Object.assign(policy, d.policy ?? (d.autoResearch !== undefined ? { research: d.autoResearch } : {}));
     if (d.divine) Object.assign(divine, d.divine);
+    for (const k of Object.keys(divineCooldown)) delete divineCooldown[k];
+    if (d.divineCooldown) Object.assign(divineCooldown, d.divineCooldown);
+    if ([1, 2, 4, 8, 16].includes(d.gameSpeed)) gameSpeed = d.gameSpeed; // geçerliyse hızı geri yükle
     eventFlags.coldSnapUntilDay = d.events?.coldSnapUntilDay ?? -1;
     goalState.index = d.goal ?? 0; // eski kayıtlar: karşılanan hedefler peş peşe tamamlanır
     eventTimer = 0.5 * tuning.dayLength; // eski kayıtlarda olay sayacı tazelenir
