@@ -194,6 +194,7 @@ function saveGame(auto = false): void {
     divine: { ...divine },
     divineCooldown: { ...divineCooldown }, // güç bekleme süreleri (reload ile sıfırlanmasın = save-scum yok)
     events: { ...eventFlags },
+    milestones: { ...milestones }, // ulaşılan dönüm noktaları (yüklemede tekrar kutlanmasın)
     goal: goalState.index,
     gameSpeed, // oyun hızı: yüklemede seçilen hızı koru
     world: world.serialize(),
@@ -275,6 +276,9 @@ function loadGame(): boolean {
     for (const k of Object.keys(divineCooldown)) delete divineCooldown[k];
     if (d.divineCooldown) Object.assign(divineCooldown, d.divineCooldown);
     if ([1, 2, 4, 8, 16].includes(d.gameSpeed)) gameSpeed = d.gameSpeed; // geçerliyse hızı geri yükle
+    if (d.milestones) Object.assign(milestones, d.milestones); // dönüm noktaları tekrar kutlanmasın
+    else for (const k of Object.keys(milestones)) (milestones as Record<string, boolean>)[k] = true; // eski kayıt: hepsini ulaşılmış say
+    prevSeason = season(); // mevsim sayacını kayıttaki ana hizala (sahte "ilk kış" olmasın)
     eventFlags.coldSnapUntilDay = d.events?.coldSnapUntilDay ?? -1;
     goalState.index = d.goal ?? 0; // eski kayıtlar: karşılanan hedefler peş peşe tamamlanır
     eventTimer = 0.5 * tuning.dayLength; // eski kayıtlarda olay sayacı tazelenir
