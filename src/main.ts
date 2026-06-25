@@ -542,9 +542,15 @@ function showScripture(): void {
 // Oyun sonu: son köylü de göçtüğünde (koloni yok olunca) gösterilir.
 // Daha önce yalnız sim donuyordu, oyuncuya hiçbir şey bildirilmiyordu.
 function showGameOver(): void {
+  const fate =
+    lastDeathCause === "predator"
+      ? "Kabilen yırtıcıların pençesinde tükendi"
+      : lastDeathCause === "hunger"
+      ? "Kabilen açlığa yenik düştü"
+      : "Son köylün de göçtü";
   buildMenu(
     "☠ KABİLEN YOK OLDU",
-    `Son köylün de göçtü — kabilen ${gameTime.year} yıl dayandı (${dateString()})`,
+    `${fate} — kabilen ${gameTime.year} yıl dayandı (${dateString()})`,
     [
       {
         label: "🔄 Yeniden Dene",
@@ -2622,6 +2628,7 @@ function step(dt: number) {
           : `💀 ${v.fullName} açlıktan öldü!`;
       addMessage(deathText);
       addJournal(deathText);
+      lastDeathCause = v.deathCause; // oyun sonu perdesi için sebebi anımsa
       if (selectedVillager === v) selectedVillager = null;
       villagers.splice(i, 1);
     }
@@ -2850,6 +2857,7 @@ let last = performance.now();
 let accumulator = 0;
 let autosaveTimer = 0; // gerçek-zaman sayacı (otomatik kayıt için)
 let gameOverShown = false; // oyun sonu perdesi bir kez gösterilsin
+let lastDeathCause: "hunger" | "predator" | null = null; // kolonyi bitiren son ölümün sebebi
 
 function frame(now: number) {
   const elapsed = Math.min((now - last) / 1000, 0.25);
