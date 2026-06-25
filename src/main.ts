@@ -2140,7 +2140,6 @@ const wasFull: Record<ItemType, boolean> = Object.fromEntries(
   ITEM_TYPES.map((t) => [t, false])
 ) as Record<ItemType, boolean>;
 
-let wasFamine = false;
 
 // Kilometre taşları: bir kez kutlanır
 const milestones = {
@@ -2182,12 +2181,8 @@ function checkStorageFull() {
     }
     wasFull[item] = full;
   }
-  // kıtlık uyarısı: yemek tamamen bitti
-  const famine = foodTotal() <= 0;
-  if (famine && !wasFamine) {
-    addMessage("⚠ Yemek stoğu tükendi! Köylüler açlıktan ölebilir.");
-  }
-  wasFamine = famine;
+  // not: yemek-bitti uyarısı artık tickFamineWarning'de (dereceli: "azalıyor"
+  // erken uyarı + "tükendi" + bildirim çanı), burada tekrar edilmez.
 }
 
 // ---- Tehlike kamerası: yırtıcıyla karşılaşan köylü takip edilir ----
