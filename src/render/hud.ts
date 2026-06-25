@@ -657,6 +657,79 @@ export function isOverToolbar(sy: number, canvasH: number): boolean {
   return sy >= canvasH - TOOLBAR_HEIGHT;
 }
 
+// Araç çubuğunda fareyle gelinen binanın üstünde ipucu: ad, maliyet, işçi
+// ve açıklama. Oyuncu binayı seçmeden önce ne işe yaradığını görür.
+export function drawToolbarTooltip(ctx: CanvasRenderingContext2D, type: BuildingType): void {
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+  const unlockedTypes = TOOLBAR_TYPES.filter(isBuildingUnlocked);
+  const slot = unlockedTypes.indexOf(type);
+  if (slot < 0) return;
+  const def = BUILDING_DEFS[type];
+  const btn = buttonRect(slot, w, h, unlockedTypes.length);
+
+  const title = def.name;
+  const stats: string[] = [`🪵 ${def.cost}`];
+  if (def.maxWorkers > 0) stats.push(`👷 ${def.maxWorkers}`);
+  if (def.needsWater) stats.push("🌊 su kenarı");
+  const statLine = stats.join("   ");
+
+  // açıklamayı sözcük sarımıyla satırlara böl
+  ctx.font = "11px monospace";
+  const maxW = 220;
+  const descLines: string[] = [];
+  let line = "";
+  for (const word of def.desc.split(" ")) {
+    const test = line ? line + " " + word : word;
+    if (line && ctx.measureText(test).width > maxW) { descLines.push(line); line = word; }
+    else line = test;
+  }
+  if (line) descLines.push(line);
+
+  // panel ölçüsü
+  const padX = 9, padY = 7, rowH = 15;
+  ctx.font = "bold 12px monospace";
+  const titleW = ctx.measureText(title).width;
+  ctx.font = "11px monospace";
+  const statW = ctx.measureText(statLine).width;
+  const descW = descLines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
+  const contentW = Math.max(titleW, statW, descW, 110);
+  const panelW = contentW + padX * 2;
+  const rows = 2 + descLines.length; // başlık + istatistik + açıklama satırları
+  const panelH = padY * 2 + rows * rowH;
+
+  // konum: butonun üstünde, yatayda ortalı, ekrana sığacak şekilde clamp
+  let px = btn.x + btn.w / 2 - panelW / 2;
+  px = Math.max(6, Math.min(px, w - panelW - 6));
+  const py = btn.y - panelH - 8;
+
+  ctx.fillStyle = "rgba(12, 14, 18, 0.94)";
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.strokeStyle = "rgba(255, 226, 150, 0.6)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(px + 0.5, py + 0.5, panelW - 1, panelH - 1);
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  let ty = py + padY + 11;
+  ctx.font = "bold 12px monospace";
+  ctx.fillStyle = "#ffe296";
+  ctx.fillText(title, px + padX, ty);
+  ty += rowH;
+  ctx.font = "11px monospace";
+  ctx.fillStyle = "#bfe0a0";
+  ctx.fillText(statLine, px + padX, ty);
+  ctx.fillStyle = "#cdd4c0";
+  for (const l of descLines) {
+    ty += rowH;
+    ctx.fillText(l, px + padX, ty);
+  }
+
+  // hangi buton olduğunu belli etmek için ince vurgu çerçevesi
+  ctx.strokeStyle = "rgba(255, 226, 150, 0.5)";
+  ctx.strokeRect(btn.x + 0.5, btn.y + 0.5, btn.w - 1, btn.h - 1);
+}
+
 // ---- İşaretleme filtresi (alan seçimi neyi işaretlesin?) ----
 
 export type MarkFilter = "all" | "wood" | "food" | "stone" | "cancel";

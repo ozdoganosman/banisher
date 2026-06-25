@@ -45,6 +45,7 @@ import {
   TOOLBAR_HEIGHT,
   TOOLBAR_TYPES,
   toolbarHitTest,
+  drawToolbarTooltip,
   updateMessages,
   drawTaskList,
   drawGoalCard,
@@ -2971,6 +2972,12 @@ function frame(now: number) {
     if (showDivine) drawDivinePanel(ctx);
     if (selectedAnimal) drawAnimalPanel(ctx, selectedAnimal, canTameAnimal(selectedAnimal));
     if (showTech) drawTechPanel(ctx, policy.research);
+  }
+
+  // araç çubuğunda fareyle gelinen binanın ipucu (tam ekran tech açıkken değil)
+  if (villagers.length > 0 && !showTech) {
+    const hoverType = toolbarHitTest(input.mouseX, input.mouseY, canvas.width, canvas.height);
+    if (hoverType !== null) drawToolbarTooltip(ctx, hoverType);
   }
 
   // araştırma kutlaması her şeyin üstünde
