@@ -1967,27 +1967,32 @@ function nightlyConceptions(): void {
 function checkBirths(): void {
   for (const mom of villagers) {
     if (!mom.readyToGiveBirth) continue;
-    let placed = false;
-    for (let r = 1; r <= 3 && !placed; r++) {
-      for (let dy = -r; dy <= r && !placed; dy++) {
-        for (let dx = -r; dx <= r && !placed; dx++) {
+    // bebeğin doğacağı kare: çevrede yürünebilir en yakın yer; sıkışıksa
+    // annenin bulunduğu kare (bebek hiçbir durumda kaybolmaz)
+    let bx = mom.tileX;
+    let by = mom.tileY;
+    search: for (let r = 1; r <= 3; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
           const x = mom.tileX + dx;
           const y = mom.tileY + dy;
-          if (!world.walkableAt(x, y)) continue;
-          const baby = new Villager(x, y, true);
-          baby.home = mom.home;
-          baby.mother = mom;
-          if (hasTech("humanity")) baby.changeMorale(10, "Tanrı inancı");
-          villagers.push(baby);
-          mom.giveBirth();
-          addMessage(`👶 ${baby.fullName} doğdu! (annesi ${mom.fullName})`);
-          addFloater(mom.x, mom.y - 18, "+1 bebek", "#ffb0d0");
-          placed = true;
+          if (world.walkableAt(x, y)) {
+            bx = x;
+            by = y;
+            break search;
+          }
         }
       }
     }
-    if (!placed) mom.giveBirth(); // sıkışık durumda bebek annenin olduğu yerde sayılır
+    const baby = new Villager(bx, by, true);
+    baby.home = mom.home;
+    baby.mother = mom;
+    if (hasTech("humanity")) baby.changeMorale(10, "Tanrı inancı");
+    villagers.push(baby);
+    mom.giveBirth();
+    addMessage(`👶 ${baby.fullName} doğdu! (annesi ${mom.fullName})`);
+    addFloater(mom.x, mom.y - 18, "+1 bebek", "#ffb0d0");
   }
 }
 
