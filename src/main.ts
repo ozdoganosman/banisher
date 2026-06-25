@@ -2853,6 +2853,34 @@ function tickFamineWarning(dt: number): void {
   famineLevel = level;
 }
 
+// ---- Düşük moral uyarısı ----
+// Moral iş hızını belirler (0 moral = yarı hız). Ortalama moral kritiğe inince
+// koloni yavaşlar ve kısır döngüye girer; oyuncu çoğu zaman bunu fark etmez.
+// Histerezis (LOW/OK) ile titremeyi önler; sürerse ~25 sn'de bir hatırlatır.
+const MORALE_LOW = 12; // çalışan ortalaması bunun altına inince uyar
+const MORALE_OK = 16; // bunun üstüne çıkınca uyarı durumu temizlenir
+let moraleWarned = false;
+let moraleWarnCooldown = 0;
+function tickMoraleWarning(dt: number): void {
+  const workers = villagers.filter((v) => v.canWork && !v.dead);
+  if (workers.length === 0) {
+    moraleWarned = false;
+    return;
+  }
+  const avg = workers.reduce((s, v) => s + v.morale, 0) / workers.length;
+  moraleWarnCooldown -= dt;
+  if (avg < MORALE_LOW && (!moraleWarned || moraleWarnCooldown <= 0)) {
+    moraleWarned = true;
+    moraleWarnCooldown = 25;
+    addMessage(
+      "😟 Moral düşük — köylüler yavaş çalışıyor (ev, ateş başı ve tanrı inancı moral yükseltir)",
+      "important"
+    );
+  } else if (avg >= MORALE_OK) {
+    moraleWarned = false;
+  }
+}
+
 let last = performance.now();
 let accumulator = 0;
 let autosaveTimer = 0; // gerçek-zaman sayacı (otomatik kayıt için)
@@ -2887,8 +2915,11 @@ function frame(now: number) {
     autosaveTimer = 0;
   }
 
-  // kıtlık erken uyarısı: yalnız oyun ilerlerken (duraklamada erzak sabit)
-  if (gameActive() && !paused) tickFamineWarning(elapsed);
+  // kıtlık ve düşük moral uyarıları: yalnız oyun ilerlerken
+  if (gameActive() && !paused) {
+    tickFamineWarning(elapsed);
+    tickMoraleWarning(elapsed);
+  }
 
   // oyun sonu: son köylü de göçtüyse perdeyi bir kez göster (menü açık değilken)
   if (villagers.length === 0 && !gameOverShown && !menuOverlay) {
