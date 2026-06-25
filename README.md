@@ -75,9 +75,10 @@ Kış haritayı bembeyaz örter ve bitki büyümesini durdurur — balıkçılı
 kışın da çalışan tek üretimdir.
 
 **Debug/denge ayarları:** tarayıcı konsolunda `__game.tuning` ile
-`dayLength` (gün süresi), `timeScale` (takvim akış hızı) ve `moveSpeed`
-(temel hareket hızı) canlı değiştirilebilir; `?seed=12345` ile sabit
-harita üretilir.
+`dayLength` (gün süresi), `timeScale` (takvim akış hızı), `moveSpeed`
+(temel hareket hızı) ve `autosaveSeconds` (otomatik kayıt aralığı, sn;
+`0` = kapalı) canlı değiştirilebilir; `?seed=12345` ile sabit harita
+üretilir.
 
 ## Çalıştırma
 
@@ -106,7 +107,9 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | B / "Defter" düğmesi | Savaş ve Tehlike Defteri |
 | T / "Teknoloji" düğmesi | Tam ekran teknoloji ağacı (sürükleyerek kaydır) |
 | 1-9, 0 | Araç çubuğundaki kilidi açık binalardan seç |
-| Esc / sağ tık | Üstteki paneli kapat; panel yoksa Esc duraklatma menüsünü açar (Kaydet/Ses/Ana Menü) |
+| Esc / sağ tık | Üstteki paneli kapat; panel yoksa Esc duraklatma menüsünü açar (Kaydet / Ses / Tehlike kamerası / Kısayollar / Ana Menü) |
+| ? | Kısayol & yardım ekranını aç (tuşlar, fare ve kısa başlangıç rehberi) |
+| Ctrl / ⌘ + S | Oyunu anında kaydet (oyun ayrıca arka planda otomatik kaydeder) |
 | Space | Duraklat / devam et |
 | X | Oyun hızı (1x / 2x / 4x / 8x / 16x) |
 | WASD / Ok tuşları | Kamerayı kaydır |
@@ -120,7 +123,27 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v3.5)
+## Şu anki özellikler (v3.6)
+
+### v3.6: Kalite-yaşam, dayanıklılık ve geri bildirim cilası
+
+- **Kayıt & dayanıklılık**: arka planda **otomatik kayıt** (sekme
+  kapanışında da) ve **Ctrl/⌘+S** ile anında kayıt; bozuk/eksik kayıt artık
+  reddedilir (mevcut oyun korunur); oyun hızı, ilahî güç bekleme süreleri ve
+  köylülerin taşıdığı kargo da kayda dahil edildi.
+- **Geri bildirim**: **kıtlık** ve **düşük moral** erken uyarıları; ölüm,
+  doğum, göçmen ve **hedef tamamlama** gibi önemli olaylar belirginleşti ve
+  yumuşak bir **bildirim çanı** çalar; koloni yok olunca **oyun sonu perdesi**
+  (ölüm sebebiyle birlikte).
+- **Keşfedilebilirlik**: **`?` yardım ekranı** (tuşlar/fare/rehber), araç
+  çubuğunda **bina ipuçları**, hayalette **odun maliyeti** önizlemesi,
+  duraklatma menüsünde hızlı koloni özeti (tarih · zorluk · nüfus).
+- **Erişilebilirlik & tercih**: **tehlike kamerası**nın otomatik kayması
+  kapatılabilir, **ses** tercihi kalıcı.
+- **Performans**: ekran dışındaki varlıklar çizilmez (viewport culling).
+- **Hata düzeltmeleri**: bina yıkımında hayalet otlak ve yarım kalan iş
+  temizliği; sıkışık konumda kaybolan bebek; zorluk ön ayarlarında değer
+  sızıntısı.
 
 ### v3.5: Sıkışma düzeltmesi + teknoloji temposu
 

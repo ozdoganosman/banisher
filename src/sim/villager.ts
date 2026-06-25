@@ -213,7 +213,9 @@ export class Villager {
   shockTtl = 0; // teskin edildi: kısa süre şokta donar
   sickUntilDay = -1; // hastalık olayı: bu güne dek halsiz (yavaş yürür/çalışır)
   prophetUntilDay = -1; // İlahî güç: bu güne dek peygamber (aura yayar, hızlı çalışır)
-  private divineBuff: { untilDay: number; amount: number } | null = null;
+  // Geçici moral takviyesi ("Tanrının sesi"): süresi dolunca geri alınır.
+  // Kayda yazılır (yoksa morale kalıcı kalıp takviye sonsuza dek sürerdi).
+  divineBuff: { untilDay: number; amount: number } | null = null;
   private fleeDirX = 0;
   private fleeDirY = 0;
   private threatTimer = Math.random() * 0.4; // yırtıcı kontrol ritmi
@@ -886,6 +888,22 @@ export class Villager {
   die(world: World): void {
     this.dead = true;
     this.releaseJob(world);
+  }
+
+  // Bir bina yıkıldığında çağrılır: güncel iş o binaya bağlıysa bırakılır
+  // (claim/rezervasyonlar serbest), köylü yeniden iş arar. Yıkılmış binaya
+  // doğru yürümeye / hayalet hedefe iş yapmaya devam etmesini önler.
+  forgetBuilding(b: Building, world: World): void {
+    const j = this.job;
+    if (!j) return;
+    const refs =
+      ("building" in j && j.building === b) ||
+      (j.kind === "tame" && j.barn === b);
+    if (!refs) return;
+    this.releaseJob(world); // claim'leri serbest bırakır ve job'u null'lar
+    this.state = "idle";
+    this.path = [];
+    this.pathIdx = 0;
   }
 
   private releaseJob(world: World): void {

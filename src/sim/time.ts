@@ -6,10 +6,12 @@
 // - dayLength: bir oyun gününün gerçek saniye süresi (1x hızda)
 // - timeScale: yalnız takvimi/saati hızlandırır-yavaşlatır (sim hızı sabit kalır)
 // - moveSpeed: köylülerin temel hareket hızı çarpanı
+// - autosaveSeconds: kaç gerçek saniyede bir otomatik kayıt alınır (0 = kapalı)
 export const tuning = {
   dayLength: 300,
   timeScale: 1,
   moveSpeed: 1,
+  autosaveSeconds: 90,
 };
 
 export const DAYS_PER_YEAR = 4; // her gün bir mevsimdir

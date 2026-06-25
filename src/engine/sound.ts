@@ -10,13 +10,29 @@ let busDry: GainNode | null = null; // kuru karışım girişi
 let reverb: ConvolverNode | null = null;
 let fireGain: GainNode | null = null; // ateşin genel seviyesi (mesafe)
 let currentFire = 0; // çıtırtı zamanlayıcısının okuduğu anlık seviye
-let muted = false;
+
+// Ses kapalı/açık tercihi tarayıcıda saklanır: sayfa yenilense ya da "Ana
+// Menü" (location.reload) sonrası bile korunur.
+const MUTE_KEY = "banisher_muted";
+function loadMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+let muted = loadMuted();
 
 let lx = 0; // dinleyici (kamera) dünya konumu
 let ly = 0;
 
 export function setMuted(m: boolean): void {
   muted = m;
+  try {
+    localStorage.setItem(MUTE_KEY, m ? "1" : "0");
+  } catch {
+    /* depolama yoksa sessizce geç */
+  }
   if (master) master.gain.value = m ? 0 : 0.5;
 }
 
@@ -226,6 +242,34 @@ export function sfxResearch(): void {
       osc.stop(start + 0.75);
     }
   });
+}
+
+// Önemli olay bildirimi (doğum, tehlike, kıtlık...): yumuşak iki notalı
+// "ding". Konuma bağlı değil — hep duyulur. Kısa aralıkta tekrarı bastırılır.
+let lastNotify = -1;
+export function sfxNotify(): void {
+  if (!actx || !busDry || muted) return;
+  const t0 = actx.currentTime;
+  if (t0 - lastNotify < 0.4) return; // üst üste binmesin
+  lastNotify = t0;
+  const notes: [number, number][] = [
+    [659.25, 0], // E5
+    [987.77, 0.08], // B5
+  ];
+  for (const [freq, off] of notes) {
+    const start = t0 + off;
+    const osc = actx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(freq, start);
+    const env = actx.createGain();
+    env.gain.setValueAtTime(0.0001, start);
+    env.gain.exponentialRampToValueAtTime(0.16, start + 0.015);
+    env.gain.exponentialRampToValueAtTime(0.0001, start + 0.4);
+    osc.connect(env);
+    connectOut(env, 0.4);
+    osc.start(start);
+    osc.stop(start + 0.42);
+  }
 }
 
 // Mızrak vınlaması: yükselen süzülmüş gürültü
