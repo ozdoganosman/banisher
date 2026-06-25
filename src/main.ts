@@ -549,6 +549,8 @@ function showScripture(): void {
     initAudio();
     closeMenu();
     paused = false;
+    // tek seferlik keşif ipucu: yeni eklenen yardım ekranını duyur
+    addMessage("❔ Tuşlar ve ipuçları için ? tuşuna bas", "important");
   };
 
   overlay.append(title, scripture, sub, btn);
