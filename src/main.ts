@@ -2758,6 +2758,35 @@ console.info(
 
 showMainMenu();
 
+// ---- Kıtlık (erzak) erken uyarısı ----
+// Hayatta kalma oyununda erzağın bittiğini ancak köylüler ölmeye başlayınca
+// fark etmek geç oluyor. Bu uyarı, kişi başına yiyecek kritiğe inince oyuncuyu
+// önceden uyarır; kötüleşen geçişte anında, sürerse ~20 sn'de bir hatırlatır.
+const FOOD_LOW_PER_CAP = 3; // kişi başı bu kadar yiyecekten az kalınca "azalıyor"
+let famineLevel = 0; // 0 yeterli · 1 azalıyor · 2 tükendi
+let famineWarnCooldown = 0; // gerçek-saniye hatırlatma sayacı
+function tickFamineWarning(dt: number): void {
+  const pop = villagers.length;
+  if (pop === 0) {
+    famineLevel = 0;
+    return;
+  }
+  famineWarnCooldown -= dt;
+  const food = foodTotal();
+  const level = food === 0 ? 2 : food < pop * FOOD_LOW_PER_CAP ? 1 : 0;
+  if (level > famineLevel || (level >= 1 && famineWarnCooldown <= 0)) {
+    addMessage(
+      level === 2
+        ? "💀 Erzak tükendi! Köy açlıkla yüz yüze"
+        : "⚠ Erzak azalıyor — yeni yiyecek kaynağı bul!",
+      "important"
+    );
+    famineWarnCooldown = 20;
+  }
+  if (level === 0) famineWarnCooldown = 0; // toparlanınca sonraki düşüş anında uyarsın
+  famineLevel = level;
+}
+
 let last = performance.now();
 let accumulator = 0;
 let autosaveTimer = 0; // gerçek-zaman sayacı (otomatik kayıt için)
@@ -2789,6 +2818,9 @@ function frame(now: number) {
   } else {
     autosaveTimer = 0;
   }
+
+  // kıtlık erken uyarısı: yalnız oyun ilerlerken (duraklamada erzak sabit)
+  if (gameActive() && !paused) tickFamineWarning(elapsed);
 
   // koloni yok olduysa simülasyon durur (oyun sonu perdesi gösterilir)
   accumulator += elapsed * (paused || villagers.length === 0 ? 0 : gameSpeed);
