@@ -410,6 +410,30 @@ function sesLabel(): string {
   return isMuted() ? "🔇 Ses: Kapalı" : "🔊 Ses: Açık";
 }
 
+// Tercih: tehlike kamerası. Açıkken, bir köylü yırtıcıyla karşılaşınca kamera
+// ona doğru otomatik kayar. Hareket hassasiyeti olan ya da kontrolü elinde
+// tutmak isteyen oyuncular için kapatılabilir — uyarı mesajı ve kırmızı ikaz
+// halkası yine gösterilir, yalnız görüş zorla kaymaz. Tarayıcıda saklanır.
+const DANGERCAM_KEY = "banisher_dangercam";
+let dangerCamEnabled = (() => {
+  try {
+    return localStorage.getItem(DANGERCAM_KEY) !== "0";
+  } catch {
+    return true;
+  }
+})();
+function setDangerCam(on: boolean): void {
+  dangerCamEnabled = on;
+  try {
+    localStorage.setItem(DANGERCAM_KEY, on ? "1" : "0");
+  } catch {
+    /* depolama yoksa sessizce geç */
+  }
+}
+function kameraLabel(): string {
+  return dangerCamEnabled ? "🎥 Tehlike kamerası: Açık" : "🎥 Tehlike kamerası: Kapalı";
+}
+
 // Giriş ekranı (oyun açılışı)
 function showMainMenu(): void {
   paused = true;
@@ -539,6 +563,14 @@ function showPauseMenu(): void {
       desc: "",
       onClick: () => {
         setMuted(!isMuted());
+        showPauseMenu();
+      },
+    },
+    {
+      label: kameraLabel(),
+      desc: "Tehlikede kameranın otomatik kaymasını aç/kapat",
+      onClick: () => {
+        setDangerCam(!dangerCamEnabled);
         showPauseMenu();
       },
     },
@@ -2135,10 +2167,13 @@ function updateDangerCamera(dt: number): void {
       dangerCooldown = 6;
       return;
     }
-    // kamerayı yumuşakça tehlikedekine çek
-    const k = Math.min(1, dt * 4);
-    camera.x += (dangerFollow.x - camera.x) * k;
-    camera.y += (dangerFollow.y - camera.y) * k;
+    // kamerayı yumuşakça tehlikedekine çek (tercih kapalıysa görüş kaymaz;
+    // uyarı mesajı ve kırmızı ikaz halkası yine gösterilir)
+    if (dangerCamEnabled) {
+      const k = Math.min(1, dt * 4);
+      camera.x += (dangerFollow.x - camera.x) * k;
+      camera.y += (dangerFollow.y - camera.y) * k;
+    }
     return;
   }
   if (dangerCooldown <= 0) {
