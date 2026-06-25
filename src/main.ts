@@ -539,6 +539,22 @@ function showScripture(): void {
   menuOverlay = overlay;
 }
 
+// Oyun sonu: son köylü de göçtüğünde (koloni yok olunca) gösterilir.
+// Daha önce yalnız sim donuyordu, oyuncuya hiçbir şey bildirilmiyordu.
+function showGameOver(): void {
+  buildMenu(
+    "☠ KABİLEN YOK OLDU",
+    `Son köylün de göçtü — kabilen ${gameTime.year} yıl dayandı (${dateString()})`,
+    [
+      {
+        label: "🔄 Yeniden Dene",
+        desc: "Ana menüye dön, yeni bir kabileyle yeniden başla",
+        onClick: () => location.reload(),
+      },
+    ]
+  );
+}
+
 // Oyun içi duraklatma menüsü (Esc — açık panel yokken)
 function showPauseMenu(): void {
   paused = true;
@@ -2833,6 +2849,7 @@ function tickFamineWarning(dt: number): void {
 let last = performance.now();
 let accumulator = 0;
 let autosaveTimer = 0; // gerçek-zaman sayacı (otomatik kayıt için)
+let gameOverShown = false; // oyun sonu perdesi bir kez gösterilsin
 
 function frame(now: number) {
   const elapsed = Math.min((now - last) / 1000, 0.25);
@@ -2864,6 +2881,12 @@ function frame(now: number) {
 
   // kıtlık erken uyarısı: yalnız oyun ilerlerken (duraklamada erzak sabit)
   if (gameActive() && !paused) tickFamineWarning(elapsed);
+
+  // oyun sonu: son köylü de göçtüyse perdeyi bir kez göster (menü açık değilken)
+  if (villagers.length === 0 && !gameOverShown && !menuOverlay) {
+    gameOverShown = true;
+    showGameOver();
+  }
 
   // koloni yok olduysa simülasyon durur (oyun sonu perdesi gösterilir)
   accumulator += elapsed * (paused || villagers.length === 0 ? 0 : gameSpeed);
