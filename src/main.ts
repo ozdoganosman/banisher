@@ -2067,7 +2067,7 @@ function checkBirths(): void {
     if (hasTech("humanity")) baby.changeMorale(10, "Tanrı inancı");
     villagers.push(baby);
     mom.giveBirth();
-    addMessage(`👶 ${baby.fullName} doğdu! (annesi ${mom.fullName})`);
+    addMessage(`👶 ${baby.fullName} doğdu! (annesi ${mom.fullName})`, "important");
     addFloater(mom.x, mom.y - 18, "+1 bebek", "#ffb0d0");
   }
 }
@@ -2493,7 +2493,7 @@ const RANDOM_EVENTS: RandomEvent[] = [
       const v = new Villager(p.x, p.y);
       if (hasTech("humanity")) v.changeMorale(10, "Tanrı inancı");
       villagers.push(v);
-      addMessage(`🧍 Gezgin ${v.fullName} kampa sığındı — kabileye katıldı!`);
+      addMessage(`🧍 Gezgin ${v.fullName} kampa sığındı — kabileye katıldı!`, "important");
       addJournal(`🧍 Gezgin ${v.fullName} kabileye katıldı`);
       return true;
     },
@@ -2646,7 +2646,7 @@ function step(dt: number) {
         v.deathCause === "predator"
           ? `💀 ${v.fullName} yırtıcı saldırısında can verdi!`
           : `💀 ${v.fullName} açlıktan öldü!`;
-      addMessage(deathText);
+      addMessage(deathText, "important");
       addJournal(deathText);
       lastDeathCause = v.deathCause; // oyun sonu perdesi için sebebi anımsa
       if (selectedVillager === v) selectedVillager = null;
