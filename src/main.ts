@@ -2817,6 +2817,8 @@ function frame(now: number) {
   const overToolbar = isOverToolbar(input.mouseY, canvas.height);
 
   let ghost: Ghost | null = null;
+  let ghostCost = 0;
+  let ghostAffordable = true;
   if (selected !== null && hoverValid && !overToolbar) {
     const def = BUILDING_DEFS[selected];
     const size = def.size;
@@ -2827,6 +2829,8 @@ function frame(now: number) {
       (!def.needsWater || world.hasAdjacentWater(gx, gy, size)) &&
       (selected !== BuildingType.Barn || pastureClearOfWater(gx, gy));
     ghost = { type: selected, tileX: gx, tileY: gy, size, valid };
+    ghostCost = def.cost;
+    ghostAffordable = resources.wood >= def.cost;
   }
 
   renderer.render(
@@ -2843,6 +2847,28 @@ function frame(now: number) {
     now / 1000
   );
   // seçili hayvan: beyaz halka (ölürse panel kapanır)
+  // bina hayaletinin üstünde odun maliyeti — yetersizse kırmızı (tıklamadan
+  // önce görünür; "Yetersiz odun!" sürprizini önler)
+  if (ghost && ghostCost > 0) {
+    const cx = (ghost.tileX + ghost.size / 2) * TILE_SIZE;
+    const topY = ghost.tileY * TILE_SIZE;
+    const sx = (cx - camera.x) * camera.zoom + canvas.width / 2;
+    const sy = (topY - camera.y) * camera.zoom + canvas.height / 2;
+    const label = `🪵 ${ghostCost}${ghostAffordable ? "" : "  yetersiz"}`;
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    const tw = ctx.measureText(label).width + 12;
+    const ly = Math.max(28, sy - 8);
+    ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
+    ctx.fillRect(sx - tw / 2, ly - 14, tw, 18);
+    ctx.strokeStyle = ghostAffordable ? "rgba(160, 240, 180, 0.7)" : "rgba(240, 110, 110, 0.85)";
+    ctx.strokeRect(sx - tw / 2 + 0.5, ly - 13.5, tw - 1, 17);
+    ctx.fillStyle = ghostAffordable ? "#d8f0c0" : "#ff9a9a";
+    ctx.fillText(label, sx, ly - 1);
+    ctx.textAlign = "left";
+  }
+
   if (selectedAnimal) {
     if (selectedAnimal.dead) selectedAnimal = null;
     else {
