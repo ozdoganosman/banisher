@@ -542,11 +542,109 @@ function showPauseMenu(): void {
       },
     },
     {
+      label: "❔ Kısayollar & Yardım",
+      desc: "Tuşlar, fare ve kısa bir başlangıç rehberi (? tuşu)",
+      onClick: showHelp,
+    },
+    {
       label: "🏠 Ana Menü",
       desc: "Kaydedilmemiş ilerleme kaybolur!",
       onClick: () => location.reload(),
     },
   ]);
+}
+
+// ❔ Kısayol & yardım ekranı (? tuşu ya da duraklatma menüsünden)
+function helpSection(heading: string, rows: [string, string][]): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.style.cssText =
+    "display:flex;flex-direction:column;gap:5px;width:min(540px,92vw)";
+  const h = document.createElement("div");
+  h.textContent = heading;
+  h.style.cssText =
+    "font-size:12px;color:#8fd05e;letter-spacing:2px;margin:6px 0 2px";
+  wrap.appendChild(h);
+  for (const [k, d] of rows) {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:12px";
+    const key = document.createElement("span");
+    key.textContent = k;
+    key.style.cssText =
+      "flex:0 0 138px;text-align:right;color:#ffd27a;font-weight:bold;font-size:12px";
+    const desc = document.createElement("span");
+    desc.textContent = d;
+    desc.style.cssText = "color:#cdd4c0;font-size:12px";
+    row.append(key, desc);
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function showHelp(): void {
+  closeMenu();
+  paused = true;
+  const overlay = document.createElement("div");
+  overlay.style.cssText =
+    "position:fixed;inset:0;background:rgba(8,10,14,0.94);display:flex;" +
+    "flex-direction:column;align-items:center;justify-content:center;" +
+    "font-family:monospace;color:#e8e2d0;z-index:10;gap:10px;padding:24px;overflow:auto";
+
+  const title = document.createElement("div");
+  title.textContent = "❔ KISAYOLLAR & YARDIM";
+  title.style.cssText =
+    "font-size:24px;font-weight:bold;color:#ffe296;letter-spacing:4px";
+
+  const keyboard = helpSection("⌨ KLAVYE", [
+    ["Boşluk", "Duraklat / Devam"],
+    ["X", "Oyun hızı (1→2→4→8→16)"],
+    ["Ctrl/⌘ + S", "Oyunu kaydet"],
+    ["Esc", "Menü · açık paneli kapat"],
+    ["1 … 0", "Araç çubuğundan bina seç"],
+    ["N", "Nüfus paneli"],
+    ["M", "Köylüler (kişiler)"],
+    ["B", "Günce"],
+    ["T", "Teknoloji ağacı"],
+    ["P", "Politika (otomasyon)"],
+    ["Y", "İlahî güçler"],
+    ["F", "İşaret filtresini değiştir"],
+    ["G H J K L", "İşaret filtreleri (doğrudan)"],
+    ["W A S D / Oklar", "Kamerayı kaydır"],
+    ["?", "Bu yardım ekranı"],
+  ]);
+
+  const mouse = helpSection("🖱 FARE", [
+    ["Sol tık", "Seç · sürükle: kaynak işaretle"],
+    ["Sağ / Orta tuş sürükle", "Kamerayı kaydır"],
+    ["Sağ tık", "Seçimi / işareti iptal et"],
+    ["Tekerlek", "Yakınlaştır / uzaklaştır"],
+  ]);
+
+  const primer = document.createElement("div");
+  primer.innerHTML =
+    "Rahipler tapınakta <b style='color:#e8b86a'>bilgi</b> üretir; bilgiyle " +
+    "<b style='color:#e8b86a'>T</b> ağacından araştırma açarsın. Kaynakları " +
+    "<b style='color:#e8b86a'>sol tuşla sürükleyerek işaretle</b> — işçiler toplar. " +
+    "Üretim binalarına işçi <b style='color:#e8b86a'>panelden</b> atanır.";
+  primer.style.cssText =
+    "max-width:560px;font-size:12px;line-height:1.7;color:#b8c4a8;text-align:center;" +
+    "border-top:1px solid rgba(255,210,60,0.25);padding-top:12px;margin-top:6px";
+
+  const btn = document.createElement("button");
+  btn.innerHTML = "<div style='font-size:15px;font-weight:bold'>▶ Devam</div>";
+  btn.style.cssText =
+    "margin-top:8px;width:240px;padding:11px 16px;background:rgba(255,255,255,0.06);" +
+    "border:1px solid #5a5f68;color:#e8e2d0;font-family:monospace;cursor:pointer;" +
+    "text-align:center;border-radius:6px";
+  btn.onmouseenter = () => (btn.style.borderColor = "#8fd05e");
+  btn.onmouseleave = () => (btn.style.borderColor = "#5a5f68");
+  btn.onclick = () => {
+    closeMenu();
+    paused = false;
+  };
+
+  overlay.append(title, keyboard, mouse, primer, btn);
+  document.body.appendChild(overlay);
+  menuOverlay = overlay;
 }
 
 // Seçilen zorluğu canlı koloniye uygula (köylü sayısı, erzak, moral)
@@ -1428,6 +1526,9 @@ window.addEventListener("keydown", (e) => {
   } else if (e.code === "Space") {
     e.preventDefault();
     paused = !paused;
+  } else if (e.code === "Slash") {
+    // ? : kısayol & yardım ekranı (başka bir menü açık değilken)
+    if (!menuOverlay) showHelp();
   } else if (e.code === "KeyX") {
     gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : gameSpeed === 4 ? 8 : gameSpeed === 8 ? 16 : 1;
   } else if (e.code === "KeyN") {
