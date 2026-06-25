@@ -906,9 +906,13 @@ function demolishBuilding(b: Building): void {
       v.assignment = { kind: "laborer" };
     }
     if (v.home === b) v.home = null;
+    // o binaya bağlı güncel işi (inşa/depo/ibadet/zanaat/uyku...) bırak
+    v.forgetBuilding(b, world);
   }
   const idx = buildings.indexOf(b);
   if (idx !== -1) buildings.splice(idx, 1);
+  // ağıl yıkıldıysa otlak karoları güncel kalsın (hayalet otlak olmasın)
+  if (b.type === BuildingType.Barn) rebuildPastures();
   const refund = Math.floor(b.def.cost / 2);
   addItem("wood", refund);
   addMessage(`${b.def.name} yıkıldı (+${refund} odun iade)`);

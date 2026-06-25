@@ -888,6 +888,22 @@ export class Villager {
     this.releaseJob(world);
   }
 
+  // Bir bina yıkıldığında çağrılır: güncel iş o binaya bağlıysa bırakılır
+  // (claim/rezervasyonlar serbest), köylü yeniden iş arar. Yıkılmış binaya
+  // doğru yürümeye / hayalet hedefe iş yapmaya devam etmesini önler.
+  forgetBuilding(b: Building, world: World): void {
+    const j = this.job;
+    if (!j) return;
+    const refs =
+      ("building" in j && j.building === b) ||
+      (j.kind === "tame" && j.barn === b);
+    if (!refs) return;
+    this.releaseJob(world); // claim'leri serbest bırakır ve job'u null'lar
+    this.state = "idle";
+    this.path = [];
+    this.pathIdx = 0;
+  }
+
   private releaseJob(world: World): void {
     if (!this.job) return;
     switch (this.job.kind) {
