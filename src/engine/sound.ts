@@ -244,6 +244,34 @@ export function sfxResearch(): void {
   });
 }
 
+// Önemli olay bildirimi (doğum, tehlike, kıtlık...): yumuşak iki notalı
+// "ding". Konuma bağlı değil — hep duyulur. Kısa aralıkta tekrarı bastırılır.
+let lastNotify = -1;
+export function sfxNotify(): void {
+  if (!actx || !busDry || muted) return;
+  const t0 = actx.currentTime;
+  if (t0 - lastNotify < 0.4) return; // üst üste binmesin
+  lastNotify = t0;
+  const notes: [number, number][] = [
+    [659.25, 0], // E5
+    [987.77, 0.08], // B5
+  ];
+  for (const [freq, off] of notes) {
+    const start = t0 + off;
+    const osc = actx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(freq, start);
+    const env = actx.createGain();
+    env.gain.setValueAtTime(0.0001, start);
+    env.gain.exponentialRampToValueAtTime(0.16, start + 0.015);
+    env.gain.exponentialRampToValueAtTime(0.0001, start + 0.4);
+    osc.connect(env);
+    connectOut(env, 0.4);
+    osc.start(start);
+    osc.stop(start + 0.42);
+  }
+}
+
 // Mızrak vınlaması: yükselen süzülmüş gürültü
 export function sfxWhoosh(x: number, y: number): void {
   if (!actx || !busDry) return;

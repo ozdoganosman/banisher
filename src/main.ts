@@ -1875,9 +1875,9 @@ function celebrateTech(id: TechId): void {
   const tech = TECHS.find((t) => t.id === id);
   if (!tech) return;
   techCelebration = { tech, ttl: 3.4, total: 3.4 };
-  sfxResearch();
-  addMessage(`🔬 Araştırıldı: ${tech.name}!`, "important");
-  if (tech.unlocks) addMessage(`✨ Açıldı: ${tech.unlocks}`, "important");
+  sfxResearch(); // tech kendi çan arpejini çalar → mesajlar sessiz (çift ses olmasın)
+  addMessage(`🔬 Araştırıldı: ${tech.name}!`, "important", { silent: true });
+  if (tech.unlocks) addMessage(`✨ Açıldı: ${tech.unlocks}`, "important", { silent: true });
   addJournal(`🔬 Yeni araştırma: ${tech.name}${tech.unlocks ? ` — ${tech.unlocks}` : ""}`);
 }
 

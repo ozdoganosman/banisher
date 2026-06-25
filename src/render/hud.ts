@@ -12,6 +12,7 @@ import {
   isBuildingUnlocked,
 } from "../sim/buildings";
 import { ROLE_NAMES } from "../sim/buildings";
+import { sfxNotify } from "../engine/sound";
 import {
   isFull,
   ITEM_INFO,
@@ -595,7 +596,11 @@ const messages: Msg[] = [];
 
 const MSG_TTL: Record<MsgLevel, number> = { low: 2.6, info: 4, important: 6.5 };
 
-export function addMessage(text: string, level: MsgLevel = "info"): void {
+export function addMessage(
+  text: string,
+  level: MsgLevel = "info",
+  opts?: { silent?: boolean }
+): void {
   // aynı metin hâlâ ekrandaysa yeni satır açma: say ve süreyi tazele (spam önlenir)
   const existing = messages.find((m) => m.text === text);
   if (existing) {
@@ -603,9 +608,12 @@ export function addMessage(text: string, level: MsgLevel = "info"): void {
     if (level === "important") existing.level = "important";
     existing.ttl = Math.max(existing.ttl, MSG_TTL[level]);
     existing.pop = 0.25;
-    return;
+    return; // tekrarda yeni bildirim sesi çalmaz
   }
   messages.push({ text, ttl: MSG_TTL[level], level, count: 1, pop: 0.25 });
+  // yeni bir ÖNEMLİ olay: yumuşak bildirim sesi (tech zaten kendi sesini çalar
+  // → silent ile bastırılır; tekrarlanan/sıradan bildirimler ses çıkarmaz)
+  if (level === "important" && !opts?.silent) sfxNotify();
   // önemli bildirimleri koru, en eski sıradanı at
   if (messages.length > 6) {
     const idx = messages.findIndex((m) => m.level !== "important");
