@@ -569,7 +569,10 @@ function showGameOver(): void {
 // Oyun içi duraklatma menüsü (Esc — açık panel yokken)
 function showPauseMenu(): void {
   paused = true;
-  buildMenu("BANISHER", `${dateString()} — kabilen seni bekliyor`, [
+  // duraklatma menüsü başlığı: hızlı koloni durumu (tarih · zorluk · nüfus)
+  const pop = villagers.length;
+  const subtitle = `${dateString()} · ${DIFFICULTY_PRESETS[difficulty.level].name} · ${pop} köylü`;
+  buildMenu("BANISHER", subtitle, [
     {
       label: "▶ Devam",
       desc: "",
