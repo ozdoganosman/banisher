@@ -2543,11 +2543,13 @@ function step(dt: number) {
   // hedef zinciri: tamamlananı kutla, sıradakini duyur
   const doneGoal = tickGoals({ world, villagers, buildings, animals });
   if (doneGoal) {
-    addMessage(`🎯 Hedef tamamlandı: ${doneGoal.title} (+${doneGoal.reward} bilgi)`);
+    // hedef zinciri oyuncunun ana ilerleme çizgisi: tamamlamak kutlanmalı
+    // (belirgin + bildirim çanı), yoksa info olarak sessizce akıp gidiyordu
+    addMessage(`🎯 Hedef tamamlandı: ${doneGoal.title} (+${doneGoal.reward} bilgi)`, "important");
     addJournal(`🎯 Hedef tamamlandı: ${doneGoal.title} (+${doneGoal.reward} bilgi)`);
     const next = currentGoal();
-    if (next) addMessage(`🎯 Yeni hedef: ${next.title}`);
-    else addMessage("🏆 Tüm hedefler tamamlandı — kabilenin kaderi artık senin ellerinde!");
+    if (next) addMessage(`🎯 Yeni hedef: ${next.title}`, "important");
+    else addMessage("🏆 Tüm hedefler tamamlandı — kabilenin kaderi artık senin ellerinde!", "important");
   }
 
   schedulePleading(dt);
