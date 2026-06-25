@@ -252,6 +252,18 @@ function loadGame(): boolean {
   if (!raw) return false;
   try {
     const d = JSON.parse(raw);
+    // Bozuk/eksik kaydı GLOBAL durumu bozmadan önce reddet: aksi halde NaN/
+    // undefined alanlar oyunu yarı-yüklenmiş kırık bir hale sokardı (otomatik
+    // kayıt sıklaştığı için kısmi yazım riski daha da önemli).
+    if (
+      !d || typeof d !== "object" ||
+      typeof d.time !== "number" || !Number.isFinite(d.time) ||
+      !Array.isArray(d.villagers) || !Array.isArray(d.buildings) ||
+      !d.world || typeof d.world !== "object"
+    ) {
+      addMessage("Kayıt bozuk — yüklenemedi (mevcut oyun korunuyor)");
+      return false;
+    }
     // zaman ve ayarlar önce (köylü kurulumu totalDays okur)
     gameTime.total = d.time;
     Object.assign(tuning, d.tuning);
