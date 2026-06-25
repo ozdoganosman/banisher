@@ -16,36 +16,50 @@ export const DIFFICULTY_PRESETS: Record<
   DifficultyLevel,
   { name: string; desc: string; apply: () => void }
 > = {
+  // Her ön ayar TÜM alanları yazar (idempotent): difficulty paylaşılan tekil
+  // nesnedir; eksik alan bırakan bir ön ayar, daha önce seçilen başka ön
+  // ayardan değer sızdırırdı (ör. Zor→Normal eski hungerPerDay/wolfDay'i
+  // taşırdı). Her seçim baştan tam bir profil kurar.
   easy: {
     name: "🌿 Kolay",
     desc: "Bol erzak, tok karın, yırtıcılar bir yıl geç gelir",
-    apply: () => {
-      difficulty.level = "easy";
-      difficulty.hungerPerDay = 30;
-      difficulty.wolfDay = 11; // Kış/2
-      difficulty.bearDay = 15; // Kış/3
-      difficulty.startBerry = 70;
-      difficulty.startMoraleBonus = 15;
-    },
+    apply: () =>
+      Object.assign(difficulty, {
+        level: "easy",
+        hungerPerDay: 30,
+        wolfDay: 11, // Kış/2
+        bearDay: 15, // Kış/3
+        startBerry: 70,
+        startVillagers: 10,
+        startMoraleBonus: 15,
+      }),
   },
   normal: {
     name: "⚖ Normal",
     desc: "Dengeli açlık ve tehlike: kurt Kış/1, ayı Kış/2",
-    apply: () => {
-      difficulty.level = "normal";
-    },
+    apply: () =>
+      Object.assign(difficulty, {
+        level: "normal",
+        hungerPerDay: 44,
+        wolfDay: 7, // Kış/1
+        bearDay: 11, // Kış/2
+        startBerry: 40,
+        startVillagers: 10,
+        startMoraleBonus: 0,
+      }),
   },
   hard: {
     name: "💀 Zor",
     desc: "Az erzak, hızlı açlık, yırtıcılar ilk kıştan saldırır",
-    apply: () => {
-      difficulty.level = "hard";
-      difficulty.hungerPerDay = 56;
-      difficulty.wolfDay = 3; // Kış/0!
-      difficulty.bearDay = 7; // Kış/1
-      difficulty.startBerry = 22;
-      difficulty.startVillagers = 8;
-      difficulty.startMoraleBonus = -5;
-    },
+    apply: () =>
+      Object.assign(difficulty, {
+        level: "hard",
+        hungerPerDay: 56,
+        wolfDay: 3, // Kış/0!
+        bearDay: 7, // Kış/1
+        startBerry: 22,
+        startVillagers: 8,
+        startMoraleBonus: -5,
+      }),
   },
 };

@@ -2,7 +2,7 @@ import { sfxHit, sfxStep, sfxWhoosh } from "../engine/sound";
 import { addFloater, burst, throwSpearFx } from "../render/effects";
 import { foodItemOf, Tile, TILE_SIZE } from "../world/tiles";
 import type { World } from "../world/world";
-import { ANIMAL_DEFS, TAME_TARGET, type Animal } from "./animals";
+import { ANIMAL_DEFS, TAME_TARGET, BARN_CAPACITY, type Animal } from "./animals";
 import type { Building } from "./buildings";
 import {
   AUTO_MARK_RADIUS,
@@ -29,6 +29,7 @@ import {
 } from "./buildings";
 import { difficulty } from "./difficulty";
 import { coldSnapActive } from "./events";
+import { bountyActive } from "./divine";
 import { policy } from "./policy";
 import { addJournal } from "./journal";
 import { babyIdentity, randomIdentity, type Identity } from "./names";
@@ -97,7 +98,7 @@ function gatherTime(): number {
   return GATHER_TIME;
 }
 function forageBonus(): number {
-  return 0;
+  return bountyActive() ? 3 : 0; // Kehanet: Bereket — toplama verimi artar
 }
 
 // Günlük açlık zorluk seviyesinden, gün süresi tuning'den okunur
@@ -211,7 +212,10 @@ export class Villager {
   pleadingTtl = 0; // Merak: oyuncuya yakarıyor (tıklanıp teskin edilebilir)
   shockTtl = 0; // teskin edildi: kısa süre şokta donar
   sickUntilDay = -1; // hastalık olayı: bu güne dek halsiz (yavaş yürür/çalışır)
-  private divineBuff: { untilDay: number; amount: number } | null = null;
+  prophetUntilDay = -1; // İlahî güç: bu güne dek peygamber (aura yayar, hızlı çalışır)
+  // Geçici moral takviyesi ("Tanrının sesi"): süresi dolunca geri alınır.
+  // Kayda yazılır (yoksa morale kalıcı kalıp takviye sonsuza dek sürerdi).
+  divineBuff: { untilDay: number; amount: number } | null = null;
   private fleeDirX = 0;
   private fleeDirY = 0;
   private threatTimer = Math.random() * 0.4; // yırtıcı kontrol ritmi
@@ -283,6 +287,10 @@ export class Villager {
     return totalDays() < this.sickUntilDay;
   }
 
+  get isProphet(): boolean {
+    return totalDays() < this.prophetUntilDay;
+  }
+
   // Hamilelik ilerlemesi 0..1 (karın adım adım büyür)
   get pregnancyProgress(): number {
     if (this.pregnantSince === null) return 0;
@@ -321,7 +329,8 @@ export class Villager {
     const before = this.morale;
     this.changeMorale(40, "Tanrının sesi");
     this.divineBuff = { untilDay: totalDays() + 2, amount: this.morale - before };
-    addFloater(this.x, this.y - 18, "⚡ Tanrı konuştu!", "#ffd23c");
+    resources.faith += 15; // iletiye yanıt vermek inancı güçlendirir
+    addFloater(this.x, this.y - 18, "⚡ Tanrı konuştu! (+15 inanç)", "#ffd23c");
   }
 
   // Yırtıcı saldırısı: hasar al; silahsızsa kaç, can biterse öl
@@ -396,7 +405,7 @@ export class Villager {
   // Profil panelinde gösterilen anlık durum
   get statusText(): string {
     if (this.shockTtl > 0) return "Şokta — Tanrı onunla konuştu!";
-    if (this.pleadingTtl > 0) return "Sana yakarıyor ✋ (tıkla ve konuş)";
+    if (this.pleadingTtl > 0) return "Sana ileti gönderiyor 📨 (tıkla ve yanıtla)";
     if (this.baby) {
       if (this.nurseryCovered) return `Bebek (bakımevinde)`;
       if (this.mother && !this.mother.dead) return `Bebek (annesine muhtaç)`;
@@ -541,6 +550,7 @@ export class Villager {
     if (this.educated) f *= 1.2; // bakımevi eğitimi: ek %20
     if (season() === 3 && !this.hasClothes) f *= 0.75; // kışın giysisiz: %25 yavaş
     if (this.sick) f *= 0.55; // hastalık: halsiz
+    if (this.isProphet) f *= 1.4; // peygamber ilhamla hızlı çalışır
     return f;
   }
 
@@ -878,6 +888,22 @@ export class Villager {
   die(world: World): void {
     this.dead = true;
     this.releaseJob(world);
+  }
+
+  // Bir bina yıkıldığında çağrılır: güncel iş o binaya bağlıysa bırakılır
+  // (claim/rezervasyonlar serbest), köylü yeniden iş arar. Yıkılmış binaya
+  // doğru yürümeye / hayalet hedefe iş yapmaya devam etmesini önler.
+  forgetBuilding(b: Building, world: World): void {
+    const j = this.job;
+    if (!j) return;
+    const refs =
+      ("building" in j && j.building === b) ||
+      (j.kind === "tame" && j.barn === b);
+    if (!refs) return;
+    this.releaseJob(world); // claim'leri serbest bırakır ve job'u null'lar
+    this.state = "idle";
+    this.path = [];
+    this.pathIdx = 0;
   }
 
   private releaseJob(world: World): void {
@@ -1252,6 +1278,43 @@ export class Villager {
             });
           }
         }
+        // çiftçi, çiftliğin türüne dönüşecek yabani bir hayvan görürse
+        // kendiliğinden evcilleştirmeye gider (ağıl dolu değilse)
+        if (hut.farmType && !bagFull) {
+          const herd = animals.filter((a) => a.barn === hut && !a.dead).length;
+          if (herd < BARN_CAPACITY) {
+            const TAME_RANGE = 28 * TILE_SIZE;
+            let bestW: Animal | null = null;
+            let bestWD = Infinity;
+            for (const a of animals) {
+              if (!a.wild || a.dead || a.claimed || a.tameMark) continue;
+              if (TAME_TARGET[a.type] !== hut.farmType) continue;
+              const d = Math.abs(a.x - this.x) + Math.abs(a.y - this.y);
+              if (d < TAME_RANGE && d < bestWD) {
+                bestWD = d;
+                bestW = a;
+              }
+            }
+            if (bestW) {
+              const target = bestW;
+              candidates.push({
+                dist: bestWD / TILE_SIZE + 4, // ürün toplama biraz öncelikli
+                start: () => {
+                  const path = findPath(
+                    world, this.tileX, this.tileY,
+                    Math.floor(target.x / TILE_SIZE), Math.floor(target.y / TILE_SIZE)
+                  );
+                  if (!path) return false;
+                  target.claimed = true;
+                  target.tameMark = true; // yeşil işaret: evcilleştiriliyor
+                  this.job = { kind: "tame", animal: target, barn: hut };
+                  this.startPath(path);
+                  return true;
+                },
+              });
+            }
+          }
+        }
       } else if (hut.type === BuildingType.Temple) {
         if (hut.worshipReady && lit(hut.centerX, hut.centerY)) {
           candidates.push({
@@ -1487,6 +1550,27 @@ export class Villager {
       }
     }
 
+    // ortalık işçisi de boştaki şantiyeleri inşa eder (ayrı inşaatçı atamaya gerek yok)
+    if (a.kind === "laborer") {
+      for (const b of this.lastBuildings ?? []) {
+        if (b.done || b.claimed || b.removed || !lit(b.centerX, b.centerY)) continue;
+        const bb = b;
+        const d = Math.abs(b.x + 1 - this.tileX) + Math.abs(b.y + 1 - this.tileY);
+        candidates.push({
+          dist: d,
+          start: () => {
+            const path = findPathAdjacentRect(world, this.tileX, this.tileY, bb.x, bb.y, bb.size);
+            if (!path) return false;
+            bb.claimed = true;
+            this.job = { kind: "build", building: bb };
+            this.takeFoodForWork();
+            this.startPath(path);
+            return true;
+          },
+        });
+      }
+    }
+
     // ortalık işçisi: elle/kulübece işaretlenmiş her kaynağa gider
     if (!isFull("wood") && !bagFull && !gathererBlocksWood) {
       this.pushTileJobCandidate(
@@ -1514,7 +1598,7 @@ export class Villager {
       );
     }
 
-    if (!isFull("stone") && !bagFull && hasTech("humanity")) {
+    if (!isFull("stone") && !bagFull && hasTech("hardobjects")) {
       this.pushTileJobCandidate(
         world, candidates, world.markedStones, world.claimedStones, litTile,
         (i) => {
@@ -1555,7 +1639,7 @@ export class Villager {
       if (!isFull("stone") && !bagFull && hasTech("hardobjects")) {
         this.pushAutoCandidate(world, candidates, AUTO,
           (x, y) =>
-            (world.get(x, y) === Tile.Stone || world.get(x, y) === Tile.Pebbles) &&
+            world.get(x, y) === Tile.Pebbles &&
             !world.claimedStones.has(world.index(x, y)) && litTile(x, y),
           (i) => {
             world.claimedStones.add(i);
@@ -1746,17 +1830,16 @@ export class Villager {
 
   // Bina içinden çevredeki yürünebilir bloğa çık
   private exitBuilding(world: World, b: Building): void {
-    for (let r = 1; r <= 3; r++) {
-      for (let dy = -r; dy <= r + b.size - 1; dy++) {
-        for (let dx = -r; dx <= r + b.size - 1; dx++) {
-          const x = b.x + dx;
-          const y = b.y + dy;
-          if (!world.walkableAt(x, y)) continue;
-          this.x = (x + 0.5) * TILE_SIZE;
-          this.y = (y + 0.5) * TILE_SIZE;
-          return;
-        }
-      }
+    // binanın çevresinde en yakın yürünebilir kareyi bul (halka halka, geniş)
+    const cx = b.x + Math.floor(b.size / 2);
+    const cy = b.y + Math.floor(b.size / 2);
+    const spot = world.findNearestTile(
+      (cx + 0.5) * TILE_SIZE, (cy + 0.5) * TILE_SIZE,
+      (x, y) => world.walkableAt(x, y), 30
+    );
+    if (spot) {
+      this.x = (spot.x + 0.5) * TILE_SIZE;
+      this.y = (spot.y + 0.5) * TILE_SIZE;
     }
   }
 
@@ -1797,7 +1880,7 @@ export class Villager {
         const p = tileOf(this.job.tile);
         const t = world.get(p.x, p.y);
         const exists = this.job.auto
-          ? t === Tile.Stone || t === Tile.Pebbles
+          ? t === Tile.Pebbles
           : world.markedStones.has(this.job.tile);
         return exists && !isFull("stone") && tileLit(this.job.tile);
       }
@@ -2049,6 +2132,7 @@ export class Villager {
     if (this.timer <= 0) {
       const gain = worshipState.yield;
       resources.knowledge += gain;
+      resources.faith += 1; // her ayin biraz inanç da getirir
       addFloater(
         job.building.centerX, job.building.y * TILE_SIZE - 6,
         `+${gain} bilgi`, "#b08fe0"
@@ -2423,7 +2507,7 @@ export class Villager {
     const mineable =
       job?.kind === "mine" &&
       (job.auto
-        ? world.get(txm, tym) === Tile.Stone || world.get(txm, tym) === Tile.Pebbles
+        ? world.get(txm, tym) === Tile.Pebbles
         : world.markedStones.has(job.tile));
     if (!job || job.kind !== "mine" || !mineable) {
       this.releaseJob(world);

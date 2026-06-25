@@ -75,9 +75,10 @@ Kış haritayı bembeyaz örter ve bitki büyümesini durdurur — balıkçılı
 kışın da çalışan tek üretimdir.
 
 **Debug/denge ayarları:** tarayıcı konsolunda `__game.tuning` ile
-`dayLength` (gün süresi), `timeScale` (takvim akış hızı) ve `moveSpeed`
-(temel hareket hızı) canlı değiştirilebilir; `?seed=12345` ile sabit
-harita üretilir.
+`dayLength` (gün süresi), `timeScale` (takvim akış hızı), `moveSpeed`
+(temel hareket hızı) ve `autosaveSeconds` (otomatik kayıt aralığı, sn;
+`0` = kapalı) canlı değiştirilebilir; `?seed=12345` ile sabit harita
+üretilir.
 
 ## Çalıştırma
 
@@ -106,7 +107,9 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 | B / "Defter" düğmesi | Savaş ve Tehlike Defteri |
 | T / "Teknoloji" düğmesi | Tam ekran teknoloji ağacı (sürükleyerek kaydır) |
 | 1-9, 0 | Araç çubuğundaki kilidi açık binalardan seç |
-| Esc / sağ tık | Üstteki paneli kapat; panel yoksa Esc duraklatma menüsünü açar (Kaydet/Ses/Ana Menü) |
+| Esc / sağ tık | Üstteki paneli kapat; panel yoksa Esc duraklatma menüsünü açar (Kaydet / Ses / Tehlike kamerası / Kısayollar / Ana Menü) |
+| ? | Kısayol & yardım ekranını aç (tuşlar, fare ve kısa başlangıç rehberi) |
+| Ctrl / ⌘ + S | Oyunu anında kaydet (oyun ayrıca arka planda otomatik kaydeder) |
 | Space | Duraklat / devam et |
 | X | Oyun hızı (1x / 2x / 4x / 8x / 16x) |
 | WASD / Ok tuşları | Kamerayı kaydır |
@@ -120,7 +123,99 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 > dikilen fidan/çalılar, çiftlik ürünleri, balıkçılık ve avcılıktır.
 > Tek doğal istisna: yabani mantarlar binalardan uzakta kendiliğinden biter.
 
-## Şu anki özellikler (v2.9)
+## Şu anki özellikler (v3.6)
+
+### v3.6: Kalite-yaşam, dayanıklılık ve geri bildirim cilası
+
+- **Kayıt & dayanıklılık**: arka planda **otomatik kayıt** (sekme
+  kapanışında da) ve **Ctrl/⌘+S** ile anında kayıt; bozuk/eksik kayıt artık
+  reddedilir (mevcut oyun korunur); oyun hızı, ilahî güç bekleme süreleri ve
+  köylülerin taşıdığı kargo da kayda dahil edildi.
+- **Geri bildirim**: **kıtlık** ve **düşük moral** erken uyarıları; ölüm,
+  doğum, göçmen ve **hedef tamamlama** gibi önemli olaylar belirginleşti ve
+  yumuşak bir **bildirim çanı** çalar; koloni yok olunca **oyun sonu perdesi**
+  (ölüm sebebiyle birlikte).
+- **Keşfedilebilirlik**: **`?` yardım ekranı** (tuşlar/fare/rehber), araç
+  çubuğunda **bina ipuçları**, hayalette **odun maliyeti** önizlemesi,
+  duraklatma menüsünde hızlı koloni özeti (tarih · zorluk · nüfus).
+- **Erişilebilirlik & tercih**: **tehlike kamerası**nın otomatik kayması
+  kapatılabilir, **ses** tercihi kalıcı.
+- **Performans**: ekran dışındaki varlıklar çizilmez (viewport culling).
+- **Hata düzeltmeleri**: bina yıkımında hayalet otlak ve yarım kalan iş
+  temizliği; sıkışık konumda kaybolan bebek; zorluk ön ayarlarında değer
+  sızıntısı.
+
+### v3.5: Sıkışma düzeltmesi + teknoloji temposu
+
+- **"Yapıya sıkışma" hatası giderildi**: otomatik inşaat artık binaların
+  çevresinde 1 karo yürüme koridoru bırakır (birbirine yapışmaz) ve köylünün
+  üstüne bina kurmaz; binadan çıkış en yakın yürünebilir kareye düşer
+- **Teknoloji oldukça yavaşlatıldı**: ayin verimi düşürüldü, ayin döngüsü
+  uzadı ve araştırma maliyeti daha dik katlanır (×1.22) — bilgi akar ama
+  ilerleme artık aceleci değil
+
+### v3.4: İlahî Güçler — dışarıdan yönlendiren tanrı
+
+### v3.4: İlahî Güçler — dışarıdan yönlendiren tanrı
+
+- **İnanç (faith)** kaynağı: tapınak ayinlerinden ve ileti yanıtlarından
+  birikir; üst bardaki ✨ sayaçta görünür
+- **İlahî Güçler paneli** (✨ düğmesi / Y tuşu): inanç harcayarak kolonyi
+  yönlendirirsin (her gücün maliyeti + bekleme süresi var):
+  - 🙏 **Peygamber Yolla**: bir köylü peygamber olur — çevresine moral
+    (ilham) yayar, hızlı çalışır, başında altın hale
+  - 📜 **Kehanet: Bilgelik**: 2 gün tapınak bilgisi iki katı
+  - 🌾 **Kehanet: Bereket**: 2 gün toplama + doğurganlık artar, çevreye
+    yemiş saçılır
+  - ✨ **Mucize: Şifa**: herkes anında iyileşir, hastalık geçer, moral artar
+  - 🛡️ **Mucize: Koruma Kalkanı**: 1 gün yırtıcılar saldıramaz
+- Vizyon: koloni kendi ihtiyaçlarını anlayıp kendini yönetir; sen
+  dışarıdan müdahale eder, kaderlerini şekillendirirsin
+
+### v3.3: Bilgi seli + "ileti"
+
+### v3.3: Bilgi seli + "ileti"
+
+- **Araştırma puanı seli**: ayin verimi rahip başına çok daha yüksek
+  (≈ rahip×2/ayin) ve ayin döngüsü hızlandı (8sn ara / 7sn ayin); tapınak
+  3 rahibe çıktı ve koloni büyüdükçe 3 tapınağa dek otomatik kurulur —
+  3 rahiple ~1.5 bilgi/sn (öncekinin ~16 katı)
+- **"Yakarış" yerine "İleti"**: köylüler artık tanrıya **ileti gönderir**;
+  tıklayıp mikrofonla **yanıtlarsın** (Merak araştırması). Sen dışarıdan
+  yönlendiren tanrısın
+
+### v3.2: Kendi kendini kuran koloni
+
+### v3.2: Kendi kendini kuran koloni
+
+- **Otomatik inşaat** (⚙ Otomasyon → Otomatik inşaat): koloni ihtiyaç
+  duydukça kampın yakınına uygun binayı (önce konut, sonra tapınak,
+  toplayıcı, balıkçı, atölye, avcı, bakımevi, depo, çiftlik) kendiliğinden
+  diker; aynı anda en çok 2 şantiye, dalı tamamen tüketmez
+- **İşçiler şantiyeleri kendiliğinden kurar**: ayrı "inşaatçı" atamaya
+  gerek yok — boştaki işçiler en yakın şantiyeyi inşa eder
+- **Katlamalı araştırma maliyeti**: her araştırma sonrakileri ~%16
+  pahalılaştırır (kabile geliştikçe ilerleme daha büyük yatırım ister)
+- **Sıradaki araştırma göstergesi**: oto-araştırma açıkken Teknoloji
+  düğmesi altında sıradaki araştırma, bilgi/ihtiyaç ve tahmini süre
+- **Çiftlik oto-evcilleştirme**: çiftçiler ağıl türüne dönüşecek yabanileri
+  görünce kendiliğinden evcilleştirir (ağıl dolu değilse)
+- Artık koloni büyük ölçüde kendini yönetiyor; sen yön verir, müdahale edersin
+
+### v3.0: Taş yalnız çakıldan + daha güçlü otomasyon
+
+### v3.0: Taş yalnız çakıldan + daha güçlü otomasyon
+
+- **Büyük taş blokları artık kırılamaz** (ileride maden çağında gelecek);
+  taş yalnızca yerdeki **çakıl** kümelerinden toplanır
+- **Çakıl bollaştı**: kayalık (toprak) kuşağında ve çimende çok daha sık
+  bulunur — taşın sürdürülebilir kaynağı çakıl madenleridir
+- **Daha güçlü otomatik işçi dağıtımı**: kadrosu eksik tüm binalar
+  (yiyecek → av → bakım → bilgi önceliğiyle) azami kadroya kadar
+  boştaki işçilerle doldurulur; nüfusa göre birkaç işçi toplama için
+  boşta kalır (elle yönetmek için ⚙ Otomasyon'dan kapat)
+
+### v2.9: Otomasyon (Politika) paneli
 
 ### v2.9: Otomasyon (Politika) paneli
 

@@ -27,6 +27,9 @@ import {
   drawPolicyPanel,
   policyPanelHitTest,
   policyButtonHitTest,
+  drawDivinePanel,
+  divinePanelHitTest,
+  divineButtonHitTest,
   drawAnimalPanel,
   animalPanelHitTest,
   journalButtonHitTest,
@@ -42,6 +45,7 @@ import {
   TOOLBAR_HEIGHT,
   TOOLBAR_TYPES,
   toolbarHitTest,
+  drawToolbarTooltip,
   updateMessages,
   drawTaskList,
   drawGoalCard,
@@ -50,7 +54,7 @@ import {
   panelRectOf,
   type PanelId,
 } from "./render/hud";
-import { buyTech, grantTech, hasTech, prereqsMet, purchasedList, restorePurchased, TECHS, type Tech, type TechId } from "./sim/tech";
+import { buyTech, grantTech, hasTech, cheapestAvailable, currentCost, purchasedList, restorePurchased, TECHS, type Tech, type TechId } from "./sim/tech";
 import { Animal, ANIMAL_DEFS, TAME_TARGET, WILD_POOL, BARN_CAPACITY, BREED_INTERVAL, PASTURE_RADIUS, pastureBounds, type AnimalType } from "./sim/animals";
 import {
   AXE_STONE_COST,
@@ -87,6 +91,7 @@ import {
 } from "./sim/resources";
 import { DIFFICULTY_PRESETS, difficulty, type DifficultyLevel } from "./sim/difficulty";
 import { eventFlags } from "./sim/events";
+import { divine, divineCooldown, DIVINE_POWERS, wisdomActive, bountyActive, type DivinePowerId } from "./sim/divine";
 import { policy, POLICY_INFO } from "./sim/policy";
 import { currentGoal, goalState, tickGoals } from "./sim/goals";
 import { addJournal, journal } from "./sim/journal";
@@ -159,6 +164,7 @@ let showPeople = false;
 let showJournal = false;
 let showTech = false;
 let showPolicy = false;
+let showDivine = false;
 let markFilter: MarkFilter = "all";
 // sol tuş sürükleme: alan seçimi veya mini harita gezdirme
 let selecting:
@@ -173,7 +179,7 @@ let gameSpeed = 1;
 
 const SAVE_KEY = "banisher_save";
 
-function saveGame(): void {
+function saveGame(auto = false): void {
   const bIndex = (b: Building | null) => (b ? buildings.indexOf(b) : -1);
   const vIndex = (v: Villager | null) => (v ? villagers.indexOf(v) : -1);
   const data = {
@@ -185,8 +191,12 @@ function saveGame(): void {
     resources: { ...resources },
     tech: purchasedList(),
     policy: { ...policy },
+    divine: { ...divine },
+    divineCooldown: { ...divineCooldown }, // güç bekleme süreleri (reload ile sıfırlanmasın = save-scum yok)
     events: { ...eventFlags },
+    milestones: { ...milestones }, // ulaşılan dönüm noktaları (yüklemede tekrar kutlanmasın)
     goal: goalState.index,
+    gameSpeed, // oyun hızı: yüklemede seçilen hızı koru
     world: world.serialize(),
     journal: journal.map((e) => ({ ...e })),
     camera: { x: camera.x, y: camera.y, zoom: camera.zoom },
@@ -202,9 +212,11 @@ function saveGame(): void {
       x: v.x, y: v.y, identity: { ...v.identity },
       hunger: v.hunger, morale: v.morale, hp: v.hp,
       moraleLog: [...v.moraleLog],
+      inventory: { ...v.inventory }, // taşınan kargo (yoksa kayıt/yüklemede kaybolur)
       birthDay: v.birthDay, pregnantSince: v.pregnantSince,
       educated: v.educated, hasAxe: v.hasAxe, hasClothes: v.hasClothes,
-      spears: v.spears, sick: v.sickUntilDay,
+      spears: v.spears, sick: v.sickUntilDay, prophet: v.prophetUntilDay,
+      divineBuff: v.divineBuff, // geçici moral takviyesi (yoksa kalıcılaşırdı)
       home: bIndex(v.home), mother: vIndex(v.mother),
       assignment:
         v.assignment.kind === "building"
@@ -220,10 +232,17 @@ function saveGame(): void {
   };
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    addMessage("💾 Oyun kaydedildi");
+    addMessage(auto ? "💾 Otomatik kayıt alındı" : "💾 Oyun kaydedildi");
   } catch {
-    addMessage("Kayıt başarısız (depolama dolu olabilir)");
+    // Otomatik kayıtta sessiz kal (her döngüde uyarı yağmuru olmasın);
+    // elle kayıtta kullanıcıyı bilgilendir.
+    if (!auto) addMessage("Kayıt başarısız (depolama dolu olabilir)");
   }
+}
+
+// Aktif oyun var mı? (ana menü/oyun sonu sırasında kayıt almayız)
+function gameActive(): boolean {
+  return villagers.length > 0 && !menuOverlay;
 }
 
 function hasSave(): boolean {
@@ -235,6 +254,18 @@ function loadGame(): boolean {
   if (!raw) return false;
   try {
     const d = JSON.parse(raw);
+    // Bozuk/eksik kaydı GLOBAL durumu bozmadan önce reddet: aksi halde NaN/
+    // undefined alanlar oyunu yarı-yüklenmiş kırık bir hale sokardı (otomatik
+    // kayıt sıklaştığı için kısmi yazım riski daha da önemli).
+    if (
+      !d || typeof d !== "object" ||
+      typeof d.time !== "number" || !Number.isFinite(d.time) ||
+      !Array.isArray(d.villagers) || !Array.isArray(d.buildings) ||
+      !d.world || typeof d.world !== "object"
+    ) {
+      addMessage("Kayıt bozuk — yüklenemedi (mevcut oyun korunuyor)");
+      return false;
+    }
     // zaman ve ayarlar önce (köylü kurulumu totalDays okur)
     gameTime.total = d.time;
     Object.assign(tuning, d.tuning);
@@ -242,6 +273,13 @@ function loadGame(): boolean {
     Object.assign(resources, d.resources);
     restorePurchased(d.tech);
     Object.assign(policy, d.policy ?? (d.autoResearch !== undefined ? { research: d.autoResearch } : {}));
+    if (d.divine) Object.assign(divine, d.divine);
+    for (const k of Object.keys(divineCooldown)) delete divineCooldown[k];
+    if (d.divineCooldown) Object.assign(divineCooldown, d.divineCooldown);
+    if ([1, 2, 4, 8, 16].includes(d.gameSpeed)) gameSpeed = d.gameSpeed; // geçerliyse hızı geri yükle
+    if (d.milestones) Object.assign(milestones, d.milestones); // dönüm noktaları tekrar kutlanmasın
+    else for (const k of Object.keys(milestones)) (milestones as Record<string, boolean>)[k] = true; // eski kayıt: hepsini ulaşılmış say
+    prevSeason = season(); // mevsim sayacını kayıttaki ana hizala (sahte "ilk kış" olmasın)
     eventFlags.coldSnapUntilDay = d.events?.coldSnapUntilDay ?? -1;
     goalState.index = d.goal ?? 0; // eski kayıtlar: karşılanan hedefler peş peşe tamamlanır
     eventTimer = 0.5 * tuning.dayLength; // eski kayıtlarda olay sayacı tazelenir
@@ -278,9 +316,12 @@ function loadGame(): boolean {
       v.hp = vd.hp;
       v.moraleLog.clear();
       for (const [k, val] of vd.moraleLog) v.moraleLog.set(k, val);
+      if (vd.inventory) Object.assign(v.inventory, vd.inventory); // taşınan kargoyu geri yükle
       v.birthDay = vd.birthDay;
       v.pregnantSince = vd.pregnantSince;
       v.sickUntilDay = vd.sick ?? -1;
+      v.prophetUntilDay = vd.prophet ?? -1;
+      v.divineBuff = vd.divineBuff ?? null; // geçici takviye geri yüklenir → süresi dolunca geri alınır
       v.educated = vd.educated;
       v.hasAxe = vd.hasAxe;
       v.hasClothes = vd.hasClothes;
@@ -394,6 +435,30 @@ function sesLabel(): string {
   return isMuted() ? "🔇 Ses: Kapalı" : "🔊 Ses: Açık";
 }
 
+// Tercih: tehlike kamerası. Açıkken, bir köylü yırtıcıyla karşılaşınca kamera
+// ona doğru otomatik kayar. Hareket hassasiyeti olan ya da kontrolü elinde
+// tutmak isteyen oyuncular için kapatılabilir — uyarı mesajı ve kırmızı ikaz
+// halkası yine gösterilir, yalnız görüş zorla kaymaz. Tarayıcıda saklanır.
+const DANGERCAM_KEY = "banisher_dangercam";
+let dangerCamEnabled = (() => {
+  try {
+    return localStorage.getItem(DANGERCAM_KEY) !== "0";
+  } catch {
+    return true;
+  }
+})();
+function setDangerCam(on: boolean): void {
+  dangerCamEnabled = on;
+  try {
+    localStorage.setItem(DANGERCAM_KEY, on ? "1" : "0");
+  } catch {
+    /* depolama yoksa sessizce geç */
+  }
+}
+function kameraLabel(): string {
+  return dangerCamEnabled ? "🎥 Tehlike kamerası: Açık" : "🎥 Tehlike kamerası: Kapalı";
+}
+
 // Giriş ekranı (oyun açılışı)
 function showMainMenu(): void {
   paused = true;
@@ -490,6 +555,8 @@ function showScripture(): void {
     initAudio();
     closeMenu();
     paused = false;
+    // tek seferlik keşif ipucu: yeni eklenen yardım ekranını duyur
+    addMessage("❔ Tuşlar ve ipuçları için ? tuşuna bas", "important");
   };
 
   overlay.append(title, scripture, sub, btn);
@@ -497,10 +564,35 @@ function showScripture(): void {
   menuOverlay = overlay;
 }
 
+// Oyun sonu: son köylü de göçtüğünde (koloni yok olunca) gösterilir.
+// Daha önce yalnız sim donuyordu, oyuncuya hiçbir şey bildirilmiyordu.
+function showGameOver(): void {
+  const fate =
+    lastDeathCause === "predator"
+      ? "Kabilen yırtıcıların pençesinde tükendi"
+      : lastDeathCause === "hunger"
+      ? "Kabilen açlığa yenik düştü"
+      : "Son köylün de göçtü";
+  buildMenu(
+    "☠ KABİLEN YOK OLDU",
+    `${fate} — kabilen ${gameTime.year} yıl dayandı (${dateString()})`,
+    [
+      {
+        label: "🔄 Yeniden Dene",
+        desc: "Ana menüye dön, yeni bir kabileyle yeniden başla",
+        onClick: () => location.reload(),
+      },
+    ]
+  );
+}
+
 // Oyun içi duraklatma menüsü (Esc — açık panel yokken)
 function showPauseMenu(): void {
   paused = true;
-  buildMenu("BANISHER", `${dateString()} — kabilen seni bekliyor`, [
+  // duraklatma menüsü başlığı: hızlı koloni durumu (tarih · zorluk · nüfus)
+  const pop = villagers.length;
+  const subtitle = `${dateString()} · ${DIFFICULTY_PRESETS[difficulty.level].name} · ${pop} köylü`;
+  buildMenu("BANISHER", subtitle, [
     {
       label: "▶ Devam",
       desc: "",
@@ -511,7 +603,7 @@ function showPauseMenu(): void {
     },
     {
       label: "💾 Kaydet",
-      desc: "Oyunu tarayıcıya kaydet",
+      desc: "Ctrl+S ile de kaydedebilirsin · oyun otomatik de kaydeder",
       onClick: () => {
         saveGame();
         closeMenu();
@@ -527,11 +619,117 @@ function showPauseMenu(): void {
       },
     },
     {
+      label: kameraLabel(),
+      desc: "Tehlikede kameranın otomatik kaymasını aç/kapat",
+      onClick: () => {
+        setDangerCam(!dangerCamEnabled);
+        showPauseMenu();
+      },
+    },
+    {
+      label: "❔ Kısayollar & Yardım",
+      desc: "Tuşlar, fare ve kısa bir başlangıç rehberi (? tuşu)",
+      onClick: showHelp,
+    },
+    {
       label: "🏠 Ana Menü",
       desc: "Kaydedilmemiş ilerleme kaybolur!",
       onClick: () => location.reload(),
     },
   ]);
+}
+
+// ❔ Kısayol & yardım ekranı (? tuşu ya da duraklatma menüsünden)
+function helpSection(heading: string, rows: [string, string][]): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.style.cssText =
+    "display:flex;flex-direction:column;gap:5px;width:min(540px,92vw)";
+  const h = document.createElement("div");
+  h.textContent = heading;
+  h.style.cssText =
+    "font-size:12px;color:#8fd05e;letter-spacing:2px;margin:6px 0 2px";
+  wrap.appendChild(h);
+  for (const [k, d] of rows) {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:12px";
+    const key = document.createElement("span");
+    key.textContent = k;
+    key.style.cssText =
+      "flex:0 0 138px;text-align:right;color:#ffd27a;font-weight:bold;font-size:12px";
+    const desc = document.createElement("span");
+    desc.textContent = d;
+    desc.style.cssText = "color:#cdd4c0;font-size:12px";
+    row.append(key, desc);
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function showHelp(): void {
+  closeMenu();
+  paused = true;
+  const overlay = document.createElement("div");
+  overlay.style.cssText =
+    "position:fixed;inset:0;background:rgba(8,10,14,0.94);display:flex;" +
+    "flex-direction:column;align-items:center;justify-content:center;" +
+    "font-family:monospace;color:#e8e2d0;z-index:10;gap:10px;padding:24px;overflow:auto";
+
+  const title = document.createElement("div");
+  title.textContent = "❔ KISAYOLLAR & YARDIM";
+  title.style.cssText =
+    "font-size:24px;font-weight:bold;color:#ffe296;letter-spacing:4px";
+
+  const keyboard = helpSection("⌨ KLAVYE", [
+    ["Boşluk", "Duraklat / Devam"],
+    ["X", "Oyun hızı (1→2→4→8→16)"],
+    ["Ctrl/⌘ + S", "Oyunu kaydet"],
+    ["Esc", "Menü · açık paneli kapat"],
+    ["1 … 0", "Araç çubuğundan bina seç"],
+    ["N", "Nüfus paneli"],
+    ["M", "Köylüler (kişiler)"],
+    ["B", "Günce"],
+    ["T", "Teknoloji ağacı"],
+    ["P", "Politika (otomasyon)"],
+    ["Y", "İlahî güçler"],
+    ["F", "İşaret filtresini değiştir"],
+    ["G H J K L", "İşaret filtreleri (doğrudan)"],
+    ["W A S D / Oklar", "Kamerayı kaydır"],
+    ["?", "Bu yardım ekranı"],
+  ]);
+
+  const mouse = helpSection("🖱 FARE", [
+    ["Sol tık", "Seç · sürükle: kaynak işaretle"],
+    ["Sağ / Orta tuş sürükle", "Kamerayı kaydır"],
+    ["Sağ tık", "Seçimi / işareti iptal et"],
+    ["Tekerlek", "Yakınlaştır / uzaklaştır"],
+  ]);
+
+  const primer = document.createElement("div");
+  primer.innerHTML =
+    "Rahipler tapınakta <b style='color:#e8b86a'>bilgi</b> üretir; bilgiyle " +
+    "<b style='color:#e8b86a'>T</b> ağacından araştırma açarsın. Kaynakları " +
+    "<b style='color:#e8b86a'>sol tuşla sürükleyerek işaretle</b> — işçiler toplar. " +
+    "Üretim binalarına işçi <b style='color:#e8b86a'>panelden</b> atanır.";
+  primer.style.cssText =
+    "max-width:560px;font-size:12px;line-height:1.7;color:#b8c4a8;text-align:center;" +
+    "border-top:1px solid rgba(255,210,60,0.25);padding-top:12px;margin-top:6px";
+
+  const btn = document.createElement("button");
+  btn.innerHTML = "<div style='font-size:15px;font-weight:bold'>▶ Devam</div>";
+  btn.style.cssText =
+    "margin-top:8px;width:240px;padding:11px 16px;background:rgba(255,255,255,0.06);" +
+    "border:1px solid #5a5f68;color:#e8e2d0;font-family:monospace;cursor:pointer;" +
+    "text-align:center;border-radius:6px";
+  btn.onmouseenter = () => (btn.style.borderColor = "#8fd05e");
+  btn.onmouseleave = () => (btn.style.borderColor = "#5a5f68");
+  btn.onclick = () => {
+    closeMenu();
+    paused = false;
+  };
+
+  overlay.append(title, keyboard, mouse, primer, btn);
+  document.body.appendChild(overlay);
+  menuOverlay = overlay;
 }
 
 // Seçilen zorluğu canlı koloniye uygula (köylü sayısı, erzak, moral)
@@ -793,9 +991,13 @@ function demolishBuilding(b: Building): void {
       v.assignment = { kind: "laborer" };
     }
     if (v.home === b) v.home = null;
+    // o binaya bağlı güncel işi (inşa/depo/ibadet/zanaat/uyku...) bırak
+    v.forgetBuilding(b, world);
   }
   const idx = buildings.indexOf(b);
   if (idx !== -1) buildings.splice(idx, 1);
+  // ağıl yıkıldıysa otlak karoları güncel kalsın (hayalet otlak olmasın)
+  if (b.type === BuildingType.Barn) rebuildPastures();
   const refund = Math.floor(b.def.cost / 2);
   addItem("wood", refund);
   addMessage(`${b.def.name} yıkıldı (+${refund} odun iade)`);
@@ -913,6 +1115,10 @@ input.onClick = (wx, wy, sx, sy) => {
     showPolicy = !showPolicy;
     return;
   }
+  if (divineButtonHitTest(sx, sy)) {
+    showDivine = !showDivine;
+    return;
+  }
   if (pauseButtonHitTest(sx, sy)) {
     paused = !paused;
     return;
@@ -965,6 +1171,16 @@ input.onClick = (wx, wy, sx, sy) => {
     const hit = journalPanelHitTest(sx, sy);
     if (hit) {
       if (hit === "close") showJournal = false;
+      return;
+    }
+  }
+
+  // ilahî güçler paneli
+  if (showDivine) {
+    const hit = divinePanelHitTest(sx, sy);
+    if (hit) {
+      if (hit.kind === "close") showDivine = false;
+      else if (hit.kind === "cast") castDivinePower(hit.id);
       return;
     }
   }
@@ -1198,6 +1414,7 @@ input.onClick = (wx, wy, sx, sy) => {
 // Açık olan en üstteki şeyi kapat; her çağrıda yalnızca bir tane
 function closeTopmost(): boolean {
   if (selected !== null) { selected = null; return true; }
+  if (showDivine) { showDivine = false; return true; }
   if (showPolicy) { showPolicy = false; return true; }
   if (showTech) { showTech = false; return true; }
   if (showJournal) { showJournal = false; return true; }
@@ -1381,6 +1598,12 @@ input.wheelInterceptor = (sx, sy, deltaY) => {
 };
 
 window.addEventListener("keydown", (e) => {
+  if (e.code === "KeyS" && (e.ctrlKey || e.metaKey)) {
+    // Ctrl/Cmd+S: hızlı kayıt (tarayıcının "sayfayı kaydet" iletişimini bastır)
+    e.preventDefault();
+    if (gameActive()) saveGame();
+    return;
+  }
   if (e.code === "Escape") {
     if (menuOverlay) {
       // menü açıkken Esc: kapat ve devam et
@@ -1392,6 +1615,9 @@ window.addEventListener("keydown", (e) => {
   } else if (e.code === "Space") {
     e.preventDefault();
     paused = !paused;
+  } else if (e.code === "Slash") {
+    // ? : kısayol & yardım ekranı (başka bir menü açık değilken)
+    if (!menuOverlay) showHelp();
   } else if (e.code === "KeyX") {
     gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : gameSpeed === 4 ? 8 : gameSpeed === 8 ? 16 : 1;
   } else if (e.code === "KeyN") {
@@ -1404,9 +1630,11 @@ window.addEventListener("keydown", (e) => {
     showTech = !showTech;
   } else if (e.code === "KeyP") {
     showPolicy = !showPolicy;
+  } else if (e.code === "KeyY") {
+    showDivine = !showDivine;
   } else if (e.code === "KeyF") {
     const visibleFilters = MARK_FILTERS.filter(
-      (f) => f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects")
+      (f) => f.id !== "stone" || hasTech("hardobjects")
     );
     const i = visibleFilters.findIndex((f) => f.id === markFilter);
     markFilter = visibleFilters[(i + 1) % visibleFilters.length].id;
@@ -1416,7 +1644,7 @@ window.addEventListener("keydown", (e) => {
   ) {
     // işaret filtreleri: yan yana tuşlar (G H J K L)
     const f = MARK_FILTERS.find((f) => f.key === e.code.slice(3));
-    if (f && (f.id !== "stone" || hasTech("humanity") || hasTech("hardobjects"))) {
+    if (f && (f.id !== "stone" || hasTech("hardobjects"))) {
       markFilter = f.id;
     }
   }
@@ -1431,6 +1659,17 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+// Sekme kapanırken / arka plana atılırken son durumu sessizce kaydet —
+// kazara ilerleme kaybını önler. (visibilitychange mobil/sekme-değişiminde,
+// pagehide kapanış/yenilemede en güvenilir tetikleyicidir.)
+function saveOnExit(): void {
+  if (gameActive()) saveGame(true);
+}
+window.addEventListener("pagehide", saveOnExit);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveOnExit();
+});
+
 // ---- Simülasyon adımı ----
 
 // ---- Konutlar ve doğumlar ----
@@ -1440,6 +1679,8 @@ let lastDayCount = 0;
 let homeTimer = 0;
 let homelessCount = 0;
 let homelessWarnTimer = 0;
+let knowledgeRate = 0; // tahmini bilgi/sn (oto-araştırma ETA için)
+let kPrevKnowledge = 0;
 
 // Oto-araştırma: açıkken bilgi yettikçe en ucuz uygun araştırmayı kendi yapar
 // (oyuncu kapatıp bilgi biriktirebilir ya da dilediğini elle araştırabilir)
@@ -1470,35 +1711,208 @@ function autoToolsTick(): void {
   }
 }
 
-// Otomatik işçi dağıtımı: kadrosuz (yeni) binalar boştaki işçilerle doldurulur;
-// en az bir işçi toplama/esneklik için boşta bırakılır
+// Otomatik işçi dağıtımı: kadrosu eksik binalar boştaki işçilerle azami kadroya
+// dek doldurulur (yiyecek/bilgi öncelikli). Esneklik için birkaç işçi boşta kalır.
+// (Elle yönetmek istersen ⚙ Otomasyon panelinden kapat.)
+function staffPriority(b: Building): number {
+  switch (b.type) {
+    case BuildingType.Gatherer:
+    case BuildingType.Fisher: return 0; // yiyecek üreten binalar önce
+    case BuildingType.HunterLodge: return 1;
+    case BuildingType.Nursery: return 2;
+    case BuildingType.Temple: return 3; // bilgi
+    default: return 4;
+  }
+}
 function autoStaffTick(): void {
   if (!policy.staff) return;
   const idle = villagers.filter(
     (v) => v.canWork && !v.caringBaby && !v.dead && v.assignment.kind === "laborer"
   );
+  // nüfusa göre esnek rezerv: küçük kolonide 1, büyükte 2-3 boşta (toplama için)
+  const reserve = Math.min(3, Math.max(1, Math.floor(villagers.length / 8)));
   let free = idle.length;
-  for (const b of buildings) {
-    if (!b.done || b.def.maxWorkers <= 0 || b.type === BuildingType.Camp) continue;
-    if (workersOf(b) > 0) continue; // yalnız kadrosuz (yeni) binaları doldur
-    let cur = 0;
-    while (cur < b.def.maxWorkers && free > 1) {
-      const v = idle.pop()!;
+  if (free <= reserve) return;
+  const targets = buildings
+    .filter((b) => b.done && b.def.maxWorkers > 0 && b.type !== BuildingType.Camp && workersOf(b) < b.def.maxWorkers)
+    .sort((a, b) => staffPriority(a) - staffPriority(b));
+  for (const b of targets) {
+    while (workersOf(b) < b.def.maxWorkers && free > reserve) {
+      const v = idle.pop();
+      if (!v) return;
       v.assignment = { kind: "building", building: b };
       free--;
-      cur++;
+    }
+  }
+}
+
+// Otomatik inşaat: koloni ihtiyaç duydukça uygun bir binayı kampın yakınına diker.
+// Aynı anda en çok 2 şantiye; bittikçe yenisi planlanır. Dalı tamamen tüketmez.
+function bCount(t: BuildingType): number {
+  return buildings.filter((b) => b.type === t && !b.removed).length;
+}
+// Otomatik yerleştirme alanı: ayak izi + 1 karo kenar boşluğu tamamen açık
+// olmalı (binalar birbirine yapışmasın, köylüler kapana kısılmasın) ve
+// üstünde köylü durmamalı.
+function autoPlaceClear(tx: number, ty: number, size: number): boolean {
+  for (let dy = -1; dy <= size; dy++) {
+    for (let dx = -1; dx <= size; dx++) {
+      const x = tx + dx, y = ty + dy;
+      if (!world.inBounds(x, y)) return false;
+      const border = dx < 0 || dy < 0 || dx >= size || dy >= size;
+      if (border) {
+        // kenar: yürünebilir bir koridor kalsın (su/ağaç/bina olmaz)
+        if (!world.walkableAt(x, y)) return false;
+      }
+    }
+  }
+  // ayak izinde köylü var mı?
+  for (const v of villagers) {
+    if (v.tileX >= tx && v.tileX < tx + size && v.tileY >= ty && v.tileY < ty + size) return false;
+  }
+  return true;
+}
+function tryAutoPlace(type: BuildingType): boolean {
+  const def = BUILDING_DEFS[type];
+  const size = def.size;
+  for (let r = 3; r <= 22; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = campCenter.x + dx, y = campCenter.y + dy;
+        if (!canPlace(world, x, y, size)) continue;
+        if (!autoPlaceClear(x, y, size)) continue;
+        if (def.needsWater && !world.hasAdjacentWater(x, y, size)) continue;
+        if (type === BuildingType.Barn && !pastureClearOfWater(x, y)) continue;
+        const b = new Building(type, x, y);
+        placeBuilding(world, b);
+        buildings.push(b);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+const AUTO_BUILD_BUFFER = 6; // bu kadar dal her zaman elde kalsın
+function autoBuildTick(): void {
+  if (!policy.build) return;
+  const pending = buildings.filter((b) => !b.done && !b.removed).length;
+  if (pending >= 2) return; // şantiyeler bitsin, sonra yenisi
+  const pop = villagers.length;
+  const wishlist: BuildingType[] = [];
+  // 1) konut: nüfus için yeterli yatak yoksa
+  if (pop > bCount(BuildingType.House) * HOUSE_CAPACITY) wishlist.push(BuildingType.House);
+  // 2) tapınak: bilgi/araştırma motoru — koloni büyüdükçe daha çok tapınak
+  if (bCount(BuildingType.Temple) < Math.min(2, 1 + Math.floor(pop / 20))) wishlist.push(BuildingType.Temple);
+  // 3) yemek: toplayıcı (kilidi açıksa), nüfusa göre 1-2 tane
+  if (isBuildingUnlocked(BuildingType.Gatherer) && bCount(BuildingType.Gatherer) < Math.min(2, Math.ceil(pop / 8))) wishlist.push(BuildingType.Gatherer);
+  // 4) balıkçı (su kenarı)
+  if (isBuildingUnlocked(BuildingType.Fisher) && bCount(BuildingType.Fisher) < 1) wishlist.push(BuildingType.Fisher);
+  // 5) atölye
+  if (isBuildingUnlocked(BuildingType.ToolWorkshop) && bCount(BuildingType.ToolWorkshop) < 1) wishlist.push(BuildingType.ToolWorkshop);
+  // 6) avcı kulübesi
+  if (isBuildingUnlocked(BuildingType.HunterLodge) && bCount(BuildingType.HunterLodge) < 1) wishlist.push(BuildingType.HunterLodge);
+  // 7) bakımevi (bebek varsa)
+  if (isBuildingUnlocked(BuildingType.Nursery) && bCount(BuildingType.Nursery) < 1 && villagers.some((v) => v.baby)) wishlist.push(BuildingType.Nursery);
+  // 8) depo (nüfus arttıkça)
+  if (isBuildingUnlocked(BuildingType.Depot) && bCount(BuildingType.Depot) < Math.floor(pop / 12)) wishlist.push(BuildingType.Depot);
+  // 9) çiftlik
+  if (isBuildingUnlocked(BuildingType.Barn) && bCount(BuildingType.Barn) < 1) wishlist.push(BuildingType.Barn);
+
+  for (const type of wishlist) {
+    const def = BUILDING_DEFS[type];
+    if (resources.wood < def.cost + AUTO_BUILD_BUFFER) continue;
+    if (tryAutoPlace(type)) {
+      resources.wood -= def.cost;
+      addMessage(`🏗 ${def.name} şantiyesi kuruldu (otomatik)`);
+      return; // bir tur bir bina yeter
+    }
+  }
+}
+
+// ---- İlahî güçler: inanç harcayarak kolonyi yönlendir ----
+function castDivinePower(id: DivinePowerId): boolean {
+  const power = DIVINE_POWERS.find((p) => p.id === id);
+  if (!power) return false;
+  if ((divineCooldown[id] ?? 0) > 0) {
+    addMessage(`${power.icon} ${power.name} henüz hazır değil (${Math.ceil(divineCooldown[id])} sn)`);
+    return false;
+  }
+  if (resources.faith < power.cost) {
+    addMessage(`İnanç yetersiz! (${power.name}: ${power.cost} inanç)`);
+    return false;
+  }
+  const now = totalDays();
+  let ok = true;
+  switch (id) {
+    case "prophet": {
+      // en yüksek moralli yetişkin peygamber olur (halk ona kulak verir)
+      const adults = villagers.filter((v) => v.canWork && !v.dead && !v.isProphet);
+      if (adults.length === 0) { ok = false; break; }
+      const p = adults.sort((a, b) => b.morale - a.morale)[0];
+      p.prophetUntilDay = now + 2;
+      p.changeMorale(30, "Peygamberlik");
+      addMessage(`🙏 ${p.fullName} peygamber seçildi — halka ilham veriyor!`, "important");
+      addJournal(`🙏 ${p.fullName} peygamber oldu`);
+      addFloater(p.x, p.y - 20, "🙏 Peygamber!", "#ffe296");
+      break;
+    }
+    case "wisdom":
+      divine.wisdomUntilDay = now + 2;
+      addMessage("📜 Kehanet: Bilgelik — 2 gün bilgi iki katı!", "important");
+      break;
+    case "bounty": {
+      divine.bountyUntilDay = now + 2;
+      // çevreye yemiş saç
+      for (let i = 0; i < 14; i++) {
+        const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * 16;
+        const x = Math.round(campCenter.x + Math.cos(a) * r);
+        const y = Math.round(campCenter.y + Math.sin(a) * r);
+        if (world.inBounds(x, y) && world.get(x, y) === Tile.Grass) world.set(x, y, Tile.Bush);
+      }
+      renderer.repaintAll();
+      addMessage("🌾 Kehanet: Bereket — bolluk çağı, toprak cömert!", "important");
+      break;
+    }
+    case "heal":
+      for (const v of villagers) {
+        if (v.dead) continue;
+        v.hp = 100;
+        v.sickUntilDay = -1;
+        v.changeMorale(20, "İlahî şifa");
+      }
+      addMessage("✨ Mucize: Şifa — herkes iyileşti!", "important");
+      addFloater(camera.x, camera.y, "✨ Şifa", "#8fd05e");
+      break;
+    case "shield":
+      divine.shieldUntilDay = now + 1;
+      addMessage("🛡️ Mucize: Koruma Kalkanı — yırtıcılar kaçıyor!", "important");
+      break;
+  }
+  if (!ok) return false;
+  resources.faith -= power.cost;
+  divineCooldown[id] = power.cooldown;
+  return true;
+}
+
+// Peygamber aurası: çevredeki köylülere moral yayar (main her adımda uygular)
+function applyProphetAura(dt: number): void {
+  const prophets = villagers.filter((v) => v.isProphet && !v.dead);
+  if (prophets.length === 0) return;
+  const R2 = (7 * TILE_SIZE) ** 2;
+  for (const p of prophets) {
+    for (const v of villagers) {
+      if (v === p || v.dead) continue;
+      const dx = v.x - p.x, dy = v.y - p.y;
+      if (dx * dx + dy * dy <= R2) v.changeMorale(0.6 * dt, "Peygamber ilhamı");
     }
   }
 }
 
 function autoResearchTick(): void {
   if (!policy.research) return;
-  let pick: Tech | null = null;
-  for (const t of TECHS) {
-    if (hasTech(t.id) || !prereqsMet(t) || resources.knowledge < t.cost) continue;
-    if (!pick || t.cost < pick.cost) pick = t;
-  }
-  if (!pick) return;
+  const pick = cheapestAvailable();
+  if (!pick || resources.knowledge < currentCost(pick)) return;
   if (buyTech(pick.id)) {
     if (pick.id === "humanity") for (const v of villagers) v.changeMorale(10, "Tanrı inancı");
     celebrateTech(pick.id);
@@ -1511,9 +1925,9 @@ function celebrateTech(id: TechId): void {
   const tech = TECHS.find((t) => t.id === id);
   if (!tech) return;
   techCelebration = { tech, ttl: 3.4, total: 3.4 };
-  sfxResearch();
-  addMessage(`🔬 Araştırıldı: ${tech.name}!`, "important");
-  if (tech.unlocks) addMessage(`✨ Açıldı: ${tech.unlocks}`, "important");
+  sfxResearch(); // tech kendi çan arpejini çalar → mesajlar sessiz (çift ses olmasın)
+  addMessage(`🔬 Araştırıldı: ${tech.name}!`, "important", { silent: true });
+  if (tech.unlocks) addMessage(`✨ Açıldı: ${tech.unlocks}`, "important", { silent: true });
   addJournal(`🔬 Yeni araştırma: ${tech.name}${tech.unlocks ? ` — ${tech.unlocks}` : ""}`);
 }
 
@@ -1618,7 +2032,7 @@ function nightlyConceptions(): void {
   // erken kabilede daha yüksek şans, nüfus büyüdükçe yavaşlar
   const pop = villagers.length;
   const boost = pop < 12 ? 1.6 : pop < 20 ? 1.15 : 0.7;
-  const chance = Math.min(0.92, BIRTH_CHANCE * boost);
+  const chance = Math.min(0.96, BIRTH_CHANCE * boost * (bountyActive() ? 1.8 : 1));
   for (const b of buildings) {
     if (!isHousing(b) || occupants(b) >= HOUSE_CAPACITY) continue;
     if (Math.random() > chance) continue;
@@ -1637,27 +2051,32 @@ function nightlyConceptions(): void {
 function checkBirths(): void {
   for (const mom of villagers) {
     if (!mom.readyToGiveBirth) continue;
-    let placed = false;
-    for (let r = 1; r <= 3 && !placed; r++) {
-      for (let dy = -r; dy <= r && !placed; dy++) {
-        for (let dx = -r; dx <= r && !placed; dx++) {
+    // bebeğin doğacağı kare: çevrede yürünebilir en yakın yer; sıkışıksa
+    // annenin bulunduğu kare (bebek hiçbir durumda kaybolmaz)
+    let bx = mom.tileX;
+    let by = mom.tileY;
+    search: for (let r = 1; r <= 3; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
           const x = mom.tileX + dx;
           const y = mom.tileY + dy;
-          if (!world.walkableAt(x, y)) continue;
-          const baby = new Villager(x, y, true);
-          baby.home = mom.home;
-          baby.mother = mom;
-          if (hasTech("humanity")) baby.changeMorale(10, "Tanrı inancı");
-          villagers.push(baby);
-          mom.giveBirth();
-          addMessage(`👶 ${baby.fullName} doğdu! (annesi ${mom.fullName})`);
-          addFloater(mom.x, mom.y - 18, "+1 bebek", "#ffb0d0");
-          placed = true;
+          if (world.walkableAt(x, y)) {
+            bx = x;
+            by = y;
+            break search;
+          }
         }
       }
     }
-    if (!placed) mom.giveBirth(); // sıkışık durumda bebek annenin olduğu yerde sayılır
+    const baby = new Villager(bx, by, true);
+    baby.home = mom.home;
+    baby.mother = mom;
+    if (hasTech("humanity")) baby.changeMorale(10, "Tanrı inancı");
+    villagers.push(baby);
+    mom.giveBirth();
+    addMessage(`👶 ${baby.fullName} doğdu! (annesi ${mom.fullName})`, "important");
+    addFloater(mom.x, mom.y - 18, "+1 bebek", "#ffb0d0");
   }
 }
 
@@ -1727,7 +2146,6 @@ const wasFull: Record<ItemType, boolean> = Object.fromEntries(
   ITEM_TYPES.map((t) => [t, false])
 ) as Record<ItemType, boolean>;
 
-let wasFamine = false;
 
 // Kilometre taşları: bir kez kutlanır
 const milestones = {
@@ -1769,12 +2187,8 @@ function checkStorageFull() {
     }
     wasFull[item] = full;
   }
-  // kıtlık uyarısı: yemek tamamen bitti
-  const famine = foodTotal() <= 0;
-  if (famine && !wasFamine) {
-    addMessage("⚠ Yemek stoğu tükendi! Köylüler açlıktan ölebilir.");
-  }
-  wasFamine = famine;
+  // not: yemek-bitti uyarısı artık tickFamineWarning'de (dereceli: "azalıyor"
+  // erken uyarı + "tükendi" + bildirim çanı), burada tekrar edilmez.
 }
 
 // ---- Tehlike kamerası: yırtıcıyla karşılaşan köylü takip edilir ----
@@ -1800,10 +2214,13 @@ function updateDangerCamera(dt: number): void {
       dangerCooldown = 6;
       return;
     }
-    // kamerayı yumuşakça tehlikedekine çek
-    const k = Math.min(1, dt * 4);
-    camera.x += (dangerFollow.x - camera.x) * k;
-    camera.y += (dangerFollow.y - camera.y) * k;
+    // kamerayı yumuşakça tehlikedekine çek (tercih kapalıysa görüş kaymaz;
+    // uyarı mesajı ve kırmızı ikaz halkası yine gösterilir)
+    if (dangerCamEnabled) {
+      const k = Math.min(1, dt * 4);
+      camera.x += (dangerFollow.x - camera.x) * k;
+      camera.y += (dangerFollow.y - camera.y) * k;
+    }
     return;
   }
   if (dangerCooldown <= 0) {
@@ -1846,7 +2263,7 @@ function schedulePleading(dt: number): void {
   if (candidates.length === 0) return;
   const v = candidates[Math.floor(Math.random() * candidates.length)];
   v.pleadingTtl = 25;
-  addMessage(`✋ ${v.fullName} sana yakarıyor — üzerine tıklayıp konuş!`);
+  addMessage(`📨 ${v.fullName} sana bir ileti gönderiyor — üzerine tıklayıp yanıtla!`, "important");
 }
 
 // Mikrofonu aç, ses etkinliği yeterliyse köylüyü teskin et.
@@ -2079,7 +2496,7 @@ const RANDOM_EVENTS: RandomEvent[] = [
       const v = new Villager(p.x, p.y);
       if (hasTech("humanity")) v.changeMorale(10, "Tanrı inancı");
       villagers.push(v);
-      addMessage(`🧍 Gezgin ${v.fullName} kampa sığındı — kabileye katıldı!`);
+      addMessage(`🧍 Gezgin ${v.fullName} kampa sığındı — kabileye katıldı!`, "important");
       addJournal(`🧍 Gezgin ${v.fullName} kabileye katıldı`);
       return true;
     },
@@ -2129,11 +2546,13 @@ function step(dt: number) {
   // hedef zinciri: tamamlananı kutla, sıradakini duyur
   const doneGoal = tickGoals({ world, villagers, buildings, animals });
   if (doneGoal) {
-    addMessage(`🎯 Hedef tamamlandı: ${doneGoal.title} (+${doneGoal.reward} bilgi)`);
+    // hedef zinciri oyuncunun ana ilerleme çizgisi: tamamlamak kutlanmalı
+    // (belirgin + bildirim çanı), yoksa info olarak sessizce akıp gidiyordu
+    addMessage(`🎯 Hedef tamamlandı: ${doneGoal.title} (+${doneGoal.reward} bilgi)`, "important");
     addJournal(`🎯 Hedef tamamlandı: ${doneGoal.title} (+${doneGoal.reward} bilgi)`);
     const next = currentGoal();
-    if (next) addMessage(`🎯 Yeni hedef: ${next.title}`);
-    else addMessage("🏆 Tüm hedefler tamamlandı — kabilenin kaderi artık senin ellerinde!");
+    if (next) addMessage(`🎯 Yeni hedef: ${next.title}`, "important");
+    else addMessage("🏆 Tüm hedefler tamamlandı — kabilenin kaderi artık senin ellerinde!", "important");
   }
 
   schedulePleading(dt);
@@ -2169,6 +2588,10 @@ function step(dt: number) {
   homeTimer -= dt;
   if (homeTimer <= 0) {
     homeTimer = 1;
+    // bilgi kazanç hızını (bilgi/sn) tahmin et: yalnız artış olan saniyeleri say
+    const dk = resources.knowledge - kPrevKnowledge;
+    if (dk > 0) knowledgeRate = knowledgeRate * 0.6 + dk * 0.4;
+    kPrevKnowledge = resources.knowledge;
     assignHomes();
     assignChildcare();
     assignDogs();
@@ -2177,8 +2600,9 @@ function step(dt: number) {
     const priests = villagers.filter(
       (v) => v.assignment.kind === "building" && v.assignment.building.type === BuildingType.Temple
     ).length;
-    worshipState.yield = worshipYieldFor(priests);
+    worshipState.yield = worshipYieldFor(priests) * (wisdomActive() ? 2 : 1);
     autoResearchTick();
+    autoBuildTick();
     autoToolsTick();
     autoStaffTick();
   }
@@ -2193,6 +2617,8 @@ function step(dt: number) {
 
   tickHouseFuel(dt);
   for (const v of villagers) v.update(dt, world, buildings, animals);
+  applyProphetAura(dt);
+  for (const id in divineCooldown) if (divineCooldown[id] > 0) divineCooldown[id] -= dt;
   updateDangerCamera(dt);
 
   // hayvanlar: dolanma, otlama, açlık; yırtıcılar insan kovalar
@@ -2225,8 +2651,9 @@ function step(dt: number) {
         v.deathCause === "predator"
           ? `💀 ${v.fullName} yırtıcı saldırısında can verdi!`
           : `💀 ${v.fullName} açlıktan öldü!`;
-      addMessage(deathText);
+      addMessage(deathText, "important");
       addJournal(deathText);
+      lastDeathCause = v.deathCause; // oyun sonu perdesi için sebebi anımsa
       if (selectedVillager === v) selectedVillager = null;
       villagers.splice(i, 1);
     }
@@ -2413,7 +2840,7 @@ Not: hile.ver() depo kapasitesini aşabilir; doluluk işçileri durdurur.`
 };
 
 // tuning: konsoldan canlı ayar (__game.tuning.dayLength / timeScale / moveSpeed)
-window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, worship: worshipState, goals: { state: goalState, current: currentGoal }, get follow() { return followVillager ? followVillager.fullName : null; }, policy };
+window.__game = { world, villagers, buildings, animals, camera, resources, gameTime, tuning, screams, hile, worship: worshipState, goals: { state: goalState, current: currentGoal }, get follow() { return followVillager ? followVillager.fullName : null; }, policy, divine, divineCooldown };
 (window as unknown as { hile: typeof hile }).hile = hile;
 console.info(
   "%cBanisher debug: konsola hile.yardim() yaz",
@@ -2422,8 +2849,68 @@ console.info(
 
 showMainMenu();
 
+// ---- Kıtlık (erzak) erken uyarısı ----
+// Hayatta kalma oyununda erzağın bittiğini ancak köylüler ölmeye başlayınca
+// fark etmek geç oluyor. Bu uyarı, kişi başına yiyecek kritiğe inince oyuncuyu
+// önceden uyarır; kötüleşen geçişte anında, sürerse ~20 sn'de bir hatırlatır.
+const FOOD_LOW_PER_CAP = 3; // kişi başı bu kadar yiyecekten az kalınca "azalıyor"
+let famineLevel = 0; // 0 yeterli · 1 azalıyor · 2 tükendi
+let famineWarnCooldown = 0; // gerçek-saniye hatırlatma sayacı
+function tickFamineWarning(dt: number): void {
+  const pop = villagers.length;
+  if (pop === 0) {
+    famineLevel = 0;
+    return;
+  }
+  famineWarnCooldown -= dt;
+  const food = foodTotal();
+  const level = food === 0 ? 2 : food < pop * FOOD_LOW_PER_CAP ? 1 : 0;
+  if (level > famineLevel || (level >= 1 && famineWarnCooldown <= 0)) {
+    addMessage(
+      level === 2
+        ? "💀 Erzak tükendi! Köy açlıkla yüz yüze"
+        : "⚠ Erzak azalıyor — yeni yiyecek kaynağı bul!",
+      "important"
+    );
+    famineWarnCooldown = 20;
+  }
+  if (level === 0) famineWarnCooldown = 0; // toparlanınca sonraki düşüş anında uyarsın
+  famineLevel = level;
+}
+
+// ---- Düşük moral uyarısı ----
+// Moral iş hızını belirler (0 moral = yarı hız). Ortalama moral kritiğe inince
+// koloni yavaşlar ve kısır döngüye girer; oyuncu çoğu zaman bunu fark etmez.
+// Histerezis (LOW/OK) ile titremeyi önler; sürerse ~25 sn'de bir hatırlatır.
+const MORALE_LOW = 12; // çalışan ortalaması bunun altına inince uyar
+const MORALE_OK = 16; // bunun üstüne çıkınca uyarı durumu temizlenir
+let moraleWarned = false;
+let moraleWarnCooldown = 0;
+function tickMoraleWarning(dt: number): void {
+  const workers = villagers.filter((v) => v.canWork && !v.dead);
+  if (workers.length === 0) {
+    moraleWarned = false;
+    return;
+  }
+  const avg = workers.reduce((s, v) => s + v.morale, 0) / workers.length;
+  moraleWarnCooldown -= dt;
+  if (avg < MORALE_LOW && (!moraleWarned || moraleWarnCooldown <= 0)) {
+    moraleWarned = true;
+    moraleWarnCooldown = 25;
+    addMessage(
+      "😟 Moral düşük — köylüler yavaş çalışıyor (ev, ateş başı ve tanrı inancı moral yükseltir)",
+      "important"
+    );
+  } else if (avg >= MORALE_OK) {
+    moraleWarned = false;
+  }
+}
+
 let last = performance.now();
 let accumulator = 0;
+let autosaveTimer = 0; // gerçek-zaman sayacı (otomatik kayıt için)
+let gameOverShown = false; // oyun sonu perdesi bir kez gösterilsin
+let lastDeathCause: "hunger" | "predator" | null = null; // kolonyi bitiren son ölümün sebebi
 
 function frame(now: number) {
   const elapsed = Math.min((now - last) / 1000, 0.25);
@@ -2440,6 +2927,30 @@ function frame(now: number) {
     dangerCooldown = 10;
   }
   updateMessages(elapsed);
+
+  // Otomatik kayıt: gerçek-zamanda işler (duraklatılsa bile), yalnız aktif
+  // oyunda. tuning.autosaveSeconds = 0 ise devre dışı.
+  if (gameActive() && tuning.autosaveSeconds > 0) {
+    autosaveTimer += elapsed;
+    if (autosaveTimer >= tuning.autosaveSeconds) {
+      autosaveTimer = 0;
+      saveGame(true);
+    }
+  } else {
+    autosaveTimer = 0;
+  }
+
+  // kıtlık ve düşük moral uyarıları: yalnız oyun ilerlerken
+  if (gameActive() && !paused) {
+    tickFamineWarning(elapsed);
+    tickMoraleWarning(elapsed);
+  }
+
+  // oyun sonu: son köylü de göçtüyse perdeyi bir kez göster (menü açık değilken)
+  if (villagers.length === 0 && !gameOverShown && !menuOverlay) {
+    gameOverShown = true;
+    showGameOver();
+  }
 
   // koloni yok olduysa simülasyon durur (oyun sonu perdesi gösterilir)
   accumulator += elapsed * (paused || villagers.length === 0 ? 0 : gameSpeed);
@@ -2468,6 +2979,8 @@ function frame(now: number) {
   const overToolbar = isOverToolbar(input.mouseY, canvas.height);
 
   let ghost: Ghost | null = null;
+  let ghostCost = 0;
+  let ghostAffordable = true;
   if (selected !== null && hoverValid && !overToolbar) {
     const def = BUILDING_DEFS[selected];
     const size = def.size;
@@ -2478,6 +2991,8 @@ function frame(now: number) {
       (!def.needsWater || world.hasAdjacentWater(gx, gy, size)) &&
       (selected !== BuildingType.Barn || pastureClearOfWater(gx, gy));
     ghost = { type: selected, tileX: gx, tileY: gy, size, valid };
+    ghostCost = def.cost;
+    ghostAffordable = resources.wood >= def.cost;
   }
 
   renderer.render(
@@ -2494,6 +3009,28 @@ function frame(now: number) {
     now / 1000
   );
   // seçili hayvan: beyaz halka (ölürse panel kapanır)
+  // bina hayaletinin üstünde odun maliyeti — yetersizse kırmızı (tıklamadan
+  // önce görünür; "Yetersiz odun!" sürprizini önler)
+  if (ghost && ghostCost > 0) {
+    const cx = (ghost.tileX + ghost.size / 2) * TILE_SIZE;
+    const topY = ghost.tileY * TILE_SIZE;
+    const sx = (cx - camera.x) * camera.zoom + canvas.width / 2;
+    const sy = (topY - camera.y) * camera.zoom + canvas.height / 2;
+    const label = `🪵 ${ghostCost}${ghostAffordable ? "" : "  yetersiz"}`;
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    const tw = ctx.measureText(label).width + 12;
+    const ly = Math.max(28, sy - 8);
+    ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
+    ctx.fillRect(sx - tw / 2, ly - 14, tw, 18);
+    ctx.strokeStyle = ghostAffordable ? "rgba(160, 240, 180, 0.7)" : "rgba(240, 110, 110, 0.85)";
+    ctx.strokeRect(sx - tw / 2 + 0.5, ly - 13.5, tw - 1, 17);
+    ctx.fillStyle = ghostAffordable ? "#d8f0c0" : "#ff9a9a";
+    ctx.fillText(label, sx, ly - 1);
+    ctx.textAlign = "left";
+  }
+
   if (selectedAnimal) {
     if (selectedAnimal.dead) selectedAnimal = null;
     else {
@@ -2525,7 +3062,7 @@ function frame(now: number) {
   }
 
   renderer.drawMinimap(ctx, camera, villagers, buildings, TOOLBAR_HEIGHT);
-  drawHud(ctx, villagers.length, selected, paused, gameSpeed, homelessCount);
+  drawHud(ctx, villagers.length, selected, paused, gameSpeed, homelessCount, knowledgeRate);
   if (villagers.length > 0) drawMarkFilters(ctx, markFilter);
   let taskListY = 42;
   if (villagers.length > 0) {
@@ -2561,8 +3098,15 @@ function frame(now: number) {
     if (showPeople) drawPeoplePanel(ctx, villagers);
     if (showJournal) drawJournalPanel(ctx);
     if (showPolicy) drawPolicyPanel(ctx);
+    if (showDivine) drawDivinePanel(ctx);
     if (selectedAnimal) drawAnimalPanel(ctx, selectedAnimal, canTameAnimal(selectedAnimal));
     if (showTech) drawTechPanel(ctx, policy.research);
+  }
+
+  // araç çubuğunda fareyle gelinen binanın ipucu (tam ekran tech açıkken değil)
+  if (villagers.length > 0 && !showTech) {
+    const hoverType = toolbarHitTest(input.mouseX, input.mouseY, canvas.width, canvas.height);
+    if (hoverType !== null) drawToolbarTooltip(ctx, hoverType);
   }
 
   // araştırma kutlaması her şeyin üstünde

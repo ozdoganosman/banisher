@@ -616,10 +616,23 @@ export class Renderer {
       if (b.type === BuildingType.Barn && b.done) this.drawPastureFence(ctx, b);
     }
 
-    // Binalar ve köylüler: taban çizgisine (y) göre sırala ki önde olan üstte çizilsin
+    // Binalar ve köylüler: taban çizgisine (y) göre sırala ki önde olan üstte çizilsin.
+    // Ekran dışındaki varlıklar elenir (büyük kolonide çizim+sıralama maliyetini düşürür);
+    // pay (M) sprite taşması ve kenar varlıkları için cömert tutulur ki "pop" olmasın.
+    const viewLeft = camera.x - halfW;
+    const viewRight = camera.x + halfW;
+    const viewTop = camera.y - halfH;
+    const viewBottom = camera.y + halfH;
+    const M = 20; // köylü/hayvan sprite payı (piksel)
+    const ptVisible = (x: number, y: number) =>
+      x >= viewLeft - M && x <= viewRight + M && y >= viewTop - M && y <= viewBottom + M;
     type Drawable = { baseY: number; draw: () => void };
     const drawables: Drawable[] = [];
     for (const b of buildings) {
+      // bina ayak izi + çatı payı görüş dikdörtgenine değiyor mu?
+      const bx0 = b.x * TILE_SIZE, bx1 = (b.x + b.size) * TILE_SIZE;
+      const by0 = b.y * TILE_SIZE - 28, by1 = (b.y + b.size) * TILE_SIZE;
+      if (bx1 < viewLeft - M || bx0 > viewRight + M || by1 < viewTop - M || by0 > viewBottom + M) continue;
       drawables.push({
         baseY: (b.y + b.size) * TILE_SIZE,
         draw: () => this.drawBuilding(ctx, b, time),
@@ -628,9 +641,11 @@ export class Renderer {
     for (const v of villagers) {
       // evinde uyuyan köylü içeridedir: çizilmez (evin üstünde z çıkar)
       if (v.state === "sleeping" && !v.groundSleep && v.home) continue;
+      if (!ptVisible(v.x, v.y)) continue;
       drawables.push({ baseY: v.y, draw: () => this.drawVillager(ctx, v, time) });
     }
     for (const a of animals) {
+      if (!ptVisible(a.x, a.y)) continue;
       drawables.push({ baseY: a.y, draw: () => this.drawAnimal(ctx, a) });
     }
     drawables.sort((a, b) => a.baseY - b.baseY);
@@ -2047,13 +2062,23 @@ export class Renderer {
       }
     }
 
-    // yakaran köylü: başının üstünde el işareti; şokta yıldırım
+    // peygamber: başının üstünde altın hale (parıldar)
+    if (v.isProphet) {
+      const pulse = 0.6 + 0.4 * Math.sin(time * 4);
+      ctx.strokeStyle = `rgba(255, 214, 90, ${pulse})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 13, 3.4, 1.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // ileti gönderen köylü: başının üstünde işaret; şokta yıldırım
     if (v.pleadingTtl > 0) {
       const bob = Math.sin(time * 5) * 1.2;
       ctx.font = "bold 5px monospace";
       ctx.textAlign = "center";
       ctx.fillStyle = "#ffe296";
-      ctx.fillText("✋", x, y - 19 + bob);
+      ctx.fillText("📨", x, y - 19 + bob);
       ctx.textAlign = "left";
     } else if (v.shockTtl > 0) {
       ctx.font = "bold 6px monospace";
